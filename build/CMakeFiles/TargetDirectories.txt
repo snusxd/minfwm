@@ -1,0 +1,3 @@
+/Users/snus/code/minfwm/build/CMakeFiles/minfwm.dir
+/Users/snus/code/minfwm/build/CMakeFiles/edit_cache.dir
+/Users/snus/code/minfwm/build/CMakeFiles/rebuild_cache.dir
