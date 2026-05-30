@@ -13,7 +13,13 @@ InputInterceptor::~InputInterceptor() {
 void InputInterceptor::start() {
     std::cout << "InputInterceptor: Starting..." << std::endl;
 
-    CGEventMask eventMask = (1 << kCGEventLeftMouseDragged) | (1 << kCGEventFlagsChanged) | (1 << kCGEventKeyDown);
+    // We now listen to Down, Up, and Drag to fully own the gesture
+    CGEventMask eventMask = (1 << kCGEventLeftMouseDown) | 
+                            (1 << kCGEventLeftMouseUp) | 
+                            (1 << kCGEventLeftMouseDragged) | 
+                            (1 << kCGEventFlagsChanged) | 
+                            (1 << kCGEventKeyDown);
+                            
     m_eventTap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, eventMask, eventTapCallback, this);
 
     if (!m_eventTap) {
@@ -38,8 +44,30 @@ void InputInterceptor::stop() {
 }
 
 CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon) {
-    auto* self = static_cast<InputInterceptor*>(refcon);
     auto& wm = WindowManager::instance();
+
+    // Check modifiers for any mouse event in our mask
+    if (type == kCGEventLeftMouseDown || type == kCGEventLeftMouseUp || type == kCGEventLeftMouseDragged) {
+        CGEventFlags flags = CGEventGetFlags(event);
+        bool cmd = flags & kCGEventFlagMaskCommand;
+        bool opt = flags & kCGEventFlagMaskAlternate;
+
+        if (cmd && opt) {
+            if (type == kCGEventLeftMouseDragged) {
+                int64_t dx = CGEventGetIntegerValueField(event, kCGMouseEventDeltaX);
+                int64_t dy = CGEventGetIntegerValueField(event, kCGMouseEventDeltaY);
+
+                if (dx != 0 || dy != 0) {
+                    wm.mainDisplay().camera().move(-dx, -dy);
+                }
+            }
+            
+            // CONSUME ALL PART OF THE GESTURE (Down, Drag, Up) 
+            // if Cmd+Opt are held. This prevents macOS from seeing the click 
+            // on the wallpaper or windows.
+            return NULL; 
+        }
+    }
 
     if (type == kCGEventKeyDown) {
         CGEventFlags flags = CGEventGetFlags(event);
@@ -48,7 +76,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         int64_t keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
 
         int index = -1;
-        if (keycode >= 18 && keycode <= 21) index = keycode - 17;
+        if (keycode >= 18 && keycode <= 21) index = keycode - 17; // 1-4
         else if (keycode == 23) index = 5;
         else if (keycode == 22) index = 6;
         else if (keycode == 26) index = 7;
@@ -58,29 +86,9 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         if (index != -1 && cmd) {
             if (shift) {
                 wm.mainDisplay().saveBookmark(index);
-                std::cout << "InputInterceptor: Saved bookmark " << index << std::endl;
             } else {
                 wm.mainDisplay().loadBookmark(index);
-                std::cout << "InputInterceptor: Loaded bookmark " << index << std::endl;
             }
-            return NULL;
-        }
-    }
-
-    if (type == kCGEventLeftMouseDragged) {
-        CGEventFlags flags = CGEventGetFlags(event);
-        bool cmd = flags & kCGEventFlagMaskCommand;
-        bool opt = flags & kCGEventFlagMaskAlternate;
-
-        if (cmd && opt) {
-            int64_t dx = CGEventGetIntegerValueField(event, kCGMouseEventDeltaX);
-            int64_t dy = CGEventGetIntegerValueField(event, kCGMouseEventDeltaY);
-
-            if (dx != 0 || dy != 0) {
-                std::cout << "InputInterceptor: Panning delta " << dx << ", " << dy << std::endl;
-                wm.mainDisplay().camera().move(-dx, -dy);
-            }
-            
             return NULL;
         }
     }
