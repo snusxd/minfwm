@@ -47,9 +47,8 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         bool shift = flags & kCGEventFlagMaskShift;
         int64_t keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
 
-        // Map keycodes for 1-9
         int index = -1;
-        if (keycode >= 18 && keycode <= 21) index = keycode - 17; // 1-4
+        if (keycode >= 18 && keycode <= 21) index = keycode - 17;
         else if (keycode == 23) index = 5;
         else if (keycode == 22) index = 6;
         else if (keycode == 26) index = 7;
@@ -62,10 +61,9 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
                 std::cout << "InputInterceptor: Saved bookmark " << index << std::endl;
             } else {
                 wm.mainDisplay().loadBookmark(index);
-                wm.updateWindows();
                 std::cout << "InputInterceptor: Loaded bookmark " << index << std::endl;
             }
-            return NULL; // Consume event
+            return NULL;
         }
     }
 
@@ -75,16 +73,14 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         bool opt = flags & kCGEventFlagMaskAlternate;
 
         if (cmd && opt) {
-            // Panning logic
             int64_t dx = CGEventGetIntegerValueField(event, kCGMouseEventDeltaX);
             int64_t dy = CGEventGetIntegerValueField(event, kCGMouseEventDeltaY);
 
             if (dx != 0 || dy != 0) {
-                // std::cout << "InputInterceptor: Panning delta " << dx << ", " << dy << std::endl;
+                std::cout << "InputInterceptor: Panning delta " << dx << ", " << dy << std::endl;
                 wm.mainDisplay().camera().move(-dx, -dy);
             }
             
-            // Consume event if it's a drag to prevent window moving/focusing
             if (type == kCGEventLeftMouseDragged) {
                 return NULL;
             }

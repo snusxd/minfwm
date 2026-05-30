@@ -8,8 +8,8 @@ namespace minfwm {
 
 void ConfigManager::load() {
     NSString* home = NSHomeDirectory();
-    NSString* path = [home stringByAppendingPathComponent:@".config/minfwm/minfwm.conf"];
-    
+    NSString* path = [home stringByAppendingPathComponent:@".config/minfwm/minfwm.toml"];
+
     std::ifstream file([path UTF8String]);
     if (!file.is_open()) {
         std::cout << "ConfigManager: Config file not found at " << [path UTF8String] << ", using defaults." << std::endl;
@@ -19,13 +19,13 @@ void ConfigManager::load() {
     std::string line;
     while (std::getline(file, line)) {
         if (line.empty() || line[0] == '#') continue;
-        
+
         size_t delimiter = line.find('=');
         if (delimiter == std::string::npos) continue;
-        
+
         std::string key = line.substr(0, delimiter);
         std::string value = line.substr(delimiter + 1);
-        
+
         // Trim whitespace
         key.erase(0, key.find_first_not_of(" \t"));
         key.erase(key.find_last_not_of(" \t") + 1);

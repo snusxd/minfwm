@@ -7,7 +7,7 @@
 namespace minfwm {
 
 void WindowManager::initialize() {
-    std::cout << "WindowManager: Initializing (SA-Only Mode)..." << std::endl;
+    std::cout << "WindowManager: Initializing..." << std::endl;
     ConfigManager::instance().load();
     for (NSScreen* screen in [NSScreen screens]) {
         NSDictionary* description = [screen deviceDescription];
@@ -69,12 +69,11 @@ void WindowManager::updateWindows() {
         float sw = targetScreen.frame.size.width;
         float sh = targetScreen.frame.size.height;
         float sx = targetScreen.frame.origin.x;
-        float sy = (float)[[NSScreen screens][0] frame].size.height - targetScreen.frame.origin.y - sh;
+        float primaryScreenHeight = (float)[[NSScreen screens][0] frame].size.height;
+        float sy = primaryScreenHeight - targetScreen.frame.origin.y - sh;
         float buffer = ConfigManager::instance().overscanBufferPx;
 
         for (auto& window : display->windowPool().windows()) {
-            if (window->wid() == 0) continue;
-
             float px = window->virtualRect.x - cx;
             float py = window->virtualRect.y - cy;
             bool is_focused = (focusedWindow && CFEqual(window->ref(), focusedWindow));
@@ -82,11 +81,38 @@ void WindowManager::updateWindows() {
                                 py + window->virtualRect.h > -buffer && py < sh + buffer);
             
             if (in_viewport || is_focused) {
-                // Move via Yabai SA Only
-                YabaiSA::moveWindow(window->wid(), (int)(px + sx), (int)(py + sy));
+                float targetX = px + sx;
+                float targetY = py + sy;
+
+                if (window->lastRenderedX != targetX || window->lastRenderedY != targetY) {
+                    // 1. Native AXAPI (Robust)
+                    CGPoint targetPos = CGPointMake(targetX, targetY);
+                    AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &targetPos);
+                    AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
+                    CFRelease(axPos);
+
+                    // 2. Yabai SA (Menu bar bypass)
+                    if (window->wid() != 0) {
+                        YabaiSA::moveWindow(window->wid(), (int)targetX, (int)targetY);
+                    }
+
+                    window->lastRenderedX = targetX;
+                    window->lastRenderedY = targetY;
+                }
             } else {
-                // Hide by moving off-screen
-                YabaiSA::moveWindow(window->wid(), -25000, -25000);
+                if (window->lastRenderedX != -25000) {
+                    CGPoint hidePos = CGPointMake(-25000, -25000);
+                    AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &hidePos);
+                    AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
+                    CFRelease(axPos);
+
+                    if (window->wid() != 0) {
+                        YabaiSA::moveWindow(window->wid(), -25000, -25000);
+                    }
+                    
+                    window->lastRenderedX = -25000;
+                    window->lastRenderedY = -25000;
+                }
             }
         }
     }

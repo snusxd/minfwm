@@ -50,7 +50,11 @@ bool YabaiSA::moveWindow(uint32_t wid, int x, int y) {
     float fy = (float)y;
 
     // Use MSG_NOSIGNAL to avoid SIGPIPE
-    send(sockfd, &opcode, sizeof(opcode), MSG_NOSIGNAL);
+    send(sockfd, &opcode, sizeof(opcode), 0);
+    send(sockfd, &message_length, sizeof(message_length), 0);
+    send(sockfd, &wid, sizeof(wid), 0);
+    send(sockfd, &fx, sizeof(fx), 0);
+    send(sockfd, &fy, sizeof(fy), 0);
     send(sockfd, &message_length, sizeof(message_length), MSG_NOSIGNAL);
     send(sockfd, &wid, sizeof(wid), MSG_NOSIGNAL);
     send(sockfd, &fx, sizeof(fx), MSG_NOSIGNAL);

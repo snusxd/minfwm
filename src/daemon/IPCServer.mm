@@ -1,6 +1,7 @@
 #include "IPCServer.hpp"
 #include "Protocol.hpp"
 #include "WindowManager.hpp"
+#include "ConfigManager.hpp"
 #include <iostream>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -9,7 +10,7 @@
 
 namespace minfwm {
 
-IPCServer::IPCServer() 
+IPCServer::IPCServer()
     : m_socketPath("/tmp/minfwm.sock"), m_running(false), m_serverFd(-1) {}
 
 IPCServer::~IPCServer() {
@@ -74,23 +75,26 @@ void IPCServer::handleClient(int clientFd) {
     IPCMessage msg;
     ssize_t bytesRead = read(clientFd, &msg, sizeof(msg));
     if (bytesRead == sizeof(msg)) {
-        auto& wm = WindowManager::instance();
-        switch (msg.type) {
-            case MessageType::RELOAD:
-                std::cout << "IPCServer: Received RELOAD" << std::endl;
-                // TODO: Implement reload logic
-                break;
-            case MessageType::CAMERA_MOVE:
-                std::cout << "IPCServer: Received CAMERA_MOVE: " << msg.data.camera_move.x << ", " << msg.data.camera_move.y << std::endl;
-                wm.mainDisplay().camera().move(msg.data.camera_move.x, msg.data.camera_move.y);
-                wm.updateWindows();
-                break;
-            default:
-                std::cout << "IPCServer: Received unknown message type" << std::endl;
-                break;
-        }
+        // Оборачиваем логику в блок GCD для безопасного выполнения на Main Thread
+        dispatch_async(dispatch_get_main_queue(), ^{
+            auto& wm = WindowManager::instance();
+            switch (msg.type) {
+                case MessageType::RELOAD:
+                    std::cout << "IPCServer: Received RELOAD" << std::endl;
+                    ConfigManager::instance().load(); // Можно сразу добавить перезагрузку конфига!
+                    break;
+                case MessageType::CAMERA_MOVE:
+                    std::cout << "IPCServer: Received CAMERA_MOVE: " << msg.data.camera_move.x << ", " << msg.data.camera_move.y << std::endl;
+                    wm.mainDisplay().camera().move(msg.data.camera_move.x, msg.data.camera_move.y);
+                    wm.updateWindows();
+                    break;
+                default:
+                    std::cout << "IPCServer: Received unknown message type" << std::endl;
+                    break;
+            }
+        });
     }
-    close(clientFd);
+    close(clientFd); // Закрываем сокет вне асинхронного блока (это потокобезопасно)
 }
 
 } // namespace minfwm

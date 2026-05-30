@@ -22,6 +22,8 @@ public:
     uint32_t wid() const { return m_wid; }
 
     VirtualRect virtualRect;
+    float lastRenderedX = -99999.0f;
+    float lastRenderedY = -99999.0f;
 
 private:
     AXUIElementRef m_windowRef;
