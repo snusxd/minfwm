@@ -8,7 +8,7 @@
 namespace minfwm {
 
 void WindowManager::initialize() {
-    std::cout << "WindowManager: Initializing (SA-Only Mode)..." << std::endl;
+    std::cout << "WindowManager: Initializing..." << std::endl;
     ConfigManager::instance().load();
     for (NSScreen* screen in [NSScreen screens]) {
         NSDictionary* description = [screen deviceDescription];
@@ -87,28 +87,38 @@ void WindowManager::updateWindows() {
                 if (window->lastRenderedX != targetX || window->lastRenderedY != targetY) {
                     window->lastProgrammaticMoveTime = now;
                     
+                    // 1. Move via AXAPI (Always works, but clamps to edges)
                     CGPoint targetPos = CGPointMake(targetX, targetY);
                     AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &targetPos);
                     AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
                     CFRelease(axPos);
 
+                    // 2. Move via SA (Bypasses edges/clamping if SA is active)
                     if (window->wid() != 0) {
                         YabaiSA::moveWindow(window->wid(), (int)targetX, (int)targetY);
                     }
+
+                    // 3. Ensure it's not hidden
+                    AXUIElementSetAttributeValue(window->ref(), (CFStringRef)@"AXHidden", kCFBooleanFalse);
 
                     window->lastRenderedX = targetX;
                     window->lastRenderedY = targetY;
                 }
             } else {
-                if (window->lastRenderedX != -25000) {
+                // Window is outside buffer -> Hide it properly
+                if (window->lastRenderedX != -35000) {
                     window->lastProgrammaticMoveTime = now;
-                    CGPoint hidePos = CGPointMake(-25000, -25000);
-                    AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &hidePos);
-                    AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
-                    CFRelease(axPos);
-                    if (window->wid() != 0) YabaiSA::moveWindow(window->wid(), -25000, -25000);
-                    window->lastRenderedX = -25000;
-                    window->lastRenderedY = -25000;
+                    
+                    // Move far away using SA (only SA can move this far)
+                    if (window->wid() != 0) {
+                        YabaiSA::moveWindow(window->wid(), -35000, -35000);
+                    }
+                    
+                    // Also hide via AXAPI to be sure
+                    AXUIElementSetAttributeValue(window->ref(), (CFStringRef)@"AXHidden", kCFBooleanTrue);
+
+                    window->lastRenderedX = -35000;
+                    window->lastRenderedY = -35000;
                 }
             }
         }
@@ -156,8 +166,6 @@ void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
 void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
     auto window = findWindow(element);
     if (!window) return;
-
-    // SUPPRESSION LOGIC
     if (m_isPanning) return;
     if (CACurrentMediaTime() - window->lastProgrammaticMoveTime < 0.25) return;
 
