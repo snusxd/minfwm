@@ -31,7 +31,7 @@ ClientWindow::ClientWindow(AXUIElementRef windowRef)
         wid = 0;
     }
 
-    CGSize size = {0, 0};
+    CGSize size = {1200, 800}; // Sane default
     CFTypeRef sizeRef = nullptr;
     if (AXUIElementCopyAttributeValue(m_windowRef, kAXSizeAttribute, &sizeRef) == kAXErrorSuccess)
     {
@@ -42,6 +42,10 @@ ClientWindow::ClientWindow(AXUIElementRef windowRef)
             height = size.height / scale;
         }
         CFRelease(sizeRef);
+    }
+    else {
+        width = 1200;
+        height = 800;
     }
 
     CGPoint position = {0, 0};
@@ -55,6 +59,13 @@ ClientWindow::ClientWindow(AXUIElementRef windowRef)
             absolute_y = position.y / scale + WindowManager::GetInstance().GetCamera().GetY();
         }
         CFRelease(positionRef);
+    }
+    else {
+        // If we can't get position, we might be in trouble, but let's at least not use (0,0)
+        // which might overlap with other windows being tiled.
+        // Actually, if we are at (0,0), it's probably better than some random place.
+        absolute_x = WindowManager::GetInstance().GetCamera().GetX();
+        absolute_y = WindowManager::GetInstance().GetCamera().GetY();
     }
 
     // Determine if the window should float (e.g. popups, dialogs, non-standard windows)

@@ -31,6 +31,8 @@ public:
   void UpdateAbsolutePosition(AXUIElementRef windowRef);
   bool IsPanning() const { return m_isPanning; }
   bool IsZooming() const { return m_isZooming; }
+  bool IsInitializing() const { return m_isInitializing; }
+  void SetInitializing(bool val) { m_isInitializing = val; }
 
   Camera &GetCamera() { return m_camera; }
   WindowPool &GetWindowPool() { return m_windowPool; }
@@ -59,4 +61,5 @@ private:
   bool m_isPanning = false;
   bool m_isZooming = false;
   bool m_isUpdating = false;
+  bool m_isInitializing = false;
 };

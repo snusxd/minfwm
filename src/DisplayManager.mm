@@ -168,6 +168,8 @@ void DisplayManager::UpdateWindowPositions(const std::vector<ClientWindow*>& win
         float tw = (float)(window->width * camera.GetScale());
         float th = (float)(window->height * camera.GetScale());
 
+        std::cout << "[DisplayManager] Window " << window->wid << " -> (" << tx << ", " << ty << ") " << tw << "x" << th << std::endl;
+
         bool moveSuccess = false;
         bool resizeSuccess = false;
 

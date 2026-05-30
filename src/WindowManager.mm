@@ -5,6 +5,8 @@
 
 void WindowManager::Initialize()
 {
+    std::cout << "[WindowManager] Initializing..." << std::endl;
+    m_isInitializing = true;
     m_currentLayout = std::make_unique<GridLayout>();
     
     // Initial application discovery
@@ -28,6 +30,10 @@ void WindowManager::Initialize()
             m_windowPool.HandleAppTerminated(app.processIdentifier);
         }
     }];
+
+    m_isInitializing = false;
+    m_displayManager.SetPanningMode(m_windowPool.GetAllWindows(), false);
+    std::cout << "[WindowManager] Initialization complete. " << m_windowPool.GetAllWindows().size() << " windows tracked." << std::endl;
 }
 
 void WindowManager::UpdateAbsolutePosition(AXUIElementRef windowRef)

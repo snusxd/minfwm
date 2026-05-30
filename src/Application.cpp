@@ -83,7 +83,7 @@ void Application::AddWindow(AXUIElementRef windowRef)
             
             std::cout << "Added window to PID " << m_pid << " (Total windows: " << m_windows.size() << ")" << std::endl;
             
-            if (isStandard) {
+            if (isStandard && !WindowManager::GetInstance().IsInitializing()) {
                 WindowManager::GetInstance().ScheduleLayout();
             }
         }

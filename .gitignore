@@ -1,0 +1,47 @@
+# --- Build System ---
+build/
+bin/
+out/
+Makefile
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+*.cmake
+
+# --- macOS System Files ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# --- Compiled Artifacts ---
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+minfwm
+minfwmc
+
+# --- IDEs and Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# --- Xcode ---
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata
+!*.xcworkspace/contents.xcworkspacedata
+xcuserdata/
+DerivedData/
