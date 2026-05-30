@@ -13,7 +13,7 @@ InputInterceptor::~InputInterceptor() {
 void InputInterceptor::start() {
     std::cout << "InputInterceptor: Starting..." << std::endl;
 
-    CGEventMask eventMask = (1 << kCGEventMouseMoved) | (1 << kCGEventLeftMouseDragged) | (1 << kCGEventFlagsChanged) | (1 << kCGEventKeyDown);
+    CGEventMask eventMask = (1 << kCGEventLeftMouseDragged) | (1 << kCGEventFlagsChanged) | (1 << kCGEventKeyDown);
     m_eventTap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, eventMask, eventTapCallback, this);
 
     if (!m_eventTap) {
@@ -67,7 +67,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         }
     }
 
-    if (type == kCGEventLeftMouseDragged || type == kCGEventMouseMoved) {
+    if (type == kCGEventLeftMouseDragged) {
         CGEventFlags flags = CGEventGetFlags(event);
         bool cmd = flags & kCGEventFlagMaskCommand;
         bool opt = flags & kCGEventFlagMaskAlternate;
@@ -81,9 +81,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
                 wm.mainDisplay().camera().move(-dx, -dy);
             }
             
-            if (type == kCGEventLeftMouseDragged) {
-                return NULL;
-            }
+            return NULL;
         }
     }
 
