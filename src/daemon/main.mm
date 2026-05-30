@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 #include <iostream>
+#include <signal.h>
 #include "WindowManager.hpp"
 #include "AXObserver.hpp"
 #include "InputInterceptor.hpp"
@@ -9,6 +10,9 @@
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         std::cout << "minfwmd: Starting macOS Infinite Window Manager daemon..." << std::endl;
+        
+        // Prevent crash on socket errors
+        signal(SIGPIPE, SIG_IGN);
 
         // Verify accessibility permissions
         NSDictionary *options = @{(id)kAXTrustedCheckOptionPrompt: @YES};
@@ -17,7 +21,6 @@ int main(int argc, const char * argv[]) {
             return 1;
         }
 
-        // Initialize components
         auto& wm = minfwm::WindowManager::instance();
         wm.initialize();
 
@@ -30,9 +33,12 @@ int main(int argc, const char * argv[]) {
         minfwm::IPCServer server;
         server.start();
 
-        std::cout << "minfwmd: Daemon is running." << std::endl;
+        // High-frequency timer for window updates (60Hz)
+        [NSTimer scheduledTimerWithTimeInterval:1.0/60.0 repeats:YES block:^(NSTimer * _Nonnull timer) {
+            minfwm::WindowManager::instance().updateWindows();
+        }];
 
-        // Start run loop
+        std::cout << "minfwmd: Daemon is running." << std::endl;
         [[NSRunLoop currentRunLoop] run];
     }
     return 0;

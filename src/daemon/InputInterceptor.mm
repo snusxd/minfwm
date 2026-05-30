@@ -80,9 +80,8 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
             int64_t dy = CGEventGetIntegerValueField(event, kCGMouseEventDeltaY);
 
             if (dx != 0 || dy != 0) {
-                std::cout << "InputInterceptor: Panning delta " << dx << ", " << dy << std::endl;
+                // std::cout << "InputInterceptor: Panning delta " << dx << ", " << dy << std::endl;
                 wm.mainDisplay().camera().move(-dx, -dy);
-                wm.updateWindows();
             }
             
             // Consume event if it's a drag to prevent window moving/focusing
