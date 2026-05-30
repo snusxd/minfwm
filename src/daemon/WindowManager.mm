@@ -2,25 +2,23 @@
 #include "YabaiSA.hpp"
 #include "ConfigManager.hpp"
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
 #include <iostream>
 
 namespace minfwm {
 
 void WindowManager::initialize() {
-    std::cout << "WindowManager: Initializing..." << std::endl;
+    std::cout << "WindowManager: Initializing (SA-Only Mode)..." << std::endl;
     ConfigManager::instance().load();
     for (NSScreen* screen in [NSScreen screens]) {
         NSDictionary* description = [screen deviceDescription];
         NSNumber* displayID = [description objectForKey:@"NSScreenNumber"];
         m_displays.push_back(std::make_unique<Display>([displayID longLongValue]));
-        std::cout << "WindowManager: Display " << [displayID longLongValue] 
-                  << " [" << screen.frame.size.width << "x" << screen.frame.size.height << "]" << std::endl;
     }
 }
 
 Display& WindowManager::displayForWindow(AXUIElementRef window) {
-    CGPoint pos;
-    CFTypeRef posValue = NULL;
+    CGPoint pos; CFTypeRef posValue = NULL;
     if (AXUIElementCopyAttributeValue(window, kAXPositionAttribute, (CFTypeRef*)&posValue) == kAXErrorSuccess) {
         AXValueGetValue((AXValueRef)posValue, kAXValueTypeCGPoint, &pos);
         CFRelease(posValue);
@@ -54,6 +52,8 @@ void WindowManager::updateWindows() {
     AXUIElementCopyAttributeValue(systemWide, kAXFocusedWindowAttribute, (CFTypeRef*)&focusedWindow);
     CFRelease(systemWide);
 
+    double now = CACurrentMediaTime();
+
     for (auto& display : m_displays) {
         float cx = display->camera().x();
         float cy = display->camera().y();
@@ -85,13 +85,13 @@ void WindowManager::updateWindows() {
                 float targetY = py + sy;
 
                 if (window->lastRenderedX != targetX || window->lastRenderedY != targetY) {
-                    // 1. Native AXAPI (Robust)
+                    window->lastProgrammaticMoveTime = now;
+                    
                     CGPoint targetPos = CGPointMake(targetX, targetY);
                     AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &targetPos);
                     AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
                     CFRelease(axPos);
 
-                    // 2. Yabai SA (Menu bar bypass)
                     if (window->wid() != 0) {
                         YabaiSA::moveWindow(window->wid(), (int)targetX, (int)targetY);
                     }
@@ -101,15 +101,12 @@ void WindowManager::updateWindows() {
                 }
             } else {
                 if (window->lastRenderedX != -25000) {
+                    window->lastProgrammaticMoveTime = now;
                     CGPoint hidePos = CGPointMake(-25000, -25000);
                     AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &hidePos);
                     AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
                     CFRelease(axPos);
-
-                    if (window->wid() != 0) {
-                        YabaiSA::moveWindow(window->wid(), -25000, -25000);
-                    }
-                    
+                    if (window->wid() != 0) YabaiSA::moveWindow(window->wid(), -25000, -25000);
                     window->lastRenderedX = -25000;
                     window->lastRenderedY = -25000;
                 }
@@ -128,6 +125,7 @@ void WindowManager::centerWindow(std::shared_ptr<ClientWindow> window) {
         }
     }
     if (!targetScreen) return;
+    window->lastProgrammaticMoveTime = CACurrentMediaTime();
     window->virtualRect.x = display.camera().x() + (targetScreen.frame.size.width / 2.0f) - (window->virtualRect.w / 2.0f);
     window->virtualRect.y = display.camera().y() + (targetScreen.frame.size.height / 2.0f) - (window->virtualRect.h / 2.0f);
 }
@@ -158,10 +156,16 @@ void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
 void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
     auto window = findWindow(element);
     if (!window) return;
+
+    // SUPPRESSION LOGIC
+    if (m_isPanning) return;
+    if (CACurrentMediaTime() - window->lastProgrammaticMoveTime < 0.25) return;
+
     for (auto& display : m_displays) {
         bool found = false;
         for (auto& w : display->windowPool().windows()) if (w == window) { found = true; break; }
         if (!found) continue;
+
         CGPoint pos; CFTypeRef posValue = NULL;
         if (AXUIElementCopyAttributeValue(element, kAXPositionAttribute, (CFTypeRef*)&posValue) == kAXErrorSuccess) {
             AXValueGetValue((AXValueRef)posValue, kAXValueTypeCGPoint, &pos);

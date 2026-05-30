@@ -14,12 +14,14 @@ find_library(CORE_GRAPHICS_FRAMEWORK CoreGraphics)
 find_library(APP_KIT_FRAMEWORK AppKit)
 find_library(APPLICATION_SERVICES_FRAMEWORK ApplicationServices)
 find_library(FOUNDATION_FRAMEWORK Foundation)
+find_library(QUARTZ_CORE_FRAMEWORK QuartzCore)
 
 set(COMMON_LIBS
     ${CORE_GRAPHICS_FRAMEWORK}
     ${APP_KIT_FRAMEWORK}
     ${APPLICATION_SERVICES_FRAMEWORK}
     ${FOUNDATION_FRAMEWORK}
+    ${QUARTZ_CORE_FRAMEWORK}
 )
 
 # Shared common code (IPC, logging, etc.)

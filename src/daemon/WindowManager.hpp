@@ -59,10 +59,14 @@ public:
     std::shared_ptr<ClientWindow> findWindow(AXUIElementRef element);
     void removeWindow(AXUIElementRef element);
 
+    bool isPanning() const { return m_isPanning; }
+    void setPanning(bool panning) { m_isPanning = panning; }
+
 private:
     WindowManager() = default;
     
     std::vector<std::unique_ptr<Display>> m_displays;
+    bool m_isPanning = false;
 };
 
 } // namespace minfwm

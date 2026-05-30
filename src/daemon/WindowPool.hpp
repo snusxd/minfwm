@@ -24,6 +24,7 @@ public:
     VirtualRect virtualRect;
     float lastRenderedX = -99999.0f;
     float lastRenderedY = -99999.0f;
+    double lastProgrammaticMoveTime = 0.0;
 
 private:
     AXUIElementRef m_windowRef;

@@ -53,6 +53,13 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         bool opt = flags & kCGEventFlagMaskAlternate;
 
         if (cmd && opt) {
+            if (type == kCGEventLeftMouseDown || type == kCGEventLeftMouseDragged) {
+                wm.setPanning(true);
+            }
+            if (type == kCGEventLeftMouseUp) {
+                wm.setPanning(false);
+            }
+
             if (type == kCGEventLeftMouseDragged) {
                 int64_t dx = CGEventGetIntegerValueField(event, kCGMouseEventDeltaX);
                 int64_t dy = CGEventGetIntegerValueField(event, kCGMouseEventDeltaY);
@@ -90,6 +97,15 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
                 wm.mainDisplay().loadBookmark(index);
             }
             return NULL;
+        }
+    }
+
+    if (type == kCGEventFlagsChanged) {
+        CGEventFlags flags = CGEventGetFlags(event);
+        bool cmd = flags & kCGEventFlagMaskCommand;
+        bool opt = flags & kCGEventFlagMaskAlternate;
+        if (!cmd || !opt) {
+            wm.setPanning(false);
         }
     }
 
