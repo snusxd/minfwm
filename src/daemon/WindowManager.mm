@@ -8,12 +8,14 @@
 namespace minfwm {
 
 void WindowManager::initialize() {
-    std::cout << "WindowManager: Initializing..." << std::endl;
+    std::cout << "WindowManager: Initializing (with Hide-in-Corner)..." << std::endl;
     ConfigManager::instance().load();
     for (NSScreen* screen in [NSScreen screens]) {
         NSDictionary* description = [screen deviceDescription];
         NSNumber* displayID = [description objectForKey:@"NSScreenNumber"];
         m_displays.push_back(std::make_unique<Display>([displayID longLongValue]));
+        std::cout << "WindowManager: Found Display ID " << [displayID longLongValue] 
+                  << " [" << screen.frame.size.width << "x" << screen.frame.size.height << "]" << std::endl;
     }
 }
 
@@ -66,17 +68,20 @@ void WindowManager::updateWindows() {
         }
         if (!targetScreen) continue;
 
-        float sw = targetScreen.frame.size.width;
-        float sh = targetScreen.frame.size.height;
-        float sx = targetScreen.frame.origin.x;
+        NSRect screenFrame = [targetScreen frame];
+        float sw = screenFrame.size.width;
+        float sh = screenFrame.size.height;
+        float sx = screenFrame.origin.x;
         float primaryScreenHeight = (float)[[NSScreen screens][0] frame].size.height;
-        float sy = primaryScreenHeight - targetScreen.frame.origin.y - sh;
+        float sy = primaryScreenHeight - screenFrame.origin.y - sh;
         float buffer = ConfigManager::instance().overscanBufferPx;
 
         for (auto& window : display->windowPool().windows()) {
             float px = window->virtualRect.x - cx;
             float py = window->virtualRect.y - cy;
             bool is_focused = (focusedWindow && CFEqual(window->ref(), focusedWindow));
+            
+            // Intersection math with camera viewport
             bool in_viewport = (px + window->virtualRect.w > -buffer && px < sw + buffer &&
                                 py + window->virtualRect.h > -buffer && py < sh + buffer);
             
@@ -84,41 +89,56 @@ void WindowManager::updateWindows() {
                 float targetX = px + sx;
                 float targetY = py + sy;
 
-                if (window->lastRenderedX != targetX || window->lastRenderedY != targetY) {
+                if (window->isHidden || window->lastRenderedX != targetX || window->lastRenderedY != targetY) {
                     window->lastProgrammaticMoveTime = now;
                     
-                    // 1. Move via AXAPI (Always works, but clamps to edges)
+                    // 1. Move to physical position
                     CGPoint targetPos = CGPointMake(targetX, targetY);
                     AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &targetPos);
                     AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
                     CFRelease(axPos);
 
-                    // 2. Move via SA (Bypasses edges/clamping if SA is active)
+                    // 2. Restore size if it was hidden
+                    if (window->isHidden) {
+                        CGSize targetSize = CGSizeMake(window->virtualRect.w, window->virtualRect.h);
+                        AXValueRef axSize = AXValueCreate(kAXValueTypeCGSize, &targetSize);
+                        AXUIElementSetAttributeValue(window->ref(), kAXSizeAttribute, axSize);
+                        CFRelease(axSize);
+                        window->isHidden = false;
+                    }
+
+                    // 3. Yabai SA for smooth overflow
                     if (window->wid() != 0) {
                         YabaiSA::moveWindow(window->wid(), (int)targetX, (int)targetY);
                     }
-
-                    // 3. Ensure it's not hidden
-                    AXUIElementSetAttributeValue(window->ref(), (CFStringRef)@"AXHidden", kCFBooleanFalse);
 
                     window->lastRenderedX = targetX;
                     window->lastRenderedY = targetY;
                 }
             } else {
-                // Window is outside buffer -> Hide it properly
-                if (window->lastRenderedX != -35000) {
+                // HIDE IN CORNER logic (inspired by AeroSpace)
+                if (!window->isHidden) {
                     window->lastProgrammaticMoveTime = now;
                     
-                    // Move far away using SA (only SA can move this far)
+                    // 1. Shrink to 1x1
+                    CGSize hideSize = CGSizeMake(1, 1);
+                    AXValueRef axSize = AXValueCreate(kAXValueTypeCGSize, &hideSize);
+                    AXUIElementSetAttributeValue(window->ref(), kAXSizeAttribute, axSize);
+                    CFRelease(axSize);
+
+                    // 2. Move to corner (bottom-right of current screen)
+                    CGPoint hidePos = CGPointMake(sx + sw - 1, sy + sh - 1);
+                    AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &hidePos);
+                    AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
+                    CFRelease(axPos);
+
                     if (window->wid() != 0) {
-                        YabaiSA::moveWindow(window->wid(), -35000, -35000);
+                        YabaiSA::moveWindow(window->wid(), -30000, -30000);
                     }
                     
-                    // Also hide via AXAPI to be sure
-                    AXUIElementSetAttributeValue(window->ref(), (CFStringRef)@"AXHidden", kCFBooleanTrue);
-
-                    window->lastRenderedX = -35000;
-                    window->lastRenderedY = -35000;
+                    window->isHidden = true;
+                    window->lastRenderedX = -30000;
+                    window->lastRenderedY = -30000;
                 }
             }
         }
@@ -165,7 +185,7 @@ void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
 
 void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
     auto window = findWindow(element);
-    if (!window) return;
+    if (!window || window->isHidden) return;
     if (m_isPanning) return;
     if (CACurrentMediaTime() - window->lastProgrammaticMoveTime < 0.25) return;
 

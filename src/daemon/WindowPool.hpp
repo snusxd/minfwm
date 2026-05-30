@@ -25,6 +25,7 @@ public:
     float lastRenderedX = -99999.0f;
     float lastRenderedY = -99999.0f;
     double lastProgrammaticMoveTime = 0.0;
+    bool isHidden = false;
 
 private:
     AXUIElementRef m_windowRef;
