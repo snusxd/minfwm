@@ -30,10 +30,10 @@ Core components:
 TODO
 
 ## Roadmap
-* [x] Initialization of `CFRunLoop` and the `CGEventTap` event system.
-* [x] Canvas panning via `Cmd + Option + Drag`.
-* [x] Integration with Yabai SA for layer management and bypassing menu bar restrictions.
-* [x] Initialization of windows without forced relayout.
+* [ ] Initialization of `CFRunLoop` and the `CGEventTap` event system.
+* [ ] Canvas panning via `Cmd + Option + Drag`.
+* [ ] Integration with Yabai SA for layer management and bypassing menu bar restrictions.
+* [ ] Initialization of windows without forced relayout.
 * [ ] Tiling Engine: refining `GridLayout` and adding new layout strategies.
 * [ ] Keyboard Navigation: camera and window control via keyboard.
 * [ ] IPC & CLI: creating `minfwmc` to control the daemon via a socket.

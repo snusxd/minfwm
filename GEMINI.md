@@ -1,55 +1,73 @@
-# MinfWM (macOS Infinite Window Manager) - Project Blueprint
+# minfwm – macOS Infinite Window Manager
+**minfwm** — это оконный менеджер для macOS, вдохновленный vxwm и DriftWM. Его главная цель – предоставить пользователю бесконечный рабочий стол (Infinite Canvas), полностью меняя парадигму взаимодействия с окнами и рабочим пространством.
 
-## 🎯 Core Concept
-A Tiling Window Manager for macOS (Apple Silicon / ARM64) implementing an "Infinite Canvas" workspace.
-Instead of using native macOS Spaces, MinfWM uses a 2D virtual camera to pan across a borderless, infinite workspace.
+## 1. Технологический стек
+* **Языки:** C++20 и Objective-C++ для прямого взаимодействия с нативными фреймворками Apple.
+* **Сборка:** CMake.
+* **Платформа:** macOS (настоятельно рекомендуется архитектура Apple Silicon / ARM64).
+* **Зависимости ядра:** * Accessibility API (AXAPI) для управления базовыми свойствами окон.
+* Yabai Scripting Addition (SA) для обхода ограничений строки меню, управления слоями (z-index) и анимациями без задержек WindowServer.
+* Для работы Yabai SA требуется частично отключенный SIP (System Integrity Protection).
 
-## 🏗 Architecture & State Management
-- **Virtual Camera**: Maintained via `viewport_x` and `viewport_y`.
-- **Window Coordinates**: Every tracked window (e.g., `ClientWindow` struct) stores its *absolute* coordinates on the infinite canvas.
-- **Screen Mapping Formula**: `screen_pos = absolute_pos - viewport_pos`.
-- **Bypassing macOS Limits**: Uses **Yabai Scripting Addition (SA)** to move window title bars above the menu bar ($Y < 38$) by communicating with the Yabai UNIX socket.
+## 2. Базовая парадигма: Виртуальное пространство
+Основа движка — разделение физических координат экрана и виртуальных координат бесконечного канваса.
+* **Virtual Space:** Бесконечная 2D-плоскость, в которой окна хранят свои координаты (например, `X: 15000, Y: -8000`).
+* **Viewport (Камера):** Виртуальное представление физического монитора, имеющее свои координаты `(X, Y)` на канвасе.
+* **Translation Layer:** Ядро, которое на каждом кадре пересчитывает виртуальные координаты видимых окон в физические координаты экрана macOS.
 
-## 🛠 Technical Stack & Constraints
-- **Language**: C++20 + Objective-C++ (`.mm`).
-- **Architecture**: ARM64 (Apple Silicon).
-- **Event Loop**: Pure `CFRunLoop`.
-- **Low-level Hook**: `CGEventTap` for intercepting `Cmd + Option + Drag`.
-- **Required Env**: SIP partially disabled (`--without debug --without fs --without nvram`), boot-arg `-arm64e_preview_abi`, and `yabai --load-sa` active.
+## 3. Архитектура Демона (`minfwmd`)
+Основная логика работает в фоне как UNIX-демон `minfwmd`.
 
----
+### 3.1. Core Engine
+* **State Manager:** Хранит глобальный список окон (WindowPool) и текущее положение Камеры.
+* **Event Loop:** Базируется на `CFRunLoop` для прослушивания системы.
 
-## 🗺 Detailed Implementation Plan
+### 3.2. Перехватчики (Hooks & Observers)
+* **Accessibility (AX) Observer:** Подписывается на события `NSWorkspace` и AX API (создание, закрытие окон, смена фокуса, изменение размера).
+* **Input Interceptor:** Глобальный перехват сочетаний клавиш и мыши с помощью `CGEventTap`. Используется для панорамирования Камеры по канвасу комбинацией `Cmd + Option + Drag`.
 
-### Phase 1: Foundation (✅ Completed)
-- [x] Setup CMake for C++20 and ARM64.
-- [x] Initialize `CFRunLoop`.
-- [x] Request and verify macOS Accessibility permissions.
-- [x] Install global `CGEventTap` for mouse tracking.
+### 3.3. Client-Server IPC
+Управление демоном осуществляется на лету через UNIX Domain Socket.
+* **`minfwmc` (CLI):** Консольная утилита для отправки команд (например, `minfwmc camera move --x 100 --y 0` или `minfwmc reload`).
 
-### Phase 2: Core Data Structures & Window Tracking (✅ Completed)
-- [x] **Create `ClientWindow` class**: Wrapper for `AXUIElementRef`.
-- [x] **Create `Application` class**: Manages `AXObserverRef` to listen for window events per-app.
-- [x] **Create `WindowManager`**: State Singleton managing viewport and app lists.
-- [x] **Hook App Launches**: Using `NSWorkspace` notifications.
-- [x] **Hook Window Events**: Listen for Create, Destroy, Move, and Resize notifications.
+## 4. Механики окон
 
-### Phase 3: The Infinite Canvas (Panning) (✅ Completed)
-- [x] **Modifier Detection**: `Cmd + Option` chord detection in Event Tap.
-- [x] **Panning Logic**: High-performance panning using raw mouse deltas.
-- [x] **Bypass Clamping**: Integrated Yabai SA socket communication (0x06 MOVE opcode) to allow windows to move above the menu bar.
-- [x] **Feedback Loop Fix**: Implemented notification suppression during active panning to prevent "rubber-band" flickering.
+Движок спроектирован так, чтобы минимизировать конфликт с нативным WindowServer, полагаясь на привычный UX macOS.
 
-### Phase 4: Tiling Engine (✅ In Progress)
-- [x] **Layout Interface (`ILayout`)**: Abstract base for different tiling strategies.
-- [x] **GridLayout**: Initial implementation of an infinite grid (1200x800 windows).
-- [x] **Floating Mode**: Standard windows are tiled; popups and dialogs are ignored.
-- [ ] **Real-time Re-tiling**: Refine the trigger for automatic layout application without causing unexpected jumps.
+* **Появление (Spawn):** Новые окна всегда появляются (спавнятся) строго по центру текущей позиции Камеры (Viewport) пользователя.
+* **Перемещение и изменение размера:** Осуществляется нативным способом (захват курсором за Title Bar и растягивание за рамки).
+* **Синхронизация:** При ручном изменении окна пользователем, `AX Observer` ловит события `AXWindowMoved` и `AXWindowResized`, а `Translation Layer` в обратном порядке обновляет виртуальные координаты этого окна.
 
-### Phase 5: Keyboard Navigation & Hotkeys (📅 Planned)
-- [ ] **Global Hotkeys**: Intercept keys for camera movement and window focus.
-- [ ] **Shortcuts**: `Mod + Arrows` (Pan), `Mod + Shift + Arrows` (Move Window).
+## 5. Оптимизация: Frustum Culling
+Для экономии системных ресурсов и заряда батареи применяется отсечение невидимых окон.
+| Состояние | Поведение системы |
+| --- | --- |
+| **Окно в зоне Камеры** | Рендерится штатно, видимо для пользователя (`AXHidden = false`).|
+| **Окно в Буферной зоне (N px)** | Рендерится системой за кадром (`AXHidden = false`) для обеспечения нулевой задержки и отсутствия мерцания при быстром возврате Камеры.|
+| **Окно за пределами буфера** | Принудительно скрывается (`AXHidden = true`), macOS переводит процесс в App Nap для экономии ресурсов.|
 
-### Phase 6: IPC & CLI (📅 Planned)
-- [ ] **Unix Domain Socket**: Internal socket for controlling the daemon.
-- [ ] **CLI Client**: `minfwmc` tool for sending commands.
+**Исключения (Иммунитет к отгрузке):**
+* Активное окно (`isFocused == true`) никогда не скрывается, чтобы не прерывать рабочие процессы (например, исполнение скриптов в фоне).
+* Окна, чьи классы/названия указаны в параметре `whitelist` конфигурации.
+
+## 6. Навигация в бесконечности
+Ориентация в пространстве базируется на динамических якорях и интеграции с нативным Dock.
+* **Закладки (Bookmarks):** Возможность сохранить текущие `X, Y` координаты Камеры (например, шорткатом `Cmd + Shift + 1`) и мгновенно телепортироваться обратно по `Cmd + 1`.
+* **Фокусная навигация (Dock):** При клике по иконке приложения в Dock, macOS нативно выводит на передний план последнее активное окно этого приложения. `minfwmd` перехватывает смену фокуса и автоматически центрирует Камеру на виртуальных координатах этого окна.
+
+## 7. Мультимониторность
+Система построена на архитектуре **Isolated Spaces** (Параллельные миры) для избежания багов пересчета координат при разных разрешениях экранов.
+* Каждый физический монитор обладает своей независимой Камерой, своим списком окон (`WindowPool`) и независимым бесконечным канвасом.
+* **Межэкранный транзит:** Перемещение окон между мониторами выполняется явной командой через CLI (например, `minfwmc window move --display next`), которая изымает окно из одного `WindowPool` и спавнит его в центре Камеры целевого монитора.
+* При отключении внешнего монитора система тихо переносит координаты его окон на главный канвас вокруг текущей Камеры.
+
+## 8. Конфигурация (ConfigManager)
+Настройки хранятся в статическом декларативном файле формата TOML или INI (например, по пути `~/.config/minfwm/minfwm.toml`).
+*Пример поддерживаемых параметров:*
+* `enable-window-shadows = false` — отключение системных теней.
+* `multi-display-mode = "isolated"` — режим мультимониторности.
+* `overscan-buffer-px = 500` — размер буферной зоны для Frustum Culling.
+* `whitelist = ["Terminal", "Music"]` — приложения, защищенные от ухода в `AXHidden`.
+* `spawn-behavior = "center"` — логика появления новых окон.
+
+Изменения применяются на лету командой `minfwmc reload` без необходимости перезапуска демона.
