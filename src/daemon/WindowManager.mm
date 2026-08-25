@@ -8,7 +8,7 @@
 namespace minfwm {
 
 void WindowManager::initialize() {
-    std::cout << "WindowManager: Initializing (with Hide-in-Corner)..." << std::endl;
+    std::cout << "WindowManager: Initializing (with Correct SA Protocol)..." << std::endl;
     ConfigManager::instance().load();
     for (NSScreen* screen in [NSScreen screens]) {
         NSDictionary* description = [screen deviceDescription];
@@ -81,7 +81,6 @@ void WindowManager::updateWindows() {
             float py = window->virtualRect.y - cy;
             bool is_focused = (focusedWindow && CFEqual(window->ref(), focusedWindow));
             
-            // Intersection math with camera viewport
             bool in_viewport = (px + window->virtualRect.w > -buffer && px < sw + buffer &&
                                 py + window->virtualRect.h > -buffer && py < sh + buffer);
             
@@ -89,16 +88,31 @@ void WindowManager::updateWindows() {
                 float targetX = px + sx;
                 float targetY = py + sy;
 
-                if (window->isHidden || window->lastRenderedX != targetX || window->lastRenderedY != targetY) {
+                if (window->isHidden || window->lastRenderedX != targetX || window->lastRenderedY != targetY || !window->isLayerSet) {
                     window->lastProgrammaticMoveTime = now;
                     
-                    // 1. Move to physical position
-                    CGPoint targetPos = CGPointMake(targetX, targetY);
-                    AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &targetPos);
-                    AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
-                    CFRelease(axPos);
+                    bool sa_moved = false;
+                    if (window->wid() != 0) {
+                        // 1. Move via SA (Handles menu bar overlap)
+                        sa_moved = YabaiSA::moveWindow(window->wid(), (int)targetX, (int)targetY);
+                        
+                        // 2. Set high layer once
+                        if (!window->isLayerSet) {
+                            if (YabaiSA::setWindowLayer(window->wid(), 11)) {
+                                window->isLayerSet = true;
+                            }
+                        }
+                    }
 
-                    // 2. Restore size if it was hidden
+                    // 3. Fallback to AXAPI
+                    if (!sa_moved) {
+                        CGPoint targetPos = CGPointMake(targetX, targetY);
+                        AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &targetPos);
+                        AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
+                        CFRelease(axPos);
+                    }
+
+                    // Restore size if needed
                     if (window->isHidden) {
                         CGSize targetSize = CGSizeMake(window->virtualRect.w, window->virtualRect.h);
                         AXValueRef axSize = AXValueCreate(kAXValueTypeCGSize, &targetSize);
@@ -107,34 +121,26 @@ void WindowManager::updateWindows() {
                         window->isHidden = false;
                     }
 
-                    // 3. Yabai SA for smooth overflow
-                    if (window->wid() != 0) {
-                        YabaiSA::moveWindow(window->wid(), (int)targetX, (int)targetY);
-                    }
-
                     window->lastRenderedX = targetX;
                     window->lastRenderedY = targetY;
                 }
             } else {
-                // HIDE IN CORNER logic (inspired by AeroSpace)
                 if (!window->isHidden) {
                     window->lastProgrammaticMoveTime = now;
                     
-                    // 1. Shrink to 1x1
+                    if (window->wid() != 0) {
+                        YabaiSA::moveWindow(window->wid(), -30000, -30000);
+                    }
+
                     CGSize hideSize = CGSizeMake(1, 1);
                     AXValueRef axSize = AXValueCreate(kAXValueTypeCGSize, &hideSize);
                     AXUIElementSetAttributeValue(window->ref(), kAXSizeAttribute, axSize);
                     CFRelease(axSize);
 
-                    // 2. Move to corner (bottom-right of current screen)
                     CGPoint hidePos = CGPointMake(sx + sw - 1, sy + sh - 1);
                     AXValueRef axPos = AXValueCreate(kAXValueTypeCGPoint, &hidePos);
                     AXUIElementSetAttributeValue(window->ref(), kAXPositionAttribute, axPos);
                     CFRelease(axPos);
-
-                    if (window->wid() != 0) {
-                        YabaiSA::moveWindow(window->wid(), -30000, -30000);
-                    }
                     
                     window->isHidden = true;
                     window->lastRenderedX = -30000;
