@@ -18,6 +18,40 @@ behavior.
   SIP changes; SA adds privileged movement/layer support when a compatible
   handshake succeeds.
 
+## System Limitations
+
+- Accessibility permission is required for `minfwmd`; restart the daemon after
+  granting or changing the permission. Add `yabai` separately if SA is used.
+- Public AX can move, resize, hide, and observe regular windows, but it cannot
+  guarantee WindowServer layer changes above the Menu Bar. That behavior needs
+  a compatible Yabai Scripting Addition. Without it, `minfwm` continues with AX
+  fallback and windows above the Menu Bar may not move.
+- Yabai SA is private, version-sensitive, and requires a root loader plus the
+  SIP configuration documented by Yabai. Do not weaken SIP for the default AX
+  backend. Native macOS Spaces are not implemented; the canvas uses virtual
+  coordinates and window projection instead.
+
+### Known Yabai Compatibility Case
+
+During testing on Apple Silicon with macOS 27.0, Yabai `7.1.25` and SA
+`2.1.29` returned no `SET_WINDOW (0x20)` capability during the handshake. The
+expected daemon message is:
+
+```text
+WindowManager: Yabai SA unavailable; using AX fallback
+```
+
+This explains why ordinary AX movement can work while windows above the Menu
+Bar do not. The installed Yabai and SA must support the current macOS version;
+restarting `minfwmd` alone cannot add a missing capability. On this Yabai
+package, use `yabai --start-service` and `sudo yabai --load-sa`. The commands
+`brew services start yabai` and `yabai --install-sa` are not supported by this
+package.
+
+The daemon writes logs to stdout/stderr. Capture them with
+`./build/minfwmd 2>&1 | tee /tmp/minfwmd.log`; Yabai service logs are commonly
+`/tmp/yabai_$(id -un).out.log` and `/tmp/yabai_$(id -un).err.log`.
+
 ## Build and Run
 
 ```bash
