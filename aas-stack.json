@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "name": "minfwm-refactor",
+  "catalog": {
+    "package": "agentic-awesome-skills",
+    "version": "16.1.0",
+    "integrity": "sha256-a43e19fc629713bda8bb1d36cf6bdaf99721c7f31b7c66f3d2f6c247220e3cce"
+  },
+  "targets": [
+    { "host": "codex", "scope": "project" }
+  ],
+  "profile": {
+    "goals": ["refactor", "test", "macos-stabilization"],
+    "projectType": "C++20 Objective-C++ macOS window manager",
+    "languages": ["c++", "objective-c++"],
+    "frameworks": ["CMake", "AppKit", "ApplicationServices", "CoreGraphics"],
+    "constraints": [
+      "macOS 14+",
+      "public macOS APIs are the default backend",
+      "Yabai scripting addition is optional",
+      "no external test dependencies",
+      "native Spaces are out of scope for phase one"
+    ]
+  },
+  "skills": [
+    { "id": "architecture" },
+    { "id": "cpp-pro" },
+    { "id": "memory-safety-patterns" },
+    { "id": "code-refactoring-refactor-clean" },
+    { "id": "code-review-and-quality" },
+    { "id": "systematic-debugging" },
+    { "id": "test-driven-development" },
+    { "id": "cross-platform-contract-propagation-audit" },
+    { "id": "api-and-interface-design" },
+    { "id": "ai-native-cli" },
+    { "id": "threat-modeling-expert" },
+    { "id": "api-security-best-practices" },
+    { "id": "orchestrate-batch-refactor" },
+    { "id": "review-multi-agent-orchestration" },
+    { "id": "acceptance-orchestrator" }
+  ]
+}
