@@ -5,7 +5,13 @@ namespace minfwm {
 
 class IPCClient {
 public:
-    void sendMessage(const IPCMessage& msg);
+    struct Result {
+        bool transportSucceeded = false;
+        Response response{};
+        std::string error;
+    };
+
+    Result sendMessage(const Request& request);
 };
 
 } // namespace minfwm

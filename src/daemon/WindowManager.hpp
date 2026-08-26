@@ -1,40 +1,42 @@
 #pragma once
 
+#import <AppKit/AppKit.h>
 #include <memory>
 #include <vector>
 #include <map>
 #include "Camera.hpp"
 #include "WindowPool.hpp"
+#include "../core/DisplayState.hpp"
+#include "AXBackend.hpp"
+#include "YabaiSA.hpp"
 
 namespace minfwm {
 
 class Display {
 public:
-    Display(int64_t displayId) : m_id(displayId) {
-        m_camera = std::make_unique<Camera>();
-        m_windowPool = std::make_unique<WindowPool>();
+    Display(int64_t displayId, core::Rect bounds, WindowPool::WindowIdResolver windowIdResolver = nullptr)
+        : m_id(displayId), m_state(core::DisplayGeometry{displayId, bounds}) {
+        m_windowPool = std::make_unique<WindowPool>(windowIdResolver);
     }
 
     int64_t id() const { return m_id; }
-    Camera& camera() { return *m_camera; }
+    Camera& camera() { return m_state.camera(); }
+    const core::DisplayState& state() const { return m_state; }
+    core::DisplayState& state() { return m_state; }
     WindowPool& windowPool() { return *m_windowPool; }
 
     void saveBookmark(int index) {
-        m_bookmarks[index] = { m_camera->x(), m_camera->y() };
+        m_state.saveBookmark(index);
     }
 
     void loadBookmark(int index) {
-        if (m_bookmarks.count(index)) {
-            auto pos = m_bookmarks[index];
-            m_camera->setPosition(pos.x, pos.y);
-        }
+        (void)m_state.loadBookmark(index);
     }
 
 private:
     int64_t m_id;
-    std::unique_ptr<Camera> m_camera;
+    core::DisplayState m_state;
     std::unique_ptr<WindowPool> m_windowPool;
-    std::map<int, CGPoint> m_bookmarks;
 };
 
 class WindowManager {
@@ -44,13 +46,15 @@ public:
         return instance;
     }
 
-    void initialize();
+    bool initialize();
+    void shutdown();
     
     // Get display for a window or camera
-    Display& mainDisplay() { return *m_displays[0]; }
+    Display& mainDisplay();
     Display& displayForWindow(AXUIElementRef window);
     
     void updateWindows();
+    void adoptWindow(Display& display, const std::shared_ptr<ClientWindow>& window);
     void centerWindow(std::shared_ptr<ClientWindow> window);
     void centerCameraOnWindow(AXUIElementRef element);
     void syncPhysicalToVirtual(AXUIElementRef element);
@@ -64,9 +68,16 @@ public:
 
 private:
     WindowManager() = default;
-    
+
+    NSScreen* screenForDisplay(int64_t displayId) const;
+    float axTopOriginForScreen(NSScreen* screen) const;
+    bool isWhitelisted(AXUIElementRef element) const;
+
     std::vector<std::unique_ptr<Display>> m_displays;
     bool m_isPanning = false;
+    bool m_initialized = false;
+    AXBackend m_axBackend;
+    YabaiSABackend m_yabaiBackend;
 };
 
 } // namespace minfwm

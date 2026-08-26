@@ -10,7 +10,8 @@ AXObserver::~AXObserver() {
     stop();
 }
 
-void AXObserver::start() {
+bool AXObserver::start() {
+    if (m_launchObserver || m_terminateObserver || !m_appObservers.empty()) return true;
     std::cout << "AXObserver: Starting..." << std::endl;
 
     NSWorkspace* workspace = [NSWorkspace sharedWorkspace];
@@ -32,11 +33,13 @@ void AXObserver::start() {
         this->unobserveApplication(app.processIdentifier);
     }];
 
+    bool registrationFailed = false;
     for (NSRunningApplication* app in [workspace runningApplications]) {
         if (app.activationPolicy == NSApplicationActivationPolicyRegular) {
-            observeApplication(app);
+            registrationFailed = !observeApplication(app) || registrationFailed;
         }
     }
+    return !registrationFailed;
 }
 
 void AXObserver::stop() {
@@ -50,67 +53,88 @@ void AXObserver::stop() {
     }
 
     for (auto& [pid, appObs] : m_appObservers) {
-        CFRunLoopRemoveSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(appObs.observer), kCFRunLoopDefaultMode);
-        CFRelease(appObs.observer);
-        CFRelease(appObs.element);
+        if (appObs.observer) {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(appObs.observer.get()), kCFRunLoopDefaultMode);
+        }
     }
     m_appObservers.clear();
 }
 
-void AXObserver::observeApplication(NSRunningApplication* app) {
+bool AXObserver::observeApplication(NSRunningApplication* app) {
     auto& wm = WindowManager::instance();
+    if (!app) return false;
     pid_t pid = app.processIdentifier;
-    if (m_appObservers.find(pid) != m_appObservers.end()) return;
+    if (m_appObservers.find(pid) != m_appObservers.end()) return true;
 
-    AXUIElementRef appElem = AXUIElementCreateApplication(pid);
-    if (!appElem) return;
+    CFRef<AXUIElementRef> appElem = CFRef<AXUIElementRef>::adopt(AXUIElementCreateApplication(pid));
+    if (!appElem) return false;
 
-    AXObserverRef observer;
-    if (AXObserverCreate(pid, axCallback, &observer) != kAXErrorSuccess) {
-        CFRelease(appElem);
-        return;
+    AXObserverRef observerRaw = nullptr;
+    if (AXObserverCreate(pid, axCallback, &observerRaw) != kAXErrorSuccess || !observerRaw) {
+        return false;
+    }
+    CFRef<AXObserverRef> observer = CFRef<AXObserverRef>::adopt(observerRaw);
+
+    const CFStringRef notifications[] = {
+        kAXWindowCreatedNotification,
+        kAXUIElementDestroyedNotification,
+        kAXWindowMovedNotification,
+        kAXWindowResizedNotification,
+        kAXFocusedWindowChangedNotification,
+    };
+    bool registrationFailed = false;
+    for (const CFStringRef notification : notifications) {
+        const AXError error = AXObserverAddNotification(observer.get(), appElem.get(), notification, this);
+        if (error != kAXErrorSuccess && error != kAXErrorNotificationAlreadyRegistered) {
+            std::cerr << "AXObserver: failed to register notification for pid " << pid
+                      << " (error " << error << ")" << std::endl;
+            registrationFailed = true;
+        }
+    }
+    if (registrationFailed) {
+        return false;
     }
 
-    AXObserverAddNotification(observer, appElem, kAXWindowCreatedNotification, this);
-    AXObserverAddNotification(observer, appElem, kAXUIElementDestroyedNotification, this);
-    AXObserverAddNotification(observer, appElem, kAXWindowMovedNotification, this);
-    AXObserverAddNotification(observer, appElem, kAXWindowResizedNotification, this);
-    AXObserverAddNotification(observer, appElem, kAXFocusedWindowChangedNotification, this);
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(observer.get()), kCFRunLoopDefaultMode);
 
-    CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
-
-    m_appObservers[pid] = {observer, appElem};
+    m_appObservers.emplace(pid, AppObserver{std::move(observer), std::move(appElem)});
 
     // Add existing windows
-    CFArrayRef windowList = NULL;
-    if (AXUIElementCopyAttributeValue(appElem, kAXWindowsAttribute, (CFTypeRef*)&windowList) == kAXErrorSuccess) {
+    CFRef<CFTypeRef> windowValue;
+    if (AXUIElementCopyAttributeValue(m_appObservers.at(pid).element.get(), kAXWindowsAttribute,
+                                      windowValue.put()) == kAXErrorSuccess && windowValue) {
+        const CFArrayRef windowList = static_cast<CFArrayRef>(windowValue.get());
+        if (CFGetTypeID(windowList) != CFArrayGetTypeID()) return true;
         CFIndex count = CFArrayGetCount(windowList);
         for (CFIndex i = 0; i < count; ++i) {
             AXUIElementRef windowRef = (AXUIElementRef)CFArrayGetValueAtIndex(windowList, i);
             Display& display = wm.displayForWindow(windowRef);
-            display.windowPool().addWindow(windowRef);
+            wm.adoptWindow(display, display.windowPool().addWindow(windowRef));
         }
-        CFRelease(windowList);
         wm.updateWindows();
     }
+    return true;
 }
 
 void AXObserver::unobserveApplication(pid_t pid) {
     auto it = m_appObservers.find(pid);
     if (it != m_appObservers.end()) {
-        CFRunLoopRemoveSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(it->second.observer), kCFRunLoopDefaultMode);
-        CFRelease(it->second.observer);
-        CFRelease(it->second.element);
+        if (it->second.observer) {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(it->second.observer.get()), kCFRunLoopDefaultMode);
+        }
         m_appObservers.erase(it);
     }
 }
 
 void AXObserver::axCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void* refcon) {
+    auto* self = static_cast<AXObserver*>(refcon);
+    if (!self || !element || !notification) return;
     auto& wm = WindowManager::instance();
     
     if (CFStringCompare(notification, kAXWindowCreatedNotification, 0) == kCFCompareEqualTo) {
         Display& display = wm.displayForWindow(element);
         auto window = display.windowPool().addWindow(element);
+        wm.adoptWindow(display, window);
         wm.centerWindow(window);
         wm.updateWindows();
     } else if (CFStringCompare(notification, kAXUIElementDestroyedNotification, 0) == kCFCompareEqualTo) {
@@ -119,7 +143,11 @@ void AXObserver::axCallback(AXObserverRef observer, AXUIElementRef element, CFSt
                CFStringCompare(notification, kAXWindowResizedNotification, 0) == kCFCompareEqualTo) {
         wm.syncPhysicalToVirtual(element);
     } else if (CFStringCompare(notification, kAXFocusedWindowChangedNotification, 0) == kCFCompareEqualTo) {
-        wm.centerCameraOnWindow(element);
+        CFRef<CFTypeRef> focusedValue;
+        if (AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute, focusedValue.put()) == kAXErrorSuccess &&
+            focusedValue) {
+            wm.centerCameraOnWindow(static_cast<AXUIElementRef>(focusedValue.get()));
+        }
     }
 }
 

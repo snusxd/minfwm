@@ -1,34 +1,81 @@
 #include "IPCClient.hpp"
-#include <iostream>
+
+#include <cstring>
+#include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
 namespace minfwm {
 
-void IPCClient::sendMessage(const IPCMessage& msg) {
-    int clientFd = socket(AF_UNIX, SOCK_STREAM, 0);
+namespace {
+
+bool isTrustedSocketPath(const std::string& path) {
+    struct stat status{};
+    return ::lstat(path.c_str(), &status) == 0 &&
+           S_ISSOCK(status.st_mode) &&
+           status.st_uid == ::getuid() &&
+           (status.st_mode & 0777) == (S_IRUSR | S_IWUSR);
+}
+
+bool setClientTimeouts(int fileDescriptor) {
+    constexpr timeval timeout = {1, 0};
+    return ::setsockopt(fileDescriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == 0 &&
+           ::setsockopt(fileDescriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) == 0;
+}
+
+} // namespace
+
+IPCClient::Result IPCClient::sendMessage(const Request& request) {
+    const auto encodedRequest = encodeRequestFrame(request);
+    if (!encodedRequest.has_value()) {
+        return Result{false, {}, "request payload exceeds protocol limit"};
+    }
+
+    const int clientFd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (clientFd == -1) {
-        std::cerr << "IPCClient: Failed to create socket" << std::endl;
-        return;
+        return Result{false, {}, "failed to create socket"};
     }
 
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
+    struct ScopedDescriptor {
+        int value;
+        ~ScopedDescriptor() {
+            if (value != -1) {
+                close(value);
+            }
+        }
+    } descriptor{clientFd};
+
+    if (!setClientTimeouts(clientFd)) {
+        return Result{false, {}, "failed to configure socket timeouts"};
+    }
+
+    const std::string path = ipcSocketPath();
+    if (path.size() >= sizeof(sockaddr_un::sun_path)) {
+        return Result{false, {}, "socket path is too long"};
+    }
+    if (!isTrustedSocketPath(path)) {
+        return Result{false, {}, "daemon socket is missing or has unsafe ownership"};
+    }
+
+    struct sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, "/tmp/minfwm.sock", sizeof(addr.sun_path) - 1);
+    std::strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
 
-    if (connect(clientFd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        std::cerr << "IPCClient: Failed to connect to daemon. Is minfwmd running?" << std::endl;
-        close(clientFd);
-        return;
+    if (connect(clientFd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == -1) {
+        return Result{false, {}, "failed to connect to daemon"};
     }
 
-    if (write(clientFd, &msg, sizeof(msg)) == -1) {
-        std::cerr << "IPCClient: Failed to send message" << std::endl;
+    if (!writeAll(clientFd, encodedRequest->data(), encodedRequest->size())) {
+        return Result{false, {}, "failed to send request"};
     }
 
-    close(clientFd);
+    Response response;
+    if (!readResponse(clientFd, response)) {
+        return Result{false, {}, "invalid or missing daemon response"};
+    }
+    return Result{true, response, {}};
 }
 
 } // namespace minfwm

@@ -1,38 +1,61 @@
 #import <Foundation/Foundation.h>
-#include <iostream>
+#include "CommandLine.hpp"
 #include "IPCClient.hpp"
 #include "Protocol.hpp"
 
+#include <csignal>
+#include <iostream>
+
+namespace {
+
+const char* errorCodeName(minfwm::ErrorCode error) {
+    switch (error) {
+        case minfwm::ErrorCode::MALFORMED:
+            return "MALFORMED";
+        case minfwm::ErrorCode::UNSUPPORTED:
+            return "UNSUPPORTED";
+        case minfwm::ErrorCode::INTERNAL:
+            return "INTERNAL";
+        case minfwm::ErrorCode::NONE:
+            return "NONE";
+    }
+    return "UNKNOWN";
+}
+
+void printUsage() {
+    std::cerr << "Usage: minfwmc reload | camera move --x <value> --y <value>\n";
+}
+
+} // namespace
+
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
-        if (argc < 2) {
-            std::cout << "Usage: minfwmc <command> [args]" << std::endl;
-            return 0;
+        signal(SIGPIPE, SIG_IGN);
+        const auto parsed = minfwm::parseCommandLine(argc, argv);
+        if (!parsed.command.has_value()) {
+            std::cerr << "minfwmc: " << parsed.error << '\n';
+            printUsage();
+            return 2;
         }
 
-        std::string command = argv[1];
+        minfwm::Request request;
+        if (parsed.command->command == minfwm::ParsedCommandLine::Command::RELOAD) {
+            request = minfwm::makeReloadRequest();
+        } else {
+            request = minfwm::makeCameraMoveRequest(parsed.command->x, parsed.command->y);
+        }
+
         minfwm::IPCClient client;
 
-        if (command == "reload") {
-            minfwm::IPCMessage msg;
-            msg.type = minfwm::MessageType::RELOAD;
-            client.sendMessage(msg);
-        } else if (command == "camera") {
-            if (argc < 5) {
-                std::cout << "Usage: minfwmc camera move --x <x> --y <y>" << std::endl;
-                return 1;
-            }
-            // Simple parsing for now
-            float x = std::stof(argv[3]);
-            float y = std::stof(argv[4]);
-            
-            minfwm::IPCMessage msg;
-            msg.type = minfwm::MessageType::CAMERA_MOVE;
-            msg.data.camera_move.x = x;
-            msg.data.camera_move.y = y;
-            client.sendMessage(msg);
-        } else {
-            std::cout << "Unknown command: " << command << std::endl;
+        const auto result = client.sendMessage(request);
+        if (!result.transportSucceeded) {
+            std::cerr << "minfwmc: " << result.error << '\n';
+            return 1;
+        }
+        if (result.response.status != minfwm::ResponseStatus::OK) {
+            std::cerr << "minfwmc: daemon rejected request ("
+                      << errorCodeName(result.response.error) << ")\n";
+            return 1;
         }
     }
     return 0;

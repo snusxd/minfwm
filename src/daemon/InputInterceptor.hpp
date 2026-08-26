@@ -2,6 +2,7 @@
 
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
+#include "CFRAII.hpp"
 
 namespace minfwm {
 
@@ -10,14 +11,14 @@ public:
     InputInterceptor();
     ~InputInterceptor();
 
-    void start();
+    bool start();
     void stop();
 
 private:
     static CGEventRef eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
     
-    CFMachPortRef m_eventTap;
-    CFRunLoopSourceRef m_runLoopSource;
+    CFRef<CFMachPortRef> m_eventTap;
+    CFRef<CFRunLoopSourceRef> m_runLoopSource;
 };
 
 } // namespace minfwm

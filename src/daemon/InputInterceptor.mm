@@ -10,7 +10,8 @@ InputInterceptor::~InputInterceptor() {
     stop();
 }
 
-void InputInterceptor::start() {
+bool InputInterceptor::start() {
+    if (m_eventTap) return true;
     std::cout << "InputInterceptor: Starting..." << std::endl;
 
     // We now listen to Down, Up, and Drag to fully own the gesture
@@ -20,30 +21,47 @@ void InputInterceptor::start() {
                             (1 << kCGEventFlagsChanged) | 
                             (1 << kCGEventKeyDown);
                             
-    m_eventTap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, eventMask, eventTapCallback, this);
+    m_eventTap = CFRef<CFMachPortRef>::adopt(CGEventTapCreate(
+        kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, eventMask, eventTapCallback, this));
 
     if (!m_eventTap) {
         std::cerr << "InputInterceptor: Failed to create event tap" << std::endl;
-        return;
+        return false;
     }
 
-    m_runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, m_eventTap, 0);
-    CFRunLoopAddSource(CFRunLoopGetCurrent(), m_runLoopSource, kCFRunLoopCommonModes);
-    CGEventTapEnable(m_eventTap, true);
+    m_runLoopSource = CFRef<CFRunLoopSourceRef>::adopt(
+        CFMachPortCreateRunLoopSource(kCFAllocatorDefault, m_eventTap.get(), 0));
+    if (!m_runLoopSource) {
+        std::cerr << "InputInterceptor: Failed to create event tap run-loop source" << std::endl;
+        m_eventTap.reset();
+        return false;
+    }
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), m_runLoopSource.get(), kCFRunLoopCommonModes);
+    CGEventTapEnable(m_eventTap.get(), true);
+    return true;
 }
 
 void InputInterceptor::stop() {
     if (m_eventTap) {
-        CGEventTapEnable(m_eventTap, false);
-        CFRunLoopRemoveSource(CFRunLoopGetCurrent(), m_runLoopSource, kCFRunLoopCommonModes);
-        CFRelease(m_runLoopSource);
-        CFRelease(m_eventTap);
-        m_eventTap = NULL;
-        m_runLoopSource = NULL;
+        CGEventTapEnable(m_eventTap.get(), false);
+        if (m_runLoopSource) {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), m_runLoopSource.get(), kCFRunLoopCommonModes);
+            m_runLoopSource.reset();
+        }
+        m_eventTap.reset();
     }
 }
 
 CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon) {
+    auto* interceptor = static_cast<InputInterceptor*>(refcon);
+    if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+        if (interceptor && interceptor->m_eventTap) {
+            std::cerr << "InputInterceptor: event tap disabled; re-enabling" << std::endl;
+            CGEventTapEnable(interceptor->m_eventTap.get(), true);
+        }
+        return event;
+    }
+
     auto& wm = WindowManager::instance();
 
     // Check modifiers for any mouse event in our mask

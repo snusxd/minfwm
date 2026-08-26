@@ -4,6 +4,7 @@
 #import <AppKit/AppKit.h>
 #import <ApplicationServices/ApplicationServices.h>
 #include <map>
+#include "CFRAII.hpp"
 
 namespace minfwm {
 
@@ -12,11 +13,11 @@ public:
     AXObserver();
     ~AXObserver();
 
-    void start();
+    bool start();
     void stop();
 
 private:
-    void observeApplication(NSRunningApplication* app);
+    bool observeApplication(NSRunningApplication* app);
     void unobserveApplication(pid_t pid);
     
     static void axCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void* refcon);
@@ -25,8 +26,8 @@ private:
     id m_terminateObserver;
     
     struct AppObserver {
-        AXObserverRef observer;
-        AXUIElementRef element;
+        CFRef<AXObserverRef> observer;
+        CFRef<AXUIElementRef> element;
     };
     std::map<pid_t, AppObserver> m_appObservers;
 };
