@@ -4,6 +4,12 @@
 coordinates and projecting the visible part onto macOS displays. The first
 phase targets macOS 14+ and keeps native Spaces out of scope.
 
+## Authorship
+
+This project is fully written by AI. Human review remains required before use,
+especially for Accessibility, WindowServer, SIP, and other privileged macOS
+behavior.
+
 ## Requirements
 
 - macOS 14 or newer, C++20, AppleClang, and CMake 3.20+.
