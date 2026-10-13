@@ -249,3 +249,12 @@ pointer input directly; spring interpolation has not been added. Build checks
 cover the adapter. Display cadence, multi-monitor timing, AX timeouts and actual
 desktop exit remain manual-only checks. Per-call timeouts bound unresponsive
 AX messages; total restoration time still depends on the number of windows.
+
+A manual, window-free display-clock probe on this desktop received 125 callbacks
+across the available displays in 0.5 seconds, stopped the clock twice safely,
+and returned from the daemon run loop (exit 0). Evidence:
+`build/manual-frame-clock.log`. This verifies live callback/stop behavior only;
+it does not establish window-animation smoothness. Frame callbacks use their
+own autorelease pool so the long-running daemon does not accumulate temporary
+Objective-C objects until shutdown. Full build and all 11 CTests passed before
+this adapter-only cleanup.

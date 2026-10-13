@@ -13,7 +13,9 @@
 
 @implementation MinfwmFrameTarget
 - (void)tick:(CADisplayLink*)link {
-    if (callback) callback(displayId);
+    @autoreleasepool {
+        if (callback) callback(displayId);
+    }
 }
 @end
 
