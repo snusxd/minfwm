@@ -86,6 +86,10 @@ add_executable(minfwm_manual_window_move EXCLUDE_FROM_ALL tools/ManualWindowMove
 target_link_libraries(minfwm_manual_window_move PRIVATE minfwm_daemon_runtime)
 
 if(BUILD_TESTING)
+    add_executable(minfwm_window_position_tests tests/WindowPositionTests.mm)
+    target_include_directories(minfwm_window_position_tests PRIVATE src/common src/daemon)
+    target_link_libraries(minfwm_window_position_tests PRIVATE ${COMMON_LIBS})
+    add_test(NAME minfwm_window_position_tests COMMAND minfwm_window_position_tests)
     add_executable(minfwm_daemon_run_loop_tests tests/DaemonRunLoopTests.mm)
     target_link_libraries(minfwm_daemon_run_loop_tests PRIVATE minfwm_daemon_runtime)
     add_test(NAME minfwm_daemon_run_loop_tests COMMAND minfwm_daemon_run_loop_tests)

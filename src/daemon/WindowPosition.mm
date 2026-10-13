@@ -4,6 +4,29 @@
 #include <cmath>
 
 namespace minfwm {
+namespace {
+
+bool positionInList(CFArrayRef windows, uint32_t wid, CGPoint& point) {
+    if (!windows) return false;
+    for (CFIndex index = 0; index < CFArrayGetCount(windows); ++index) {
+        const auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows, index));
+        if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID()) continue;
+        const auto number = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowNumber));
+        uint32_t found = 0;
+        if (!number || CFGetTypeID(number) != CFNumberGetTypeID() ||
+            !CFNumberGetValue(number, kCGWindowIDCFNumberType, &found) || found != wid) continue;
+        const auto bounds = static_cast<CFDictionaryRef>(CFDictionaryGetValue(info, kCGWindowBounds));
+        CGRect frame{};
+        if (!bounds || CFGetTypeID(bounds) != CFDictionaryGetTypeID() ||
+            !CGRectMakeWithDictionaryRepresentation(bounds, &frame) ||
+            !std::isfinite(frame.origin.x) || !std::isfinite(frame.origin.y)) return false;
+        point = frame.origin;
+        return true;
+    }
+    return false;
+}
+
+}
 
 bool windowPositionMatches(CGPoint actual, int x, int y) {
     // Coordinates are logical screen points, including on Retina displays.
@@ -16,15 +39,11 @@ bool readWindowPosition(AXUIElementRef element, uint32_t wid, CGPoint& point) {
     if (wid != 0) {
         CFRef<CFArrayRef> windows = CFRef<CFArrayRef>::adopt(
             CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, wid));
-        if (!windows || CFArrayGetCount(windows.get()) != 1) return false;
-        const auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows.get(), 0));
-        if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID()) return false;
-        const auto bounds = static_cast<CFDictionaryRef>(CFDictionaryGetValue(info, kCGWindowBounds));
-        CGRect frame{};
-        if (!bounds || CFGetTypeID(bounds) != CFDictionaryGetTypeID() ||
-            !CGRectMakeWithDictionaryRepresentation(bounds, &frame)) return false;
-        point = frame.origin;
-        return std::isfinite(point.x) && std::isfinite(point.y);
+        if (positionInList(windows.get(), wid, point)) return true;
+        // Some real windows (observed with Discord on macOS 27) are absent
+        // from the selected-window query but present in the full session list.
+        windows = CFRef<CFArrayRef>::adopt(CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID));
+        return positionInList(windows.get(), wid, point);
     }
 
     // The public AX-only path does not resolve private WindowServer IDs.
