@@ -16,6 +16,12 @@ public:
     [[nodiscard]] Camera& camera() noexcept;
     [[nodiscard]] const Camera& camera() const noexcept;
     [[nodiscard]] Rect viewport() const noexcept;
+    [[nodiscard]] float scale() const noexcept { return m_scale; }
+    [[nodiscard]] bool overviewActive() const noexcept { return m_scale != 1 || m_targetScale != 1; }
+    bool setScaleAt(float scale, Point physicalAnchor) noexcept;
+    bool requestZoom(float scrollDelta, Point physicalAnchor) noexcept;
+    void advanceZoom(double elapsedSeconds) noexcept;
+    void resetZoom(Point physicalAnchor) noexcept;
 
     // Both points use the same canonical physical coordinate system.
     // The physical display origin may be negative.
@@ -30,6 +36,9 @@ public:
 private:
     DisplayGeometry m_geometry;
     Camera m_camera;
+    float m_scale = 1;
+    float m_targetScale = 1;
+    Point m_zoomAnchor;
     std::map<int, Point> m_bookmarks;
 };
 

@@ -81,6 +81,36 @@ int main() {
     expectNear(display.camera().y(), 200.0f, "bookmark restores camera y");
     expect(!display.loadBookmark(99), "missing bookmark is reported");
 
+    DisplayState zoomed({8, {-1920, -300, 1920, 1080}});
+    zoomed.camera().setPosition(-500, 200);
+    const Point anchor{-1200, 120};
+    const Point anchoredWorld = zoomed.physicalToVirtual(anchor);
+    expect(zoomed.setScaleAt(0.5f, anchor), "overview accepts a finite scale");
+    expectNear(zoomed.physicalToVirtual(anchor).x, anchoredWorld.x, "zoom preserves the world point under a negative-origin cursor");
+    expectNear(zoomed.physicalToVirtual(anchor).y, anchoredWorld.y, "zoom preserves cursor anchor on y");
+    expectNear(zoomed.viewport().w, 3840, "zoom out expands the virtual viewport");
+    const Rect scaled = zoomed.virtualToPhysical(virtualRect);
+    expectNear(scaled.w, 320, "overview scales presentation width without changing model geometry");
+    const Rect unscaled = zoomed.physicalToVirtual(scaled);
+    expectNear(unscaled.x, virtualRect.x, "scaled rectangle origin round-trips");
+    expectNear(unscaled.h, virtualRect.h, "scaled rectangle size round-trips");
+    expect(!zoomed.setScaleAt(NAN, anchor) && !zoomed.setScaleAt(0, anchor) &&
+           !zoomed.setScaleAt(1.1f, anchor) && zoomed.scale() == 0.5f, "invalid scales leave camera and scale unchanged");
+    expect(!zoomed.setScaleAt(0.4f, {INFINITY, 0}) && zoomed.scale() == 0.5f, "invalid anchor is atomic");
+    DisplayState sixty({9, {0, 0, 1920, 1080}}), oneTwenty(sixty);
+    expect(sixty.requestZoom(-80, {800, 400}) && oneTwenty.requestZoom(-80, {800, 400}), "scroll requests overview");
+    for (int i = 0; i < 30; ++i) sixty.advanceZoom(1.0 / 60);
+    for (int i = 0; i < 60; ++i) oneTwenty.advanceZoom(1.0 / 120);
+    expectNear(sixty.scale(), oneTwenty.scale(), "zoom easing is independent of display refresh rate");
+    expect(sixty.overviewActive() && sixty.scale() < 0.5f, "negative scroll zooms out smoothly");
+    expect(!sixty.requestZoom(NAN, anchor), "invalid scroll cannot corrupt the target");
+    sixty.requestZoom(-10000, {800, 400});
+    sixty.advanceZoom(2);
+    expectNear(sixty.scale(), 0.2f, "overview scale is bounded at twenty percent");
+    sixty.resetZoom({800, 400});
+    expect(!sixty.overviewActive() && sixty.scale() == 1, "escape restores exact native scale");
+    expectNear(sixty.physicalToVirtual(Point{800, 400}).x, 800, "reset preserves the zoom anchor");
+
     const Rect usable{0, 31, 1920, 1049};
     expect(canUseNativePosition({100, 100, 640, 480}, usable), "ordinary visible frame prefers native movement");
     expect(canUseNativePosition({-600, 100, 640, 480}, usable), "partially visible window can retain native title-bar input");
