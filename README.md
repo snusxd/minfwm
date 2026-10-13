@@ -1,11 +1,5 @@
 # macOS Infinite Window Manager
 
-> Historical rollback checkpoint: this revision restores automatic lifecycle v1
-> transforms from before the reported system regression. It is an intermediate
-> comparison point, not a recommendation to reload the old payload. The lifecycle
-> v2/default-off descriptions below document the later recovery checkpoint
-> (`2809352`) and do not describe this historical source revision.
-
 `minfwm` provides an infinite 2D canvas by storing window positions in virtual
 coordinates and projecting the visible part onto macOS displays. The first
 phase targets macOS 14+ and keeps native Spaces out of scope.
@@ -35,7 +29,7 @@ behavior.
   experimental minfwm SA extension translates the rendered window while
   retaining its AppKit frame. It demonstrated placement above the menu bar,
   but its first revision caused persistent offsets and native dragging jumps.
-  Transforms are disabled by default; the revised cleanup is not yet validated
+  The revised cleanup is not yet validated
   with third-party applications. See the [regression record](docs/acceptance-macos.md#persistent-transform-regression-and-recovery-2026-10-13).
 - Yabai SA is private, version-sensitive, and requires a root loader plus the
   SIP configuration documented by Yabai. Do not weaken SIP for the default AX
@@ -67,7 +61,7 @@ after other applications changed their frames.
 
 ### Experimental window translation
 
-The normal build/run instructions below leave this feature disabled. The first
+The backend selects transforms automatically with a lifecycle v2 SA. The first
 payload revision (`0x80`) is no longer accepted. Lifecycle v2 (`0x180`) has
 automated regression coverage and builds successfully, but has not been loaded
 for another live acceptance pass. To prepare a deliberate manual experiment:
@@ -79,11 +73,10 @@ sudo ./build/yabai-minfwm/bin/yabai --load-sa
 
 The first command builds a pinned Yabai 7.1.25 extension locally. Loading it
 replaces Yabai's installed SA and can restart Dock; it does not change SIP.
-Set `experimental-window-transforms = true` in the configuration, then restart
-`minfwmd` to opt in. This option is read at startup; `reload` does not switch the
-active backend. The daemon prints `absolute transforms enabled (experimental)`
-only with explicit opt-in and a lifecycle v2 capability handshake. Stock SA
-remains supported with ordinary movement and AX fallback.
+The daemon prints `absolute transforms enabled` with a lifecycle v2 capability
+handshake. Stock SA remains supported with ordinary movement and AX fallback;
+stock SA cannot guarantee above-menu-bar placement. No startup opt-in setting
+is required.
 See [extension setup and protocol](integrations/yabai/README.md).
 
 Transforms are reset before AX visibility/size operations and orderly shutdown.
@@ -146,7 +139,7 @@ prototype stayed at `y=-120` and returned successfully on macOS 27. It uses
 Yabai's PIP toggle at scale 1 as an earlier diagnostic. The absolute fixture
 uses the integrated backend/renderer, checks 120 pan frames, holds the window
 for input testing, resets it, and checks recovery after its owner exits without
-cleanup. This mode explicitly opts into transforms, requires the lifecycle v2
+cleanup. This mode requires the lifecycle v2
 extension and exits 77 when it is unavailable. It does not replace native
 dragging tests with third-party applications.
 
@@ -157,7 +150,6 @@ is accepted and reload is atomic:
 
 ```toml
 enable-window-shadows = false
-experimental-window-transforms = false
 multi-display-mode = "isolated"
 overscan-buffer-px = 500
 whitelist = ["Terminal", "Music"]
@@ -166,7 +158,6 @@ spawn-behavior = "center"
 
 Invalid values leave the active snapshot unchanged. `reload` reports a daemon
 error when the file cannot be parsed.
-`experimental-window-transforms` takes effect only after daemon restart.
 
 ## Architecture
 

@@ -223,7 +223,8 @@ bool YabaiSA::handshake() {
         // depend on that flag. Still require the complete versioned handshake.
         m_compatible = parseVersion(version);
         // This extension is shipped with the pinned minfwm SA patch only.
-        m_transformSupport = version == "2.1.29" && (attributes[0] & 0x80) != 0;
+        m_transformSupport = version == "2.1.29" && (attributes[0] & 0x80) != 0 &&
+            (attributes[1] & 0x01) != 0; // Lifecycle v2 restores the current native baseline.
     }
     return result && m_compatible;
 }

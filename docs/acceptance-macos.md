@@ -207,3 +207,13 @@ The startup-only option `experimental-window-transforms` defaults to false.
 Enabling it additionally requires lifecycle v2 capability 0x180 and exact
 SA version 2.1.29. Changing this option requires daemon restart. Ordinary
 movement and AX fallback remain available with stock SA.
+
+## Recovery baseline and automatic transforms (2026-10-13)
+
+Commit `85e6f5a` reconstructs the automatic lifecycle v1 backend from before
+system jitter was reported, following the user's requested rollback point.
+It is a historical comparison point, not an installed payload. The current
+backend again selects transforms automatically, but requires lifecycle v2
+capability 0x180. This supersedes the earlier startup opt-in/default-off policy.
+The current-native-frame and partial-cleanup regression tests are retained.
+Stock SA remains a fallback and does not guarantee above-menu-bar placement.

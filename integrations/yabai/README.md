@@ -7,7 +7,7 @@ Build with `python3 tools/build_yabai_sa.py`. This does not install anything.
 The resulting `build/yabai-minfwm/bin/yabai --load-sa` must be run with sudo
 from a terminal to install/load the payload. It replaces the installed Yabai
 scripting addition; it does not change SIP. Loading can restart Dock.
-Transforms are experimental and disabled by default. The first revision caused
+Transforms are experimental and selected automatically with lifecycle v2. The first revision caused
 persistent offsets in third-party windows; lifecycle v2 is built and unit-tested,
 but has not passed the revised live acceptance matrix. Do not treat the earlier
 fixture pass as evidence of safe native dragging.
@@ -24,8 +24,7 @@ native dragging before restarting minfwmd.
 
 The patched handshake is numeric version `2.1.29` with attributes `0x180`:
 `0x80` for absolute translation and `0x100` for lifecycle v2 cleanup.
-Both bits, the exact version and explicit startup configuration
-`experimental-window-transforms = true` are required before the daemon selects
+Both bits and the exact version are required before the daemon selects
 extension commands. Lifecycle v1 (`0x80` alone) is rejected. Integers are
 little endian; all packets retain Yabai's uint16 payload-length prefix.
 

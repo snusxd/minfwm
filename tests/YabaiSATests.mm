@@ -255,8 +255,14 @@ void testInvalidAckAndTimeout() {
 }
 
 void testAbsoluteTransforms() {
+    {
+        FakeSAServer server(false, false, 0x80, false, "2.1.29");
+        minfwm::YabaiSA sa(server.path());
+        expect(sa.handshake() && !sa.supportsTransforms(), "stale cleanup payload cannot enable transforms");
+    }
+
     for (const auto version : {"2.1.30", "2.1.29"}) {
-        FakeSAServer server(false, false, 0x80, false, version);
+        FakeSAServer server(false, false, 0x180, false, version);
         minfwm::YabaiSA sa(server.path());
         expect(sa.handshake(), "transform capability handshake is complete");
         const bool extension = std::string(version) == "2.1.29";
@@ -270,12 +276,12 @@ void testAbsoluteTransforms() {
         expect(sa.handshake() && !sa.supportsTransforms(), "version alone cannot enable transforms");
     }
     {
-        FakeSAServer server(false, false, 0x80, true, "2.1.29");
+        FakeSAServer server(false, false, 0x180, true, "2.1.29");
         minfwm::YabaiSA sa(server.path());
         expect(sa.handshake() && !sa.transformWindow(42, 0, -120), "EOF cannot acknowledge an absolute transform");
     }
     {
-        FakeSAServer server(false, false, 0x80, false, "2.1.29", false, 3);
+        FakeSAServer server(false, false, 0x180, false, "2.1.29", false, 3);
         minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; });
         expect(sa.initialize() && sa.usesTransforms(), "backend selects translation instead of physical movement");
         expect(sa.move(nullptr, 42, 10, -120).succeeded(), "first absolute target applies");
@@ -283,7 +289,7 @@ void testAbsoluteTransforms() {
         expect(sa.resetTransform(42).succeeded() && sa.resetTransform(42).succeeded(), "reset is idempotent without a duplicate packet");
     }
     {
-        FakeSAServer server(false, false, 0x80, false, "2.1.29", false, 2);
+        FakeSAServer server(false, false, 0x180, false, "2.1.29", false, 2);
         minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return false; });
         expect(sa.initialize(), "failed readback test enables transform backend");
         FallbackBackend ax;

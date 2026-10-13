@@ -11,7 +11,7 @@
  static void do_handshake(int sockfd)
  {
 -    uint32_t attrib = 0;
-+    uint32_t attrib = 0x80; // minfwm absolute translation + reset extension
++    uint32_t attrib = 0x180; // minfwm absolute translation + reset extension
  
      if (dock_spaces != nil)                attrib |= OSAX_ATTRIB_DOCK_SPACES;
      if (dp_desktop_picture_manager != nil) attrib |= OSAX_ATTRIB_DPPM;
@@ -60,7 +60,7 @@
      "<string>payload</string>\n"
      "<key>CFBundleIdentifier</key>\n"
 -    "<string>com.asmvik.yabai-sa</string>\n"
-+    "<string>com.minfwm.yabai-sa</string>\n"
++    "<string>com.minfwm.yabai-sa.lifecycle2</string>\n"
      "<key>CFBundleInfoDictionaryVersion</key>\n"
      "<string>6.0</string>\n"
      "<key>CFBundleName</key>\n"
@@ -70,7 +70,7 @@
  
 -        bool status = string_equals([ns_version UTF8String], OSAX_VERSION);
 +        bool status = string_equals([ns_version UTF8String], OSAX_VERSION) &&
-+                      [[payload_bundle objectForInfoDictionaryKey:@"CFBundleIdentifier"] isEqualToString:@"com.minfwm.yabai-sa"];
++                      [[payload_bundle objectForInfoDictionaryKey:@"CFBundleIdentifier"] isEqualToString:@"com.minfwm.yabai-sa.lifecycle2"];
          result = status ? 0 : 1;
      } else {
          result = 1;

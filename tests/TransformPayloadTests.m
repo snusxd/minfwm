@@ -77,12 +77,30 @@ int main(void) {
         expect(current.ty == -200 && !minfwm_transforms[0].wid, "watchdog restores stale owner identity");
         current = CGAffineTransformMakeScale(2, 2);
         expect(request(0x14, owner, 100, -120, 17) == 1, "preexisting scaled window is not taken over");
+        current = CGAffineTransformMakeTranslation(-50, -75);
+        count = transform_calls;
+        expect(request(0x14, owner, 100, -120, 17) == 1 && transform_calls == count && !minfwm_transforms[0].wid,
+               "preexisting foreign translation is not taken over or changed");
         current = CGAffineTransformMakeTranslation(-100, -200);
         fail_transform = true;
         expect(request(0x14, owner, 100, -120, 17) == 1, "WindowServer failure is explicitly acknowledged");
         expect(minfwm_transforms[0].wid == 42, "failed operations retain a recovery snapshot");
         fail_transform = false;
         expect(request(0x15, owner, 0, 0, 9) == 0, "failed operation can subsequently be cleaned up");
+        expect(request(0x14, owner, 100, -120, 17) == 0, "native-drag fixture applies");
+        native_frame.origin = CGPointMake(418, 364);
+        expect(request(0x15, owner, 0, 0, 9) == 0 && current.tx == -418 && current.ty == -364,
+               "reset normalizes the current native frame after a user drag, not the stale snapshot");
+        expect(request(0x14, owner, 100, -120, 17) == 0, "partial recovery fixture applies");
+        fail_level = true;
+        expect(request(0x15, owner, 0, 0, 9) == 1, "failed layer restore retains cleanup state");
+        int recovered_calls = transform_calls;
+        native_frame.origin = CGPointMake(500, 500);
+        current = CGAffineTransformMakeTranslation(-500, -500); // Native drag after transform cleanup.
+        expect(request(0x15, owner, 0, 0, 9) == 1 && transform_calls == recovered_calls && current.tx == -500,
+               "layer retries must never replay an already-restored transform during native dragging");
+        fail_level = false;
+        expect(request(0x15, owner, 0, 0, 9) == 0, "layer-only retry completes cleanup");
     }
     return failures ? 1 : 0;
 }
