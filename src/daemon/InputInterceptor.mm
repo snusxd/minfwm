@@ -109,8 +109,8 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (type == kCGEventKeyUp || type == kCGEventKeyDown) {
         const auto code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
         if (code >= 0 && code < 256) {
-            if (type == kCGEventKeyUp && interceptor->m_overviewKeys.test(code)) {
-                interceptor->m_overviewKeys.reset(code);
+            if (interceptor->m_overviewKeys.test(code)) {
+                if (type == kCGEventKeyUp) interceptor->m_overviewKeys.reset(code);
                 return nullptr;
             }
             if (wm.overviewActive()) {
