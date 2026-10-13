@@ -542,3 +542,6 @@ ownership cleanup; and recovery after owner process death. Evidence:
 `build/zoom-overview3-live-fixture.log`. This validates the installed handoff
 path; it does not establish the absence of a visually perceptible flash across
 third-party applications. The updated daemon was started for that human check.
+Live reload accepted `mouse`, `focus`, and `screen` in turn; the exact original
+config was then restored and reloaded (currently `screen`). This confirms live
+configuration acceptance; subjective anchoring behavior is still a manual check.
