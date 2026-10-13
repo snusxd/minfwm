@@ -257,8 +257,8 @@ bool YabaiSA::setWindowLayer(uint32_t wid, int layer) const {
     return wid != 0 && m_compatible && sendPacket(encodeLayerPacket(wid, layer));
 }
 
-YabaiSABackend::YabaiSABackend(std::string socketPath, WindowPositionCheck check)
-    : m_sa(std::move(socketPath)), m_checkPosition(std::move(check)) {}
+YabaiSABackend::YabaiSABackend(std::string socketPath, WindowPositionCheck check, bool experimentalNativeHandoff)
+    : m_sa(std::move(socketPath)), m_checkPosition(std::move(check)), m_experimentalNativeHandoff(experimentalNativeHandoff) {}
 
 std::vector<uint8_t> YabaiSA::encodeNativeHandoffPacket(uint32_t wid, uint32_t owner, int x, int y) {
     std::vector<uint8_t> body{0x17};
@@ -364,7 +364,7 @@ BackendResult YabaiSABackend::resize(AXUIElementRef, uint32_t, float, float) {
 
 BackendResult YabaiSABackend::moveNative(AXUIElementRef element, uint32_t wid, int x, int y) {
     if (!available() || !wid) return {BackendCode::unavailable};
-    if (m_sa.supportsNativeHandoff() && m_transformed.contains(wid)) {
+    if (nativeMovePreservesLayer() && m_transformed.contains(wid)) {
         const bool handedOff = m_sa.nativeHandoff(wid, x, y) && m_checkPosition && m_checkPosition(element, wid, x, y);
         if (handedOff) m_transformed.erase(wid);
         else (void)resetTransform(wid);
@@ -373,7 +373,7 @@ BackendResult YabaiSABackend::moveNative(AXUIElementRef element, uint32_t wid, i
     // Move the native frame first. Resetting first would expose its old
     // position for one frame before moving the application under the pointer.
     const bool moved = m_sa.moveWindow(wid, x, y);
-    const bool reset = m_sa.supportsNativeHandoff() || resetTransform(wid).succeeded();
+    const bool reset = nativeMovePreservesLayer() || resetTransform(wid).succeeded();
     return {moved && reset && m_checkPosition && m_checkPosition(element, wid, x, y) ? BackendCode::ok : BackendCode::failed};
 }
 

@@ -63,6 +63,13 @@ Older payloads keep the separate move/reset fallback. A live probe of that
 fallback exposed an intermediate displaced frame; atomic handoff prevents it
 from being presented.
 
+Desktop validation subsequently reported broken movement and overview despite
+the isolated fixture passing. The production backend therefore uses the prior
+`0x06` then `0x15` handoff even when `0x400` is advertised. Atomic handoff is
+explicitly enabled only by the isolated `--overview-fixture` tool. Run
+`--overview-compatible-fixture` to check the production path. The one-frame
+flash remains unresolved; the isolated success is not desktop acceptance.
+
 On macOS 27, the legacy geometry-association symbol is a bare `ret` with no
 defined return value. Its older-system side effect is retained, but it cannot
 serve as an error status. Native move, bounds, transform and update-resume

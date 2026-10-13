@@ -268,13 +268,23 @@ void testInvalidAckAndTimeout() {
 void testAbsoluteTransforms() {
     {
         FakeSAServer server(false, false, 0x780, false, "2.1.29", false, 3);
-        minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; });
-        expect(sa.initialize() && sa.presentOverview(nullptr, 42, 200, 100, 0.5f).succeeded(), "layer-preserving handoff begins in overview");
-        expect(sa.moveNative(nullptr, 42, 450, 200).succeeded() && !sa.hasTransform(42), "overview handoff returns native input geometry");
-        expect(server.opcodes() == std::vector<uint8_t>{0x16, 0x17},
-               "native frame and presentation switch in one handoff command");
+        minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; }, true);
+        expect(sa.initialize() && sa.presentOverview(nullptr, 42, 200, 100, 0.5f).succeeded(), "experimental handoff begins in overview");
+        expect(sa.moveNative(nullptr, 42, 450, 200).succeeded() && !sa.hasTransform(42), "experimental handoff clears active presentation");
+        expect(server.opcodes() == std::vector<uint8_t>{0x16, 0x17} && sa.nativeMovePreservesLayer(),
+               "isolated fixture can explicitly select atomic handoff");
         expect(sa.resetTransform(42).succeeded() && server.opcodes() == std::vector<uint8_t>{0x16, 0x17, 0x15},
-               "native handoff retains ownership so shutdown still restores the original layer");
+               "experimental handoff retains cleanup ownership until final reset");
+    }
+    {
+        FakeSAServer server(false, false, 0x780, false, "2.1.29", false, 3);
+        minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; });
+        expect(sa.initialize() && sa.presentOverview(nullptr, 42, 200, 100, 0.5f).succeeded(), "compatible handoff begins in overview");
+        expect(sa.moveNative(nullptr, 42, 450, 200).succeeded() && !sa.hasTransform(42), "overview handoff returns native input geometry");
+        expect(server.opcodes() == std::vector<uint8_t>{0x16, 0x06, 0x15} && !sa.nativeMovePreservesLayer(),
+               "installed atomic capability must not automatically enable the regressed native path");
+        expect(sa.resetTransform(42).succeeded() && server.opcodes() == std::vector<uint8_t>{0x16, 0x06, 0x15},
+               "compatible handoff releases ownership and final cleanup is idempotent");
     }
 
     {

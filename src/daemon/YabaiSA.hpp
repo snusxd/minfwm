@@ -52,14 +52,17 @@ private:
 
 class YabaiSABackend final : public WindowBackend {
 public:
-    explicit YabaiSABackend(std::string socketPath = {}, WindowPositionCheck check = isWindowAtPosition);
+    // Atomic handoff remains opt-in for isolated live fixtures: desktop
+    // validation exposed a regression despite successful single-window checks.
+    explicit YabaiSABackend(std::string socketPath = {}, WindowPositionCheck check = isWindowAtPosition,
+                            bool experimentalNativeHandoff = false);
     ~YabaiSABackend() override;
 
     bool initialize();
     bool available() const { return m_sa.compatible(); }
     bool usesTransforms() const override { return m_sa.supportsTransforms(); }
     bool supportsOverview() const override { return m_sa.supportsOverview(); }
-    bool nativeMovePreservesLayer() const override { return m_sa.supportsNativeHandoff(); }
+    bool nativeMovePreservesLayer() const override { return m_experimentalNativeHandoff && m_sa.supportsNativeHandoff(); }
     BackendResult presentOverview(AXUIElementRef element, uint32_t wid, int x, int y, float scale) override;
     BackendResult resetTransform(uint32_t wid) override;
 
@@ -75,6 +78,7 @@ public:
 private:
     YabaiSA m_sa;
     WindowPositionCheck m_checkPosition;
+    bool m_experimentalNativeHandoff = false;
     std::unordered_set<uint32_t> m_transformed;
     std::unordered_set<uint32_t> m_transformOwners;
 };

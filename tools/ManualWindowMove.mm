@@ -172,7 +172,7 @@ int checkTransform(uint32_t wid, CGRect original) {
     return sent && stayed && reset && returned ? 0 : 1;
 }
 
-int checkOverview(uint32_t wid, CGRect original, const char* executable) {
+int checkOverview(uint32_t wid, CGRect original, const char* executable, bool experimentalHandoff) {
     bool handoffReadback = false;
     minfwm::YabaiSABackend sa({}, [&](AXUIElementRef element, uint32_t windowId, int x, int y) {
         CGPoint point{};
@@ -184,12 +184,12 @@ int checkOverview(uint32_t wid, CGRect original, const char* executable) {
                       << " matches=" << matches << std::endl;
         }
         return matches;
-    });
+    }, experimentalHandoff);
     if (!sa.initialize() || !sa.supportsOverview()) {
         std::cerr << "Overview SA extension unavailable (requires capability 0x200)" << std::endl;
         return 77;
     }
-    if (!sa.nativeMovePreservesLayer()) {
+    if (experimentalHandoff && !sa.nativeMovePreservesLayer()) {
         std::cerr << "Atomic native handoff extension unavailable (requires capability 0x400)" << std::endl;
         return 77;
     }
@@ -241,8 +241,8 @@ int checkOverview(uint32_t wid, CGRect original, const char* executable) {
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     sampling = false;
     sampler.join();
-    const bool cleanHandoff = handedOff && sampledFrames > 0 && intermediateFrames == 0;
-    std::cout << "OVERVIEW ATOMIC HANDOFF=" << (cleanHandoff ? "PASS" : "FAIL")
+    const bool cleanHandoff = handedOff && sampledFrames > 0 && (!experimentalHandoff || intermediateFrames == 0);
+    std::cout << "OVERVIEW " << (experimentalHandoff ? "ATOMIC" : "COMPATIBLE") << " HANDOFF=" << (cleanHandoff ? "PASS" : "FAIL")
               << " readback=" << handoffReadback << " samples=" << sampledFrames
               << " intermediate=" << intermediateFrames << std::endl;
     good = cleanHandoff && good;
@@ -418,7 +418,7 @@ int checkNativeDragProbe(uint32_t wid) {
     return sa.resetTransform(wid).succeeded() ? 0 : 1;
 }
 
-int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute, bool dragProbe, bool overview) {
+int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute, bool dragProbe, bool overview, bool experimentalHandoff) {
     int readyPipe[2];
     if (::pipe(readyPipe) != 0) return 1;
     minfwm::UniqueFd readEnd(readyPipe[0]), writeEnd(readyPipe[1]);
@@ -450,7 +450,7 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
         std::cerr << "WindowServer did not return fixture bounds" << std::endl;
         return 1;
     }
-    if (overview) return checkOverview(wid, original, executable);
+    if (overview) return checkOverview(wid, original, executable, experimentalHandoff);
     if (absolute) return checkAbsolute(wid, original, pid, executable);
     if (dragProbe) return checkNativeDragProbe(wid);
     if (transform) return checkTransform(wid, original);
@@ -505,6 +505,7 @@ int main(int argc, char** argv) {
             argc == 2 && std::string(argv[1]) == "--transform-fixture",
             argc == 2 && std::string(argv[1]) == "--absolute-fixture",
             argc == 2 && std::string(argv[1]) == "--drag-probe",
+            argc == 2 && (std::string(argv[1]) == "--overview-fixture" || std::string(argv[1]) == "--overview-compatible-fixture"),
             argc == 2 && std::string(argv[1]) == "--overview-fixture");
     }
 }

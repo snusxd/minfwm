@@ -545,3 +545,34 @@ third-party applications. The updated daemon was started for that human check.
 Live reload accepted `mouse`, `focus`, and `screen` in turn; the exact original
 config was then restored and reloaded (currently `screen`). This confirms live
 configuration acceptance; subjective anchoring behavior is still a manual check.
+
+### Desktop regression and compatible handoff rollback (2026-10-14)
+
+The user rejected overview3 desktop behavior: windows became jerky and overview
+stopped working. The daemon was stopped normally. Its log shows repeated overview
+failures on ChatGPT WID 7726 from the first wheel event, with shutdown restore
+failures for ChatGPT and Ghostty. After shutdown, Ghostty's visible/native frame
+matched, but the visible ChatGPT window had an identity matrix and origin (0,0)
+against native (316,136). Only that known visible ChatGPT window was normalized;
+hidden applications were left untouched. Evidence:
+`build/zoom-esc-overview3-live.log`, `build/overview3-regression-state.log`,
+`build/overview3-repair.log`.
+
+Following normalization, isolated real-ChatGPT probes passed repeated
+overview/native/overview transitions and three production WindowManager
+zoom/return/pan cycles. The exact trigger for the bad baseline was not reproduced.
+The external fixture hide/unhide requests returned false, so they provide no
+visibility-lifecycle validation. Single-window atomic success does not explain
+or resolve the reported desktop regression.
+
+The daemon now defaults to the previously accepted stock native move plus full
+transform reset, even with an installed atomic capability. Atomic handoff is
+available only through explicit constructor opt-in in isolated tools/tests;
+there is no daemon or config opt-in. Zoom, smoothing, inversion and Escape
+anchor settings remain intact. A default-policy regression test failed before
+this change and passes now; all 12 CTests pass. The compatible live fixture
+passed 120 scaled frames, native handoff readback, original-frame restoration,
+ownership cleanup and crash recovery. Evidence:
+`build/overview-compatible-fixture-live.log`. This is a containment rollback;
+the one-frame flash and the original desktop trigger remain unresolved. The
+daemon remains stopped pending confirmation of normal native interaction.
