@@ -35,6 +35,7 @@ BackendResult WindowRenderer::suspend(ClientWindow& window, double now) {
     window.positionRetryTime = 0;
     window.lastProgrammaticMoveTime = now;
     window.applicationSuspended = true;
+    window.nativePresentationChecked = false;
     return result;
 }
 

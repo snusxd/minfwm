@@ -89,6 +89,7 @@ private:
     float axTopOriginForScreen(NSScreen* screen) const;
     bool isWhitelisted(const ClientWindow& window) const;
     void commitNativeInteraction();
+    void refreshWindowSnapshot(double now);
     void addNativeCandidate(const std::shared_ptr<ClientWindow>& window);
     std::shared_ptr<ClientWindow> windowAtPoint(core::Point pointer) const;
     void applyOverviewExit();
@@ -98,6 +99,7 @@ private:
     bool m_initialized = false;
     CFRef<AXUIElementRef> m_focusedWindow;
     double m_focusRefreshTime = 0;
+    double m_windowRefreshTime = 0;
     bool m_nativePointerHeld = false;
     bool m_nativeCommitPending = false;
     double m_nativeCommitTime = 0;

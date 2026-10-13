@@ -178,6 +178,15 @@ void WindowPool::removeWindowsForPid(pid_t pid) {
     for (const auto& window : removed) removeWindow(window->ref());
 }
 
+std::vector<std::shared_ptr<ClientWindow>> WindowPool::removeMissingWindows(const std::unordered_set<uint32_t>& liveIds) {
+    std::vector<std::shared_ptr<ClientWindow>> removed;
+    for (const auto& window : m_windows) {
+        if (window->wid() && !liveIds.contains(window->wid())) removed.push_back(window);
+    }
+    for (const auto& window : removed) removeWindow(window->ref());
+    return removed;
+}
+
 std::shared_ptr<ClientWindow> WindowPool::findWindowByWID(std::uint32_t wid) const {
     if (wid == 0) return nullptr;
 

@@ -8,7 +8,8 @@ NSArray* allEntries;
 int failures = 0;
 
 CFArrayRef fakeWindowInfo(CGWindowListOption option, CGWindowID) {
-    return static_cast<CFArrayRef>(CFRetain((CFArrayRef)(option == kCGWindowListOptionAll ? allEntries : selectedEntries)));
+    NSArray* entries = option == kCGWindowListOptionAll ? allEntries : selectedEntries;
+    return entries ? static_cast<CFArrayRef>(CFRetain((CFArrayRef)entries)) : nullptr;
 }
 
 NSDictionary* window(uint32_t wid, double x, double y) {
@@ -34,6 +35,23 @@ int main() {
         selectedEntries = @[];
         visible = minfwm::readOnscreenWindowIds();
         expect(visible && visible->empty(), "empty onscreen list is a valid absence of presented windows");
+        allEntries = @[window(42, -100, -200), window(99, 0, 0), window(0, 0, 0)];
+        const auto session = minfwm::readSessionWindowIds();
+        expect(session && session->size() == 2 && session->contains(42) && session->contains(99),
+               "full-session reconciliation includes offscreen and hidden windows");
+        allEntries = nil;
+        expect(!minfwm::readSessionWindowIds(), "failed full-session query cannot be treated as an empty session");
+        minfwm::NativeWindowPresentation presentation{CGRectMake(100, 200, 640, 480), CGAffineTransformIdentity};
+        expect(minfwm::needsNativePresentationRecovery(presentation), "system zero-origin presentation needs normalization");
+        presentation.transform = CGAffineTransformMakeTranslation(-100, -200);
+        expect(!minfwm::needsNativePresentationRecovery(presentation), "normal native baseline needs no recovery");
+        presentation.transform = CGAffineTransformMakeTranslation(-50, -75);
+        expect(!minfwm::needsNativePresentationRecovery(presentation), "foreign nonzero translation is preserved");
+        presentation.transform = CGAffineTransformMakeScale(2, 2);
+        expect(!minfwm::needsNativePresentationRecovery(presentation), "foreign scaling is preserved");
+        presentation.transform = CGAffineTransformIdentity;
+        presentation.frame.origin = CGPointZero;
+        expect(!minfwm::needsNativePresentationRecovery(presentation), "identity at native origin is already normalized");
         CGPoint position{7, 8};
         selectedEntries = @[];
         allEntries = @[window(99, 999, 999), window(42, 10, -120)];

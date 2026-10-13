@@ -2,10 +2,12 @@
 #include "CFRAII.hpp"
 
 #include <cmath>
+#include <dlfcn.h>
 
 namespace minfwm {
-std::optional<std::unordered_set<uint32_t>> readOnscreenWindowIds() {
-    auto windows = CFRef<CFArrayRef>::adopt(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
+namespace {
+std::optional<std::unordered_set<uint32_t>> readWindowIds(CGWindowListOption option) {
+    auto windows = CFRef<CFArrayRef>::adopt(CGWindowListCopyWindowInfo(option, kCGNullWindowID));
     if (!windows) return {};
     std::unordered_set<uint32_t> result;
     for (CFIndex i = 0; i < CFArrayGetCount(windows.get()); ++i) {
@@ -17,6 +19,35 @@ std::optional<std::unordered_set<uint32_t>> readOnscreenWindowIds() {
             CFNumberGetValue(number, kCGWindowIDCFNumberType, &wid) && wid) result.insert(wid);
     }
     return result;
+}
+}
+std::optional<std::unordered_set<uint32_t>> readOnscreenWindowIds() {
+    return readWindowIds(kCGWindowListOptionOnScreenOnly);
+}
+std::optional<std::unordered_set<uint32_t>> readSessionWindowIds() {
+    return readWindowIds(kCGWindowListOptionAll);
+}
+
+std::optional<NativeWindowPresentation> readNativeWindowPresentation(uint32_t wid) {
+    // Optional SA recovery only. Public AX operation never calls these APIs.
+    static void* sky = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY);
+    static auto connection = sky ? reinterpret_cast<int (*)()>(dlsym(sky, "SLSMainConnectionID")) : nullptr;
+    static auto bounds = sky ? reinterpret_cast<CGError (*)(int, uint32_t, CGRect*)>(dlsym(sky, "SLSGetWindowBounds")) : nullptr;
+    static auto transform = sky ? reinterpret_cast<CGError (*)(int, uint32_t, CGAffineTransform*)>(dlsym(sky, "SLSGetWindowTransform")) : nullptr;
+    NativeWindowPresentation result{};
+    if (!wid || !connection || !bounds || !transform ||
+        bounds(connection(), wid, &result.frame) != kCGErrorSuccess ||
+        transform(connection(), wid, &result.transform) != kCGErrorSuccess) return {};
+    return result;
+}
+
+bool needsNativePresentationRecovery(const NativeWindowPresentation& presentation) {
+    const CGRect frame = presentation.frame;
+    return std::isfinite(frame.origin.x) && std::isfinite(frame.origin.y) &&
+        std::isfinite(frame.size.width) && std::isfinite(frame.size.height) &&
+        frame.size.width > 0 && frame.size.height > 0 &&
+        (frame.origin.x != 0 || frame.origin.y != 0) &&
+        CGAffineTransformEqualToTransform(presentation.transform, CGAffineTransformIdentity);
 }
 namespace {
 

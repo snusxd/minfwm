@@ -94,6 +94,7 @@ int main(int argc, const char * argv[]) {
                 CFRunLoopStop(CFRunLoopGetMain());
                 return;
             }
+            if (!g_stopRequested) observerPtr->reconcileWindows();
             if (!displayLinked) wm.updateWindows();
         }];
 

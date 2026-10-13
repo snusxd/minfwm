@@ -8,6 +8,7 @@
 #include <memory>
 #include <unordered_map>
 #include <optional>
+#include <unordered_set>
 
 #include "CFRAII.hpp"
 #include "Geometry.hpp"
@@ -51,6 +52,7 @@ public:
     bool virtualCoordinatesInitialized = false;
     bool centerOnAdoption = false;
     bool preferNativePosition = false;
+    bool nativePresentationChecked = false;
 
 private:
     CFRef<AXUIElementRef> m_windowRef;
@@ -73,6 +75,7 @@ public:
     std::shared_ptr<ClientWindow> addWindow(AXUIElementRef windowRef);
     void removeWindow(AXUIElementRef windowRef);
     void removeWindowsForPid(pid_t pid);
+    std::vector<std::shared_ptr<ClientWindow>> removeMissingWindows(const std::unordered_set<uint32_t>& liveIds);
 
     [[nodiscard]] std::shared_ptr<ClientWindow> findWindowByWID(std::uint32_t wid) const;
     [[nodiscard]] std::shared_ptr<ClientWindow> findWindowByAXRef(AXUIElementRef windowRef) const;

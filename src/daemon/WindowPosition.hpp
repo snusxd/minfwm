@@ -16,5 +16,13 @@ bool isWindowAtPosition(AXUIElementRef element, uint32_t wid, int x, int y);
 bool readWindowPosition(AXUIElementRef element, uint32_t wid, CGPoint& point);
 bool windowPositionMatches(CGPoint actual, int x, int y);
 std::optional<std::unordered_set<uint32_t>> readOnscreenWindowIds();
+std::optional<std::unordered_set<uint32_t>> readSessionWindowIds();
+
+struct NativeWindowPresentation {
+    CGRect frame;
+    CGAffineTransform transform;
+};
+std::optional<NativeWindowPresentation> readNativeWindowPresentation(uint32_t wid);
+bool needsNativePresentationRecovery(const NativeWindowPresentation& presentation);
 
 } // namespace minfwm

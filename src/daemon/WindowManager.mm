@@ -128,6 +128,7 @@ void WindowManager::shutdown() {
     m_isPanning = false;
     m_focusedWindow.reset();
     m_focusRefreshTime = 0;
+    m_windowRefreshTime = 0;
     m_nativePointerHeld = false;
     m_nativeCommitPending = false;
     m_nativeCameras.clear();
@@ -224,6 +225,21 @@ bool WindowManager::isWhitelisted(const ClientWindow& window) const {
     return false;
 }
 
+void WindowManager::refreshWindowSnapshot(double now) {
+    m_windowRefreshTime = now + 0.25;
+    if (auto visible = readOnscreenWindowIds()) m_onscreenWindows = std::move(visible);
+    const auto liveIds = readSessionWindowIds();
+    if (!liveIds) return; // A failed query is never evidence of destruction.
+    for (auto& display : m_displays) {
+        for (const auto& window : display->windowPool().removeMissingWindows(*liveIds)) {
+            (void)m_yabaiBackend.resetTransform(window->wid());
+            std::erase(m_nativeCandidates, window);
+            if (m_focusedWindow && CFEqual(m_focusedWindow.get(), window->ref())) m_focusedWindow.reset();
+            std::cout << "WindowManager: removed missing window WID=" << window->wid() << std::endl;
+        }
+    }
+}
+
 void WindowManager::updateWindows(int64_t displayId) {
     if (!m_initialized || m_displays.empty()) return;
     const double now = CACurrentMediaTime();
@@ -231,9 +247,11 @@ void WindowManager::updateWindows(int64_t displayId) {
     // Do not turn its first AX notification into another programmatic move.
     if (m_nativePointerHeld || (m_nativeCommitPending && now < m_nativeCommitTime)) return;
     if (m_nativeCommitPending) commitNativeInteraction();
+    const auto* zoomDisplay = m_zoomRequest ? displayById(m_zoomRequest->displayId) : nullptr;
+    const bool enteringOverview = zoomDisplay && !zoomDisplay->state().overviewActive();
+    if (now >= m_windowRefreshTime || enteringOverview) refreshWindowSnapshot(now);
     if (m_zoomRequest) {
         if (auto* display = displayById(m_zoomRequest->displayId)) {
-            if (!display->state().overviewActive()) m_onscreenWindows = readOnscreenWindowIds();
             display->state().requestZoom(m_zoomRequest->delta, m_zoomRequest->anchor);
             if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
                 std::cout << "ZOOM display=" << display->id() << " delta=" << m_zoomRequest->delta
@@ -247,7 +265,6 @@ void WindowManager::updateWindows(int64_t displayId) {
     // presentation frame (especially on high-refresh-rate displays).
     if (now >= m_focusRefreshTime) {
         m_focusRefreshTime = now + 0.25;
-        m_onscreenWindows = readOnscreenWindowIds();
         CFRef<AXUIElementRef> systemWide = CFRef<AXUIElementRef>::adopt(AXUIElementCreateSystemWide());
         CFRef<CFTypeRef> focusedApplication;
         CFRef<CFTypeRef> focusedValue;
@@ -289,6 +306,18 @@ void WindowManager::updateWindows(int64_t displayId) {
                 !m_onscreenWindows->contains(window->wid())) {
                 if (!window->applicationSuspended) (void)m_renderer.suspend(*window, now);
                 continue;
+            }
+            if (!window->nativePresentationChecked && m_yabaiBackend.usesTransforms() && window->wid() &&
+                m_onscreenWindows && m_onscreenWindows->contains(window->wid())) {
+                window->nativePresentationChecked = true;
+                if (!m_yabaiBackend.hasTransform(window->wid())) {
+                    const auto native = readNativeWindowPresentation(window->wid());
+                    if (native && needsNativePresentationRecovery(*native)) {
+                        const bool recovered = m_yabaiBackend.recoverNativePresentation(window->wid(), native->frame).succeeded();
+                        std::cout << "WindowManager: native presentation recovery WID=" << window->wid()
+                                  << " result=" << (recovered ? "ok" : "failed") << std::endl;
+                    }
+                }
             }
             if (state.overviewActive()) {
                 if (!window->wid()) continue;

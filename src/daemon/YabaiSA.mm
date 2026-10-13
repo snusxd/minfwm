@@ -260,6 +260,37 @@ bool YabaiSA::setWindowLayer(uint32_t wid, int layer) const {
 YabaiSABackend::YabaiSABackend(std::string socketPath, WindowPositionCheck check, bool experimentalNativeHandoff)
     : m_sa(std::move(socketPath)), m_checkPosition(std::move(check)), m_experimentalNativeHandoff(experimentalNativeHandoff) {}
 
+std::vector<uint8_t> YabaiSA::encodeNativeNormalizationPacket(uint32_t wid, CGRect frame) {
+    if (!wid || !std::isfinite(frame.origin.x) || !std::isfinite(frame.origin.y) ||
+        !std::isfinite(frame.size.width) || !std::isfinite(frame.size.height) ||
+        frame.size.width <= 0 || frame.size.height <= 0 || frame.size.width > 16000 || frame.size.height > 16000 ||
+        std::abs(frame.origin.x) > 16000 || std::abs(frame.origin.y) > 16000) return {};
+    std::vector<uint8_t> body{0x0d};
+    appendU32(body, wid);
+    // Upstream PIP uses one quarter of the supplied width. Four native widths
+    // therefore describe the unit-scale native frame in either toggle branch.
+    for (float value : {static_cast<float>(frame.origin.x - frame.size.width * 3),
+                       static_cast<float>(frame.origin.y), static_cast<float>(frame.size.width * 4),
+                       static_cast<float>(frame.size.height)}) {
+        uint32_t bits;
+        std::memcpy(&bits, &value, sizeof(bits));
+        appendU32(body, bits);
+    }
+    return finishPacket(std::move(body));
+}
+
+bool YabaiSA::normalizeNativeWindow(uint32_t wid, CGRect nativeFrame) const {
+    const auto packet = encodeNativeNormalizationPacket(wid, nativeFrame);
+    return supportsTransforms() && !packet.empty() && sendPacket(packet);
+}
+
+BackendResult YabaiSABackend::recoverNativePresentation(uint32_t wid, CGRect nativeFrame) {
+    if (m_transformOwners.contains(wid)) return {BackendCode::failed};
+    const bool recovered = m_sa.normalizeNativeWindow(wid, nativeFrame) && m_checkPosition &&
+        m_checkPosition(nullptr, wid, static_cast<int>(std::lround(nativeFrame.origin.x)), static_cast<int>(std::lround(nativeFrame.origin.y)));
+    return {recovered ? BackendCode::ok : BackendCode::failed};
+}
+
 std::vector<uint8_t> YabaiSA::encodeNativeHandoffPacket(uint32_t wid, uint32_t owner, int x, int y) {
     std::vector<uint8_t> body{0x17};
     appendU32(body, wid);

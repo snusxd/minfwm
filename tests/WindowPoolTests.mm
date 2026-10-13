@@ -89,6 +89,18 @@ int main() {
         expect(ownedWidPool.windows().empty() && !ownedWidPool.findWindowByWID(42),
                "application termination also erases the WID index");
 
+        minfwm::WindowPool reconciledPool(&fixedWindowId);
+        const auto stale = reconciledPool.addWindow(secondRef);
+        expect(reconciledPool.removeMissingWindows({42}).empty(), "session reconciliation preserves existing windows");
+        const auto removed = reconciledPool.removeMissingWindows({99});
+        expect(removed.size() == 1 && removed.front() == stale && reconciledPool.windows().empty() &&
+               !reconciledPool.findWindowByWID(42) && !reconciledPool.findWindowByAXRef(secondRef),
+               "missing destruction notifications cannot leave stale records in either index");
+        expect(reconciledPool.removeMissingWindows({99}).empty(), "session reconciliation is idempotent");
+        expect(reconciledPool.addWindow(secondRef) != stale, "a reopened window gets a fresh model");
+        expect(refOnlyPool.addWindow(firstRef) && refOnlyPool.removeMissingWindows({}).empty() &&
+               refOnlyPool.windows().size() == 1, "WindowServer reconciliation preserves public AX-only records");
+
         CFRelease(firstRef);
         CFRelease(secondRef);
     }

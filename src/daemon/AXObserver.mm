@@ -2,6 +2,7 @@
 #import "WindowManager.hpp"
 #import <iostream>
 #include <algorithm>
+#import <QuartzCore/QuartzCore.h>
 
 namespace minfwm {
 
@@ -24,12 +25,20 @@ bool AXObserver::start() {
             const char* name = app.localizedName.UTF8String;
             WindowManager::instance().setApplicationState(app.processIdentifier, name ? name : "",
                 [note.name isEqualToString:NSWorkspaceDidHideApplicationNotification]);
+            if ([note.name isEqualToString:NSWorkspaceDidUnhideApplicationNotification]) {
+                m_refreshPending = true;
+                m_nextReconcileTime = 0;
+            }
         }
     };
     m_hideObserver = [center addObserverForName:NSWorkspaceDidHideApplicationNotification object:nil
         queue:NSOperationQueue.mainQueue usingBlock:applicationVisibilityChanged];
     m_unhideObserver = [center addObserverForName:NSWorkspaceDidUnhideApplicationNotification object:nil
         queue:NSOperationQueue.mainQueue usingBlock:applicationVisibilityChanged];
+    m_activateObserver = [center addObserverForName:NSWorkspaceDidActivateApplicationNotification object:nil
+        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*) {
+            if (m_started) { m_refreshPending = true; m_nextReconcileTime = 0; }
+        }];
 
     m_launchObserver = [center addObserverForName:NSWorkspaceDidLaunchApplicationNotification
                                            object:nil
@@ -62,11 +71,15 @@ bool AXObserver::start() {
 void AXObserver::stop() {
     m_started = false;
     m_registrationSucceeded = false;
-    for (id observer : {m_hideObserver, m_unhideObserver}) {
+    for (id observer : {m_hideObserver, m_unhideObserver, m_activateObserver}) {
         if (observer) [NSWorkspace.sharedWorkspace.notificationCenter removeObserver:observer];
     }
     m_hideObserver = nil;
     m_unhideObserver = nil;
+    m_activateObserver = nil;
+    m_sessionIds.reset();
+    m_nextReconcileTime = 0;
+    m_refreshPending = false;
     if (m_launchObserver) {
         [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:m_launchObserver];
         m_launchObserver = nil;
@@ -91,7 +104,7 @@ bool AXObserver::observeApplication(NSRunningApplication* app) {
     pid_t pid = app.processIdentifier;
     const char* name = app.localizedName.UTF8String;
     wm.setApplicationState(pid, name ? name : "", app.hidden);
-    if (m_appObservers.find(pid) != m_appObservers.end()) return true;
+    if (auto existing = m_appObservers.find(pid); existing != m_appObservers.end()) return refreshWindows(existing->second, false);
 
     CFRef<AXUIElementRef> appElem = CFRef<AXUIElementRef>::adopt(AXUIElementCreateApplication(pid));
     if (!appElem) return false;
@@ -119,20 +132,42 @@ bool AXObserver::observeApplication(NSRunningApplication* app) {
 
     auto [entry, inserted] = m_appObservers.emplace(pid, AppObserver{std::move(observer), std::move(appElem), {}});
 
-    // Add existing windows
+    return refreshWindows(entry->second, false) && !registrationFailed;
+}
+
+bool AXObserver::refreshWindows(AppObserver& app, bool centerNewWindows) {
     CFRef<CFTypeRef> windowValue;
-    if (AXUIElementCopyAttributeValue(m_appObservers.at(pid).element.get(), kAXWindowsAttribute,
-                                      windowValue.put()) == kAXErrorSuccess && windowValue) {
-        if (CFGetTypeID(windowValue.get()) != CFArrayGetTypeID()) return false;
-        const CFArrayRef windowList = static_cast<CFArrayRef>(windowValue.get());
-        CFIndex count = CFArrayGetCount(windowList);
-        for (CFIndex i = 0; i < count; ++i) {
-            AXUIElementRef windowRef = (AXUIElementRef)CFArrayGetValueAtIndex(windowList, i);
-            registrationFailed = !observeWindow(entry->second, windowRef, false) || registrationFailed;
-        }
-        wm.updateWindows();
+    if (AXUIElementCopyAttributeValue(app.element.get(), kAXWindowsAttribute, windowValue.put()) != kAXErrorSuccess ||
+        !windowValue || CFGetTypeID(windowValue.get()) != CFArrayGetTypeID()) return false;
+    bool succeeded = true;
+    const auto windowList = static_cast<CFArrayRef>(windowValue.get());
+    for (CFIndex i = 0; i < CFArrayGetCount(windowList); ++i) {
+        auto windowRef = static_cast<AXUIElementRef>(CFArrayGetValueAtIndex(windowList, i));
+        succeeded = observeWindow(app, windowRef, centerNewWindows) && succeeded;
     }
-    return !registrationFailed;
+    WindowManager::instance().updateWindows();
+    return succeeded;
+}
+
+void AXObserver::reconcileWindows() {
+    if (!m_started) return;
+    const double now = CACurrentMediaTime();
+    if (now < m_nextReconcileTime) return;
+    m_nextReconcileTime = now + 0.5;
+    const auto session = readSessionWindowIds();
+    if (session && (!m_sessionIds || *m_sessionIds != *session)) {
+        m_refreshPending = true;
+        m_sessionIds = session;
+    }
+    auto& wm = WindowManager::instance();
+    for (auto& [pid, app] : m_appObservers) {
+        // WindowServer reconciliation removes stale model records even if
+        // the application never supports AX destruction notifications.
+        std::erase_if(app.windows, [&](const auto& window) { return !wm.findWindow(window.get()); });
+    }
+    if (!m_refreshPending || wm.isPanning() || wm.overviewActive()) return;
+    m_refreshPending = false;
+    for (auto& [pid, app] : m_appObservers) (void)refreshWindows(app, false);
 }
 
 bool AXObserver::observeWindow(AppObserver& app, AXUIElementRef element, bool center) {

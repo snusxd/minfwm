@@ -267,6 +267,19 @@ void testInvalidAckAndTimeout() {
 
 void testAbsoluteTransforms() {
     {
+        FakeSAServer server(false, false, 0x780);
+        minfwm::YabaiSA sa(server.path());
+        expect(sa.handshake() && sa.normalizeNativeWindow(42, CGRectMake(100, 200, 640, 480)),
+               "startup normalization uses the existing unit-scale PIP command");
+        expect(server.opcodes() == std::vector<uint8_t>{0x0d}, "normalization does not require another payload revision");
+        expect(minfwm::YabaiSA::encodeNativeNormalizationPacket(42, CGRectMake(100, 200, 640, 480)),
+               {21, 0, 0x0d, 42, 0, 0, 0, 0, 128, 227, 196, 0, 0, 72, 67, 0, 0, 32, 69, 0, 0, 240, 67},
+               "normalization packet targets the native frame with unit presentation scale");
+        expect(minfwm::YabaiSA::encodeNativeNormalizationPacket(0, CGRectMake(100, 200, 640, 480)).empty() &&
+               minfwm::YabaiSA::encodeNativeNormalizationPacket(42, CGRectMake(100, 200, 0, 480)).empty(),
+               "invalid native normalization geometry is never sent");
+    }
+    {
         FakeSAServer server(false, false, 0x780, false, "2.1.29", false, 3);
         minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; }, true);
         expect(sa.initialize() && sa.presentOverview(nullptr, 42, 200, 100, 0.5f).succeeded(), "experimental handoff begins in overview");

@@ -28,6 +28,8 @@ public:
     bool overviewWindow(uint32_t wid, int x, int y, uint32_t scalePermille) const;
     bool transformWindow(uint32_t wid, int x, int y) const;
     bool resetTransform(uint32_t wid) const;
+    bool normalizeNativeWindow(uint32_t wid, CGRect nativeFrame) const;
+    static std::vector<uint8_t> encodeNativeNormalizationPacket(uint32_t wid, CGRect nativeFrame);
 
     bool moveWindow(uint32_t wid, int x, int y) const;
     bool setWindowLayer(uint32_t wid, int layer) const;
@@ -65,6 +67,7 @@ public:
     bool nativeMovePreservesLayer() const override { return m_experimentalNativeHandoff && m_sa.supportsNativeHandoff(); }
     BackendResult presentOverview(AXUIElementRef element, uint32_t wid, int x, int y, float scale) override;
     BackendResult resetTransform(uint32_t wid) override;
+    BackendResult recoverNativePresentation(uint32_t wid, CGRect nativeFrame);
 
     BackendResult move(AXUIElementRef element, uint32_t wid, int x, int y) override;
     BackendResult moveNative(AXUIElementRef element, uint32_t wid, int x, int y) override;
