@@ -28,6 +28,12 @@ void expect(bool condition, const char* message) {
 
 int main() {
     @autoreleasepool {
+        selectedEntries = @[window(42, 100, 200), window(0, 0, 0), @{@"not-a-window": @1}];
+        auto visible = minfwm::readOnscreenWindowIds();
+        expect(visible && visible->size() == 1 && visible->contains(42), "onscreen snapshot ignores invalid IDs and malformed entries");
+        selectedEntries = @[];
+        visible = minfwm::readOnscreenWindowIds();
+        expect(visible && visible->empty(), "empty onscreen list is a valid absence of presented windows");
         CGPoint position{7, 8};
         selectedEntries = @[];
         allEntries = @[window(99, 999, 999), window(42, 10, -120)];

@@ -91,6 +91,11 @@ bool ClientWindow::captureInitialGeometry() {
         !std::isfinite(physical.w) || !std::isfinite(physical.h) || physical.w <= 0 || physical.h <= 0) return false;
     virtualRect = physical;
     originalPhysicalRect = physical;
+    CFRef<CFTypeRef> subrole;
+    if (AXUIElementCopyAttributeValue(m_windowRef.get(), kAXSubroleAttribute, subrole.put()) == kAXErrorSuccess &&
+        subrole && CFGetTypeID(subrole.get()) == CFStringGetTypeID()) {
+        isAuxiliaryWindow = !CFEqual(subrole.get(), kAXStandardWindowSubrole);
+    }
     lastRenderedX = physical.x;
     lastRenderedY = physical.y;
     return true;

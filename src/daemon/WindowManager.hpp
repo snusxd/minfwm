@@ -110,6 +110,7 @@ private:
     std::shared_ptr<ClientWindow> m_overviewFocus;
     std::map<pid_t, std::string> m_applicationNames;
     std::set<pid_t> m_hiddenApplications;
+    std::optional<std::unordered_set<uint32_t>> m_onscreenWindows;
     AXBackend m_axBackend;
     YabaiSABackend m_yabaiBackend;
     WindowRenderer m_renderer{m_axBackend, m_yabaiBackend};

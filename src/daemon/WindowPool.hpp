@@ -35,6 +35,7 @@ public:
     float lastRenderedScale = 1;
     bool overviewPresented = false;
     bool applicationSuspended = false;
+    bool isAuxiliaryWindow = false;
     double lastProgrammaticMoveTime = 0.0;
     double positionVerificationTime = 0.0;
     double positionRetryTime = 0.0;

@@ -4,6 +4,20 @@
 #include <cmath>
 
 namespace minfwm {
+std::optional<std::unordered_set<uint32_t>> readOnscreenWindowIds() {
+    auto windows = CFRef<CFArrayRef>::adopt(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
+    if (!windows) return {};
+    std::unordered_set<uint32_t> result;
+    for (CFIndex i = 0; i < CFArrayGetCount(windows.get()); ++i) {
+        auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows.get(), i));
+        if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID()) continue;
+        auto number = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowNumber));
+        uint32_t wid = 0;
+        if (number && CFGetTypeID(number) == CFNumberGetTypeID() &&
+            CFNumberGetValue(number, kCGWindowIDCFNumberType, &wid) && wid) result.insert(wid);
+    }
+    return result;
+}
 namespace {
 
 bool positionInList(CFArrayRef windows, uint32_t wid, CGPoint& point) {
