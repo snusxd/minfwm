@@ -109,6 +109,7 @@ private:
     std::optional<OverviewExit> m_overviewExit;
     std::map<int64_t, double> m_zoomFrameTimes;
     std::shared_ptr<ClientWindow> m_overviewFocus;
+    std::weak_ptr<ClientWindow> m_lastFocusedWindow;
     std::map<pid_t, std::string> m_applicationNames;
     std::set<pid_t> m_hiddenApplications;
     std::optional<std::unordered_set<uint32_t>> m_onscreenWindows;

@@ -45,6 +45,16 @@ int main() {
            "duplicate zoom scroll inversion is rejected atomically");
     expect(minfwm::ConfigManager::parseText("invert-zoom-scroll-direction = false\n", parsed, error) &&
            !parsed.invertZoomScrollDirection, "zoom scroll inversion accepts false");
+    expect(parsed.zoomedEscCenter == "screen", "Escape anchor defaults to screen center");
+    for (const char* mode : {"screen", "mouse", "focus"}) {
+        expect(minfwm::ConfigManager::parseText(std::string("zoomed-esc-center = \"") + mode + "\"", parsed, error) &&
+               parsed.zoomedEscCenter == mode, "all documented Escape anchor modes parse");
+    }
+    const auto focused = parsed;
+    for (const char* invalid : {"true", "[\"screen\"]", "\"cursor\"", "\"\""}) {
+        expect(!minfwm::ConfigManager::parseText(std::string("zoomed-esc-center = ") + invalid, parsed, error) &&
+               parsed.zoomedEscCenter == focused.zoomedEscCenter, "invalid Escape anchors preserve the previous snapshot");
+    }
     const minfwm::ConfigSnapshot before = parsed;
     expect(!minfwm::ConfigManager::parseText("overscan-buffer-px = nan\n", parsed, error),
            "non-finite number is rejected");

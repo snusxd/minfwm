@@ -22,7 +22,7 @@ public:
     bool requestZoom(float scrollDelta, Point physicalAnchor) noexcept;
     void advanceZoom(double elapsedSeconds) noexcept;
     void resetZoom(Point physicalAnchor) noexcept;
-    bool beginReturn(std::optional<Point> targetCamera = {}) noexcept;
+    bool beginReturn(std::optional<Point> targetCamera = {}, std::optional<Point> physicalAnchor = {}) noexcept;
     [[nodiscard]] bool returning() const noexcept { return m_return.has_value(); }
 
     // Both points use the same canonical physical coordinate system.
@@ -43,6 +43,7 @@ private:
     Point m_zoomAnchor;
     struct ReturnTransition {
         Point fromCenter;
+        Point physicalAnchor;
         Point targetCamera;
         float fromScale;
         double elapsed = 0;

@@ -143,6 +143,12 @@ bool ConfigManager::parseText(std::string_view text, ConfigSnapshot& out, std::s
                     error = "line " + std::to_string(lineNumber) + ": expected true or false";
                     return false;
                 }
+            } else if (key == "zoomed-esc-center") {
+                if (!parseString(value, candidate.zoomedEscCenter) ||
+                    (candidate.zoomedEscCenter != "screen" && candidate.zoomedEscCenter != "mouse" && candidate.zoomedEscCenter != "focus")) {
+                    error = "line " + std::to_string(lineNumber) + ": zoomed-esc-center must be \"screen\", \"mouse\" or \"focus\"";
+                    return false;
+                }
             } else if (key == "multi-display-mode") {
                 if (!parseString(value, candidate.multiDisplayMode) || candidate.multiDisplayMode != "isolated") {
                     error = "line " + std::to_string(lineNumber) + ": multi-display-mode must be \"isolated\"";

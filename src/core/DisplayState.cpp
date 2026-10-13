@@ -3,13 +3,16 @@
 #include <cmath>
 
 namespace minfwm::core {
-bool DisplayState::beginReturn(std::optional<Point> target) noexcept {
-    const Point center = physicalToVirtual(Point{m_geometry.bounds.x + m_geometry.bounds.w / 2,
-                                                  m_geometry.bounds.y + m_geometry.bounds.h / 2});
-    const Point camera = target.value_or(Point{center.x - m_geometry.bounds.w / 2, center.y - m_geometry.bounds.h / 2});
+bool DisplayState::beginReturn(std::optional<Point> target, std::optional<Point> physicalAnchor) noexcept {
+    const Point anchor = physicalAnchor.value_or(Point{m_geometry.bounds.x + m_geometry.bounds.w / 2,
+                                                        m_geometry.bounds.y + m_geometry.bounds.h / 2});
+    if (!std::isfinite(anchor.x) || !std::isfinite(anchor.y)) return false;
+    const Point center = physicalToVirtual(anchor);
+    const Point camera = target.value_or(Point{center.x - (anchor.x - m_geometry.bounds.x),
+                                               center.y - (anchor.y - m_geometry.bounds.y)});
     if (!std::isfinite(center.x) || !std::isfinite(center.y) ||
         !std::isfinite(camera.x) || !std::isfinite(camera.y)) return false;
-    m_return = ReturnTransition{center, camera, m_scale};
+    m_return = ReturnTransition{center, anchor, camera, m_scale};
     m_targetScale = 1;
     return true;
 }
@@ -41,12 +44,13 @@ void DisplayState::advanceZoom(double elapsed) noexcept {
         const double t = transition.elapsed / duration;
         const double progress = t * t * t * (10 + t * (-15 + t * 6));
         const double scale = std::exp(std::log(transition.fromScale) * (1 - progress));
-        const double endX = double(transition.targetCamera.x) + m_geometry.bounds.w / 2;
-        const double endY = double(transition.targetCamera.y) + m_geometry.bounds.h / 2;
+        const double localX = double(transition.physicalAnchor.x) - m_geometry.bounds.x;
+        const double localY = double(transition.physicalAnchor.y) - m_geometry.bounds.y;
+        const double endX = double(transition.targetCamera.x) + localX;
+        const double endY = double(transition.targetCamera.y) + localY;
         const double centerX = transition.fromCenter.x + (endX - transition.fromCenter.x) * progress;
         const double centerY = transition.fromCenter.y + (endY - transition.fromCenter.y) * progress;
-        if (!m_camera.setPosition(centerX - m_geometry.bounds.w / (2 * scale),
-                                  centerY - m_geometry.bounds.h / (2 * scale))) {
+        if (!m_camera.setPosition(centerX - localX / scale, centerY - localY / scale)) {
             m_return.reset();
             m_targetScale = m_scale;
             return;

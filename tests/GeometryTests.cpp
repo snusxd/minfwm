@@ -140,6 +140,20 @@ int main() {
     returning.resetZoom({-960, 240});
     expect(!returning.returning() && returning.scale() == 1, "failure recovery can still cancel return immediately");
 
+    DisplayState mouseReturn({11, {-1920, -300, 1920, 1080}});
+    mouseReturn.camera().setPosition(100, -200);
+    const Point mouseAnchor{-1400, 80};
+    mouseReturn.setScaleAt(0.3f, mouseAnchor);
+    const Point mouseWorld = mouseReturn.physicalToVirtual(mouseAnchor);
+    expect(mouseReturn.beginReturn({}, mouseAnchor), "mouse Escape return accepts a physical cursor anchor");
+    mouseReturn.advanceZoom(0.18);
+    const auto mouseMid = mouseReturn.physicalToVirtual(mouseAnchor);
+    expect(std::abs(mouseMid.x - mouseWorld.x) < 0.001f && std::abs(mouseMid.y - mouseWorld.y) < 0.001f,
+           "mouse Escape return keeps the virtual point under the cursor fixed during animation");
+    mouseReturn.advanceZoom(0.18);
+    expectNear(mouseReturn.camera().x(), mouseWorld.x - (mouseAnchor.x + 1920), "mouse Escape return ends at the anchored native camera");
+    expect(!mouseReturn.beginReturn({}, Point{NAN, 0}), "invalid mouse return anchor is rejected atomically");
+
     const Rect usable{0, 31, 1920, 1049};
     expect(canUseNativePosition({100, 100, 640, 480}, usable), "ordinary visible frame prefers native movement");
     expect(canUseNativePosition({-600, 100, 640, 480}, usable), "partially visible window can retain native title-bar input");

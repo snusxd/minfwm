@@ -135,6 +135,7 @@ void WindowManager::shutdown() {
     m_zoomRequest.reset();
     m_overviewExit.reset();
     m_overviewFocus.reset();
+    m_lastFocusedWindow.reset();
     m_zoomFrameTimes.clear();
     m_applicationNames.clear();
     m_hiddenApplications.clear();
@@ -258,6 +259,9 @@ void WindowManager::updateWindows(int64_t displayId) {
                                          kAXFocusedWindowAttribute, focusedValue.put()) == kAXErrorSuccess &&
             focusedValue && CFGetTypeID(focusedValue.get()) == AXUIElementGetTypeID()) {
             m_focusedWindow = CFRef<AXUIElementRef>::retain(static_cast<AXUIElementRef>(focusedValue.get()));
+            if (!overviewActive()) {
+                if (auto focused = findWindow(m_focusedWindow.get())) m_lastFocusedWindow = focused;
+            }
         }
     }
 
@@ -346,8 +350,9 @@ void WindowManager::centerWindow(std::shared_ptr<ClientWindow> window) {
 
 void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
     m_focusedWindow = CFRef<AXUIElementRef>::retain(element);
-    if (overviewActive() || m_nativePointerHeld || m_nativeCommitPending || m_isPanning || CACurrentMediaTime() < m_nativeCommitTime + 0.25) return;
     const auto window = findWindow(element);
+    if (!overviewActive() && window) m_lastFocusedWindow = window;
+    if (overviewActive() || m_nativePointerHeld || m_nativeCommitPending || m_isPanning || CACurrentMediaTime() < m_nativeCommitTime + 0.25) return;
     if (!window || !window->virtualCoordinatesInitialized) return;
     for (auto& display : m_displays) {
         if (!display->windowPool().findWindowByAXRef(element)) continue;
@@ -450,16 +455,24 @@ std::shared_ptr<ClientWindow> WindowManager::windowAtPoint(core::Point pointer) 
 
 void WindowManager::applyOverviewExit() {
     const auto request = *std::exchange(m_overviewExit, {});
+    const auto mode = ConfigManager::instance().snapshot().zoomedEscCenter;
     m_overviewFocus = request.selectWindow ? windowAtPoint(request.pointer) : nullptr;
+    if (!request.selectWindow && mode == "focus") {
+        if (auto focused = m_lastFocusedWindow.lock(); focused && !focused->applicationSuspended && findWindow(focused->ref())) {
+            m_overviewFocus = focused;
+        }
+    }
     m_zoomRequest.reset();
     for (auto& display : m_displays) {
         const auto bounds = display->state().geometry().bounds;
         std::optional<core::Point> target;
+        std::optional<core::Point> anchor;
         if (m_overviewFocus && display->windowPool().findWindowByWID(m_overviewFocus->wid())) {
             const auto frame = m_overviewFocus->virtualRect;
             target = core::Point{frame.x + frame.w / 2 - bounds.w / 2, frame.y + frame.h / 2 - bounds.h / 2};
         }
-        if ((display->state().overviewActive() || target) && !display->state().beginReturn(target)) {
+        if (!request.selectWindow && mode == "mouse" && displayForPoint(request.pointer).id() == display->id()) anchor = request.pointer;
+        if ((display->state().overviewActive() || target) && !display->state().beginReturn(target, anchor)) {
             display->state().resetZoom({bounds.x + bounds.w / 2, bounds.y + bounds.h / 2});
         }
     }
