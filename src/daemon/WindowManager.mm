@@ -116,6 +116,8 @@ void WindowManager::shutdown() {
         }
     }
     m_isPanning = false;
+    m_focusedWindow.reset();
+    m_focusRefreshTime = 0;
     m_displays.clear();
     m_initialized = false;
 }
@@ -194,33 +196,38 @@ bool WindowManager::isWhitelisted(AXUIElementRef element) const {
     return false;
 }
 
-void WindowManager::updateWindows() {
+void WindowManager::updateWindows(int64_t displayId) {
     if (!m_initialized || m_displays.empty()) return;
-
-    CFRef<AXUIElementRef> systemWide = CFRef<AXUIElementRef>::adopt(AXUIElementCreateSystemWide());
-    CFRef<CFTypeRef> focusedApplication;
-    CFRef<CFTypeRef> focusedValue;
-    AXUIElementRef focusedWindow = nullptr;
-    if (systemWide && AXUIElementCopyAttributeValue(systemWide.get(), kAXFocusedApplicationAttribute,
-                                                    focusedApplication.put()) == kAXErrorSuccess &&
-        focusedApplication && CFGetTypeID(focusedApplication.get()) == AXUIElementGetTypeID() &&
-        AXUIElementCopyAttributeValue(static_cast<AXUIElementRef>(focusedApplication.get()),
-                                     kAXFocusedWindowAttribute, focusedValue.put()) == kAXErrorSuccess &&
-        focusedValue && CFGetTypeID(focusedValue.get()) == AXUIElementGetTypeID()) {
-        focusedWindow = static_cast<AXUIElementRef>(focusedValue.get());
+    const double now = CACurrentMediaTime();
+    // Focus queries cross into another process; they must not run on every
+    // presentation frame (especially on high-refresh-rate displays).
+    if (now >= m_focusRefreshTime) {
+        m_focusRefreshTime = now + 0.25;
+        CFRef<AXUIElementRef> systemWide = CFRef<AXUIElementRef>::adopt(AXUIElementCreateSystemWide());
+        CFRef<CFTypeRef> focusedApplication;
+        CFRef<CFTypeRef> focusedValue;
+        m_focusedWindow.reset();
+        if (systemWide && AXUIElementCopyAttributeValue(systemWide.get(), kAXFocusedApplicationAttribute,
+                                                        focusedApplication.put()) == kAXErrorSuccess &&
+            focusedApplication && CFGetTypeID(focusedApplication.get()) == AXUIElementGetTypeID() &&
+            AXUIElementCopyAttributeValue(static_cast<AXUIElementRef>(focusedApplication.get()),
+                                         kAXFocusedWindowAttribute, focusedValue.put()) == kAXErrorSuccess &&
+            focusedValue && CFGetTypeID(focusedValue.get()) == AXUIElementGetTypeID()) {
+            m_focusedWindow = CFRef<AXUIElementRef>::retain(static_cast<AXUIElementRef>(focusedValue.get()));
+        }
     }
 
     const ConfigSnapshot config = ConfigManager::instance().snapshot();
     const core::VisibilityPolicy visibility(config.overscanBufferPx);
-    const double now = CACurrentMediaTime();
 
     for (auto& display : m_displays) {
+        if (displayId && display->id() != displayId) continue;
         const core::DisplayState& state = display->state();
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref()) continue;
             adoptWindow(*display, window);
             if (!window->virtualCoordinatesInitialized) continue;
-            const bool focused = focusedWindow && CFEqual(window->ref(), focusedWindow);
+            const bool focused = m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get());
             const bool protectedWindow = focused || isWhitelisted(window->ref());
             const bool shouldRender = protectedWindow ||
                 visibility.shouldRender(window->virtualRect, state.viewport(), focused);
@@ -245,6 +252,7 @@ void WindowManager::centerWindow(std::shared_ptr<ClientWindow> window) {
 }
 
 void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
+    m_focusedWindow = CFRef<AXUIElementRef>::retain(element);
     const auto window = findWindow(element);
     if (!window || !window->virtualCoordinatesInitialized) return;
     for (auto& display : m_displays) {

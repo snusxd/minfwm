@@ -56,7 +56,7 @@ public:
     Display* displayById(int64_t id);
     Display& displayForWindow(AXUIElementRef window);
     
-    void updateWindows();
+    void updateWindows(int64_t displayId = 0);
     void adoptWindow(Display& display, const std::shared_ptr<ClientWindow>& window);
     void centerWindow(std::shared_ptr<ClientWindow> window);
     void centerCameraOnWindow(AXUIElementRef element);
@@ -80,6 +80,8 @@ private:
     std::vector<std::unique_ptr<Display>> m_displays;
     bool m_isPanning = false;
     bool m_initialized = false;
+    CFRef<AXUIElementRef> m_focusedWindow;
+    double m_focusRefreshTime = 0;
     AXBackend m_axBackend;
     YabaiSABackend m_yabaiBackend;
     WindowRenderer m_renderer{m_axBackend, m_yabaiBackend};

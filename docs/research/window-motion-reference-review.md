@@ -5,9 +5,11 @@ Reviewed source revisions:
 - Paneru `8a213313538a352537b26e25131cfe75f1e00724` (MIT).
 - Nehir `f097f35a22c463b343c16e29327bd317b7573171` (GPL-2.0-only).
 
-This review changed no animation implementation and copied no project code.
-The immediate implementation fixes minfwm's transform cleanup and disables the
-experimental backend by default; live recovery is in
+No project code was copied. The follow-up implementation adds independent
+per-display CADisplayLink scheduling, integer position caching, failure backoff
+and translation-only offscreen culling. It retains direct pointer movement;
+spring interpolation remains a future change. Transform cleanup is fixed and
+the backend automatically requires lifecycle v2; live recovery is in
 [the acceptance record](../acceptance-macos.md#persistent-transform-regression-and-recovery-2026-10-13).
 
 ## Smooth movement

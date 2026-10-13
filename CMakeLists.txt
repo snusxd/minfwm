@@ -60,6 +60,7 @@ target_link_libraries(minfwm_window_runtime PUBLIC minfwm_window_pool)
 # Daemon adapters, also linked by socket lifecycle tests without starting AX.
 add_library(minfwm_daemon_runtime STATIC
     src/daemon/DaemonRunLoop.mm
+    src/daemon/DisplayFrameClock.mm
     src/daemon/WindowManager.mm
     src/daemon/AXObserver.mm
     src/daemon/InputInterceptor.mm

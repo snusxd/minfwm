@@ -230,3 +230,22 @@ Partial geometry restoration remains retryable. With lifecycle v2 transforms,
 fully offscreen windows keep their native size and use translation-only culling.
 The new and existing renderer tests pass. Desktop smoothness and minimum-size
 behavior still require a live check with the corresponding payload installed.
+
+## Presentation cadence and bounded AX waits (2026-10-13)
+
+The daemon now uses NSScreen/CADisplayLink callbacks per display instead of a
+fixed 60 Hz update timer. The adapter rebuilds display links on screen-parameter
+changes and invalidates/releases them before restoring windows. The fallback
+timer is retained when display-link creation fails. Focus queries are cached
+for 250 ms and updated by focus notifications, rather than sent across process
+boundaries on every display frame. AX calls use a checked 100 ms process-wide
+messaging timeout, reduced to 50 ms during shutdown. A separate signal timer
+keeps exit independent of display-link callbacks. Shutdown logs identify input
+stop, window restoration and completion.
+
+The display-link scheduling idea follows the independently implemented API
+pattern reviewed in Nehir; no GPL source was copied. The daemon still follows
+pointer input directly; spring interpolation has not been added. Build checks
+cover the adapter. Display cadence, multi-monitor timing, AX timeouts and actual
+desktop exit remain manual-only checks. Per-call timeouts bound unresponsive
+AX messages; total restoration time still depends on the number of windows.

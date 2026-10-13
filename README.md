@@ -113,6 +113,9 @@ restarts; its lock is released automatically when the process exits. Invalid
 CLI arguments return a nonzero exit code.
 
 Cmd+Option dragging pans the display under the pointer when the gesture starts.
+Window updates follow each display's presentation cadence. Pointer movement is
+direct; spring interpolation is not implemented. Rejected moves and failed
+parking operations are suppressed/backed off instead of retried every frame.
 Releasing either modifier stops movement and consumes the rest of that captured
 mouse gesture. Camera bookmarks also use the display under the pointer.
 Orderly shutdown restores each window's captured physical position and size,

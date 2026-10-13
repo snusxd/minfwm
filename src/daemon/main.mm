@@ -7,6 +7,8 @@
 #include "InputInterceptor.hpp"
 #include "IPCServer.hpp"
 #include "DaemonRunLoop.hpp"
+#include "DisplayFrameClock.hpp"
+#include "CFRAII.hpp"
 
 namespace {
 volatile sig_atomic_t g_stopRequested = 0;
@@ -29,6 +31,11 @@ int main(int argc, const char * argv[]) {
         NSDictionary *options = @{(id)kAXTrustedCheckOptionPrompt: @YES};
         if (!AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)options)) {
             std::cerr << "minfwmd: Error - Accessibility permissions not granted." << std::endl;
+            return 1;
+        }
+        auto systemWide = minfwm::CFRef<AXUIElementRef>::adopt(AXUIElementCreateSystemWide());
+        if (!systemWide || AXUIElementSetMessagingTimeout(systemWide.get(), 0.1f) != kAXErrorSuccess) {
+            std::cerr << "minfwmd: failed to bound Accessibility messaging timeout" << std::endl;
             return 1;
         }
 
@@ -55,24 +62,39 @@ int main(int argc, const char * argv[]) {
             std::cerr << "minfwmd: event tap unavailable; continuing without global input" << std::endl;
         }
 
-        // High-frequency timer for window updates (60Hz)
+        minfwm::DisplayFrameClock frameClock;
+        const bool displayLinked = frameClock.start([&wm](int64_t displayId) {
+            if (!g_stopRequested) wm.updateWindows(displayId);
+        });
+        if (!displayLinked) std::cerr << "minfwmd: display link unavailable; using 60 Hz fallback" << std::endl;
+
+        // A separate timer handles signals even when no frames are presented.
         minfwm::IPCServer* serverPtr = &server;
         minfwm::InputInterceptor* interceptorPtr = &interceptor;
         minfwm::AXObserver* observerPtr = &observer;
+        minfwm::DisplayFrameClock* clockPtr = &frameClock;
+        AXUIElementRef systemWideRef = systemWide.get();
         __block bool shutdownComplete = false;
-        [NSTimer scheduledTimerWithTimeInterval:1.0/60.0 repeats:YES block:^(NSTimer * _Nonnull timer) {
+        [NSTimer scheduledTimerWithTimeInterval:displayLinked ? 0.05 : 1.0/60.0 repeats:YES block:^(NSTimer * _Nonnull timer) {
             if (g_stopRequested && !shutdownComplete) {
                 [timer invalidate];
+                std::cout << "minfwmd: stopping input, observers and frame updates" << std::endl;
+                clockPtr->stop();
                 // Stop producers before restoring window geometry.
                 serverPtr->stop();
                 interceptorPtr->stop();
                 observerPtr->stop();
+                if (AXUIElementSetMessagingTimeout(systemWideRef, 0.05f) != kAXErrorSuccess) {
+                    std::cerr << "minfwmd: failed to set shutdown AX timeout" << std::endl;
+                }
+                std::cout << "minfwmd: restoring windows" << std::endl;
                 wm.shutdown();
+                std::cout << "minfwmd: shutdown complete" << std::endl;
                 shutdownComplete = true;
                 CFRunLoopStop(CFRunLoopGetMain());
                 return;
             }
-            minfwm::WindowManager::instance().updateWindows();
+            if (!displayLinked) wm.updateWindows();
         }];
 
         std::cout << "minfwmd: Daemon is running." << std::endl;
