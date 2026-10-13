@@ -260,7 +260,9 @@ void WindowManager::updateWindows(int64_t displayId) {
             focusedValue && CFGetTypeID(focusedValue.get()) == AXUIElementGetTypeID()) {
             m_focusedWindow = CFRef<AXUIElementRef>::retain(static_cast<AXUIElementRef>(focusedValue.get()));
             if (!overviewActive()) {
-                if (auto focused = findWindow(m_focusedWindow.get())) m_lastFocusedWindow = focused;
+                if (auto focused = findWindow(m_focusedWindow.get()); focused && focused->virtualCoordinatesInitialized && focused->wid()) {
+                    m_lastFocusedWindow = focused;
+                }
             }
         }
     }
@@ -351,7 +353,7 @@ void WindowManager::centerWindow(std::shared_ptr<ClientWindow> window) {
 void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
     m_focusedWindow = CFRef<AXUIElementRef>::retain(element);
     const auto window = findWindow(element);
-    if (!overviewActive() && window) m_lastFocusedWindow = window;
+    if (!overviewActive() && window && window->virtualCoordinatesInitialized && window->wid()) m_lastFocusedWindow = window;
     if (overviewActive() || m_nativePointerHeld || m_nativeCommitPending || m_isPanning || CACurrentMediaTime() < m_nativeCommitTime + 0.25) return;
     if (!window || !window->virtualCoordinatesInitialized) return;
     for (auto& display : m_displays) {
@@ -458,7 +460,8 @@ void WindowManager::applyOverviewExit() {
     const auto mode = ConfigManager::instance().snapshot().zoomedEscCenter;
     m_overviewFocus = request.selectWindow ? windowAtPoint(request.pointer) : nullptr;
     if (!request.selectWindow && mode == "focus") {
-        if (auto focused = m_lastFocusedWindow.lock(); focused && !focused->applicationSuspended && findWindow(focused->ref())) {
+        if (auto focused = m_lastFocusedWindow.lock(); focused && focused->virtualCoordinatesInitialized &&
+            !focused->applicationSuspended && !m_hiddenApplications.contains(focused->pid()) && findWindow(focused->ref())) {
             m_overviewFocus = focused;
         }
     }

@@ -17,18 +17,19 @@ checks; see `docs/acceptance-macos.md` for the scope of each result.
 The payload retains upstream's 2.1.29 bundle version so the existing 7.1.25
 `dock_did_restart` loader preserves it. A separate bundle identifier lets the
 custom installer distinguish it from stock SA and lifecycle v1:
-`com.minfwm.yabai-sa.overview1`. Upgrading Yabai may replace the
+`com.minfwm.yabai-sa.overview2`. Upgrading Yabai may replace the
 extension; the daemon then falls back to ordinary moves until it is reloaded.
 To revert, uninstall the SA with the original Yabai's `--uninstall-sa`, then
 load the original Yabai's `--load-sa`. Stop minfwmd first. Unloading an SA alone
 does not clear any transforms already left in WindowServer; confirm normal
 native dragging before restarting minfwmd.
 
-The patched handshake is numeric version `2.1.29` with attributes `0x380`:
+The patched handshake is numeric version `2.1.29` with attributes `0x780`:
 `0x80` for absolute translation and `0x100` for lifecycle v2 cleanup.
 Both lifecycle bits and the exact version are required for translation.
 `0x200` additionally advertises overview scaling; all three bits are required
-for opcode `0x16`. A lifecycle v2 payload without `0x200` remains compatible
+for opcode `0x16`. `0x400` additionally advertises atomic native handoff
+(opcode `0x17`); it requires all earlier capabilities. A lifecycle v2 payload without `0x200` remains compatible
 with translation and native movement. Lifecycle v1 (`0x80` alone) is rejected. Integers are
 little endian; all packets retain Yabai's uint16 payload-length prefix.
 
@@ -37,6 +38,7 @@ little endian; all packets retain Yabai's uint16 payload-length prefix.
 | `0x14` | WID u32, owner PID u32, x i32, y i32 | byte 0 success, 1 failure |
 | `0x15` | WID u32, owner PID u32 | byte 0 success, 1 failure |
 | `0x16` | WID u32, owner PID u32, x i32, y i32, scale u32 | byte 0 success, 1 failure |
+| `0x17` | WID u32, owner PID u32, x i32, y i32 | byte 0 success, 1 failure |
 
 `0x14` sets an absolute translation at scale 1 without moving AppKit's frame.
 It captures the prior level once per window, accepts only an untransformed
@@ -52,6 +54,14 @@ matrix `(1/s, 0, 0, 1/s, -x/s, -y/s)`. It shares ownership, recovery entries,
 explicit ACKs, coordinate limits and reset/watchdog cleanup with translation.
 Application native size is unchanged. The daemon blocks application input in
 overview; selection returns to unit scale before native interaction.
+
+`0x17` hands an owned window back to native geometry in one request. It blocks
+presentation updates while moving the native frame, associating geometry and
+restoring a unit transform, and always reenables updates on failure. It preserves
+the current layer and retains ownership for final reset/process-death cleanup.
+Older payloads keep the separate move/reset fallback. A live probe of that
+fallback exposed an intermediate displaced frame; atomic handoff prevents it
+from being presented.
 
 The single socket thread owns all saved state. Every 250 ms it compares process
 PID plus start time; if the owning daemon dies, it restores its windows. Failed

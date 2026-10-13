@@ -130,7 +130,7 @@ unhides windows hidden by the daemon, and resets successfully applied SA layers.
 
 ### Scroll overview
 
-With the overview SA capability (`0x380`, bundle `com.minfwm.yabai-sa.overview1`),
+With the overview SA capability (`0x780`, bundle `com.minfwm.yabai-sa.overview2`),
 **Cmd+Option + vertical scroll** zooms the display under the pointer between
 20% and 100%. The world point under the cursor stays fixed. Zoom eases with
 elapsed frame time, including on high-refresh-rate displays. Positive vertical
@@ -141,14 +141,15 @@ its default is `false`.
 While zoomed out, Cmd+Option dragging pans the canvas. Clicking a window returns
 all displays to 100%, centers that window on its display and raises it. Selection
 and Escape animate back over 0.36 seconds with a smooth start and stop; the
-camera and scale move together. Escape preserves each display's virtual center.
+camera and scale move together. Escape uses the configured anchor below.
 The selection click and matching
 mouse-up are consumed; normal application input resumes after the native
 geometry returns. Overview changes presentation, never application layout.
 
 Build/load the SA with the commands above, **with minfwmd stopped**, then restart
 `./build/minfwmd`. Lifecycle v2 (`0x180`) and stock SA keep their existing movement
-behavior; they do not enable overview. If a scale operation fails, the daemon
+behavior; they do not enable overview. Overview v1 (`0x380`) remains compatible,
+but atomic native handoff requires the new `0x400` bit. If a scale operation fails, the daemon
 returns to 100% and uses the ordinary movement/fallback path. Live overview
 checks are tracked separately in [the acceptance record](docs/acceptance-macos.md).
 
@@ -189,15 +190,25 @@ is accepted and reload is atomic:
 ```toml
 enable-window-shadows = false
 invert-zoom-scroll-direction = false
+zoomed-esc-center = "screen"
 multi-display-mode = "isolated"
 overscan-buffer-px = 500
 whitelist = ["Terminal", "Music"]
 spawn-behavior = "center"
 ```
 
+`zoomed-esc-center` chooses the Escape return anchor; click selection always
+centers the selected window:
+
+| Value | Escape behavior |
+| --- | --- |
+| `"screen"` | Keep the current virtual center of each display fixed (default). |
+| `"mouse"` | Keep the point under the cursor fixed on its display; use screen center on other displays. |
+| `"focus"` | Center the last focused managed window; use screen center if it has closed or become hidden. |
+
 Invalid values leave the active snapshot unchanged. `reload` reports a daemon
 error when the file cannot be parsed.
-Changing scroll direction takes effect after `./build/minfwmc reload`; the SA
+Changing either zoom option takes effect after `./build/minfwmc reload`; the SA
 does not need to be reloaded. A complete example is in
 [`config/minfwm.toml.example`](config/minfwm.toml.example).
 
