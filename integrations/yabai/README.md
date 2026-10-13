@@ -17,7 +17,7 @@ checks; see `docs/acceptance-macos.md` for the scope of each result.
 The payload retains upstream's 2.1.29 bundle version so the existing 7.1.25
 `dock_did_restart` loader preserves it. A separate bundle identifier lets the
 custom installer distinguish it from stock SA and lifecycle v1:
-`com.minfwm.yabai-sa.overview2`. Upgrading Yabai may replace the
+`com.minfwm.yabai-sa.overview3`. Upgrading Yabai may replace the
 extension; the daemon then falls back to ordinary moves until it is reloaded.
 To revert, uninstall the SA with the original Yabai's `--uninstall-sa`, then
 load the original Yabai's `--load-sa`. Stop minfwmd first. Unloading an SA alone
@@ -62,6 +62,11 @@ the current layer and retains ownership for final reset/process-death cleanup.
 Older payloads keep the separate move/reset fallback. A live probe of that
 fallback exposed an intermediate displaced frame; atomic handoff prevents it
 from being presented.
+
+On macOS 27, the legacy geometry-association symbol is a bare `ret` with no
+defined return value. Its older-system side effect is retained, but it cannot
+serve as an error status. Native move, bounds, transform and update-resume
+results are checked, followed by client position readback.
 
 The single socket thread owns all saved state. Every 250 ms it compares process
 PID plus start time; if the owning daemon dies, it restores its windows. Failed

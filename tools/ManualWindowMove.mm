@@ -173,7 +173,18 @@ int checkTransform(uint32_t wid, CGRect original) {
 }
 
 int checkOverview(uint32_t wid, CGRect original, const char* executable) {
-    minfwm::YabaiSABackend sa;
+    bool handoffReadback = false;
+    minfwm::YabaiSABackend sa({}, [&](AXUIElementRef element, uint32_t windowId, int x, int y) {
+        CGPoint point{};
+        const bool read = minfwm::readWindowPosition(element, windowId, point);
+        const bool matches = read && minfwm::windowPositionMatches(point, x, y);
+        if (x == 400 && y == 200) {
+            handoffReadback = true;
+            std::cout << "OVERVIEW handoff readback=" << read << " position=" << point.x << ',' << point.y
+                      << " matches=" << matches << std::endl;
+        }
+        return matches;
+    });
     if (!sa.initialize() || !sa.supportsOverview()) {
         std::cerr << "Overview SA extension unavailable (requires capability 0x200)" << std::endl;
         return 77;
@@ -232,7 +243,8 @@ int checkOverview(uint32_t wid, CGRect original, const char* executable) {
     sampler.join();
     const bool cleanHandoff = handedOff && sampledFrames > 0 && intermediateFrames == 0;
     std::cout << "OVERVIEW ATOMIC HANDOFF=" << (cleanHandoff ? "PASS" : "FAIL")
-              << " samples=" << sampledFrames << " intermediate=" << intermediateFrames << std::endl;
+              << " readback=" << handoffReadback << " samples=" << sampledFrames
+              << " intermediate=" << intermediateFrames << std::endl;
     good = cleanHandoff && good;
 
     window.preferNativePosition = true;

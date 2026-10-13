@@ -33,15 +33,16 @@ def main():
             # Upgrade only the exact previous generated patch, never an unknown
             # dirty checkout. Its payload is not installed by this script.
             current = PATCH.read_text()
+            previous_atomic = current.replace("com.minfwm.yabai-sa.overview3", "com.minfwm.yabai-sa.overview2")
             previous_overview = current.replace("0x780; // minfwm translation, lifecycle, overview and native handoff",
                                                 "0x380; // minfwm translation, lifecycle and overview scale").replace(
-                "com.minfwm.yabai-sa.overview2", "com.minfwm.yabai-sa.overview1")
+                "com.minfwm.yabai-sa.overview3", "com.minfwm.yabai-sa.overview1")
             previous_v2 = previous_overview.replace("0x380; // minfwm translation, lifecycle and overview scale",
                                           "0x180; // minfwm absolute translation + reset extension").replace(
                 "com.minfwm.yabai-sa.overview1", "com.minfwm.yabai-sa.lifecycle2")
             previous_v1 = previous_v2.replace("0x180", "0x80").replace(
                 "com.minfwm.yabai-sa.lifecycle2", "com.minfwm.yabai-sa")
-            for previous in (previous_overview, previous_v2, previous_v1):
+            for previous in (previous_atomic, previous_overview, previous_v2, previous_v1):
                 with tempfile.NamedTemporaryFile(mode="w", suffix=".patch") as old:
                     old.write(previous)
                     old.flush()

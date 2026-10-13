@@ -517,3 +517,20 @@ peer/length rejection before suspension and release after move/transform/enable
 failures. Full build and 12/12 CTests pass. The pinned SA builds successfully;
 live atomic-handoff sampling and subjective flash validation remain pending
 installation of the new payload. Commits: `a9ff13f`, `7a4b70c`, `58ff911`.
+
+The installed overview2 payload passed 120 scaled fixture frames, native return,
+ownership cleanup and crash recovery, but rejected the atomic handoff before
+client readback. A separate owned-window API probe returned success for update
+suspension, native move, bounds, transform and resume; geometry association
+returned an arbitrary nonzero value. LLDB disassembly on this macOS 27 host
+showed `SLSReassociateWindowsSpacesByGeometry` consists only of `ret`, with no
+defined status. Evidence: `build/zoom-atomic-diagnostic-live.log`,
+`build/atomic-api-probe-live.log`, `build/atomic-api-disassembly.log`.
+
+The payload now retains that legacy side effect without treating its undefined
+return register as CGError. All actual geometry/update results and client
+position readback remain checked. A regression fake returning the observed
+arbitrary value failed before the change and passes afterward; full build and
+12/12 CTests pass. Installer identity overview3 ensures the corrected payload
+replaces overview2. Live handoff and subjective flash checks require this build
+to be loaded; the daemon remains stopped until then.

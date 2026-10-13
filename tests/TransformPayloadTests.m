@@ -50,7 +50,8 @@ static OSStatus SLSMoveWindowWithGroup(int cid, uint32_t wid, CGPoint* point) {
     native_frame.origin = *point;
     return kCGErrorSuccess;
 }
-static CGError SLSReassociateWindowsSpacesByGeometry(int cid, CFArrayRef windows) { return kCGErrorSuccess; }
+// On macOS 27 the symbol is a bare ret and does not define a return value.
+static CGError SLSReassociateWindowsSpacesByGeometry(int cid, CFArrayRef windows) { return 1457819; }
 static CFArrayRef fakeWindowInfo(CGWindowListOption options, CGWindowID wid) {
     CFNumberRef level = CFNumberCreate(NULL, kCFNumberIntType, &current_level);
     const void *keys[] = {kCGWindowLayer}, *values[] = {level};

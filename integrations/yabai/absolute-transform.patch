@@ -60,7 +60,7 @@
      "<string>payload</string>\n"
      "<key>CFBundleIdentifier</key>\n"
 -    "<string>com.asmvik.yabai-sa</string>\n"
-+    "<string>com.minfwm.yabai-sa.overview2</string>\n"
++    "<string>com.minfwm.yabai-sa.overview3</string>\n"
      "<key>CFBundleInfoDictionaryVersion</key>\n"
      "<string>6.0</string>\n"
      "<key>CFBundleName</key>\n"
@@ -70,7 +70,7 @@
  
 -        bool status = string_equals([ns_version UTF8String], OSAX_VERSION);
 +        bool status = string_equals([ns_version UTF8String], OSAX_VERSION) &&
-+                      [[payload_bundle objectForInfoDictionaryKey:@"CFBundleIdentifier"] isEqualToString:@"com.minfwm.yabai-sa.overview2"];
++                      [[payload_bundle objectForInfoDictionaryKey:@"CFBundleIdentifier"] isEqualToString:@"com.minfwm.yabai-sa.overview3"];
          result = status ? 0 : 1;
      } else {
          result = 1;

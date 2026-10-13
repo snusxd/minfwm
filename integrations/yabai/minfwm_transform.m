@@ -123,7 +123,12 @@ static bool minfwm_handle_transform(int sockfd, const char *message, int length)
         bool moved = SLSMoveWindowWithGroup(cid, wid, &point) == kCGErrorSuccess;
         CFNumberRef number = CFNumberCreate(NULL, kCFNumberSInt32Type, &wid);
         CFArrayRef windows = number ? CFArrayCreate(NULL, (const void **)&number, 1, &kCFTypeArrayCallBacks) : NULL;
-        bool associated = moved && windows && SLSReassociateWindowsSpacesByGeometry(cid, windows) == kCGErrorSuccess;
+        bool associated = moved && windows;
+        // macOS 27 implements this legacy hook as a bare ret: it defines no
+        // status. Keep the older-OS side effect, but never interpret its return
+        // register as CGError. Move/transform status and client readback decide
+        // whether the native handoff succeeded.
+        if (associated) (void)SLSReassociateWindowsSpacesByGeometry(cid, windows);
         if (windows) CFRelease(windows);
         if (number) CFRelease(number);
         CGRect frame;
