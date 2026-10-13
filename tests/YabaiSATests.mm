@@ -267,6 +267,17 @@ void testInvalidAckAndTimeout() {
 
 void testAbsoluteTransforms() {
     {
+        FakeSAServer server(false, false, 0x780, false, "2.1.29", false, 3);
+        minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; });
+        expect(sa.initialize() && sa.presentOverview(nullptr, 42, 200, 100, 0.5f).succeeded(), "layer-preserving handoff begins in overview");
+        expect(sa.moveNative(nullptr, 42, 450, 200).succeeded() && !sa.hasTransform(42), "overview handoff returns native input geometry");
+        expect(server.opcodes() == std::vector<uint8_t>{0x16, 0x17},
+               "native frame and presentation switch in one handoff command");
+        expect(sa.resetTransform(42).succeeded() && server.opcodes() == std::vector<uint8_t>{0x16, 0x17, 0x15},
+               "native handoff retains ownership so shutdown still restores the original layer");
+    }
+
+    {
         FakeSAServer server(false, false, 0x180, false, "2.1.29", false, 3);
         minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; });
         expect(sa.initialize() && sa.move(nullptr, 42, 100, -120).succeeded(), "native handoff starts with a transformed window");
@@ -364,6 +375,16 @@ int main() {
             FakeSAServer server(false, false, 0x380, true);
             minfwm::YabaiSA sa(server.path());
             expect(sa.handshake() && !sa.overviewWindow(42, 0, 0, 500), "scaled presentation requires explicit ACK, never EOF");
+        }
+        expect(minfwm::YabaiSA::encodeNativeHandoffPacket(42, 123, -100, -120),
+               {17, 0, 0x17, 42, 0, 0, 0, 123, 0, 0, 0,
+                0x9c, 0xff, 0xff, 0xff, 0x88, 0xff, 0xff, 0xff},
+               "native handoff packet carries peer ownership and signed physical coordinates");
+        for (uint32_t flags : {0x400u, 0x380u, 0x780u}) {
+            FakeSAServer server(false, false, flags, false, "2.1.29", false, 0);
+            minfwm::YabaiSA sa(server.path());
+            expect(sa.handshake() && sa.supportsNativeHandoff() == (flags == 0x780),
+                   "atomic native handoff requires every prior lifecycle and overview capability");
         }
         testInvalidAckAndTimeout();
         testMovementWithoutFocusCapability();

@@ -28,6 +28,29 @@ static CGError SLSSetWindowSubLevel(int cid, uint32_t wid, int level) {
     if (fail_level) return kCGErrorFailure;
     current_level = level; return kCGErrorSuccess;
 }
+static bool updates_disabled = false, fail_disable = false, fail_move = false;
+static int disable_calls = 0, enable_calls = 0;
+static bool fail_first_enable = false;
+static bool native_move_blocked = true;
+static CGError SLSDisableUpdate(int cid) {
+    ++disable_calls;
+    if (fail_disable) return kCGErrorFailure;
+    updates_disabled = true;
+    return kCGErrorSuccess;
+}
+static CGError SLSReenableUpdate(int cid) {
+    ++enable_calls;
+    if (fail_first_enable) { fail_first_enable = false; return kCGErrorFailure; }
+    updates_disabled = false;
+    return kCGErrorSuccess;
+}
+static OSStatus SLSMoveWindowWithGroup(int cid, uint32_t wid, CGPoint* point) {
+    native_move_blocked = native_move_blocked && updates_disabled;
+    if (fail_move) return kCGErrorFailure;
+    native_frame.origin = *point;
+    return kCGErrorSuccess;
+}
+static CGError SLSReassociateWindowsSpacesByGeometry(int cid, CFArrayRef windows) { return kCGErrorSuccess; }
 static CFArrayRef fakeWindowInfo(CGWindowListOption options, CGWindowID wid) {
     CFNumberRef level = CFNumberCreate(NULL, kCFNumberIntType, &current_level);
     const void *keys[] = {kCGWindowLayer}, *values[] = {level};
@@ -118,6 +141,37 @@ int main(void) {
         native_frame.origin = CGPointMake(700, 600);
         expect(request(0x15, owner, 0, 0, 9) == 0 && current.a == 1 && current.d == 1 && current.tx == -700 && current.ty == -600,
                "overview cleanup restores unit scale at the current native frame");
+        expect(scaledRequest(0x16, owner, 400, -100, 21, 500) == 0, "atomic handoff fixture applies");
+        current_level = 101;
+        expect(request(0x17, owner, 450, 250, 16) == 1 && disable_calls == 0, "truncated handoff never blocks display updates");
+        expect(request(0x17, owner + 1, 450, 250, 17) == 1 && disable_calls == 0, "handoff checks peer ownership before blocking updates");
+        expect(request(0x17, owner, 450, 250, 17) == 0 && current.a == 1 && current.tx == -450 && current.ty == -250,
+               "atomic handoff moves the native frame and normalizes presentation");
+        expect(native_move_blocked && disable_calls == 1 && enable_calls == 1 && !updates_disabled && current_level == 101,
+               "handoff holds presentation updates through geometry changes and preserves the layer");
+        expect(minfwm_transforms[0].wid == 42 && minfwm_transforms[0].transform_restored,
+               "native handoff retains layer ownership without an active transform");
+        expect(request(0x15, owner, 0, 0, 9) == 0 && current_level == 0, "final cleanup releases preserved native layer ownership");
+        expect(request(0x17, owner, 450, 250, 17) == 1, "native handoff never takes over an unowned window");
+        expect(scaledRequest(0x16, owner, 400, -100, 21, 500) == 0, "failed handoff fixture applies");
+        fail_move = true;
+        expect(request(0x17, owner, 500, 300, 17) == 1 && !updates_disabled && enable_calls == 2,
+               "failed native move always reenables display updates");
+        fail_move = false;
+        fail_disable = true;
+        expect(request(0x17, owner, 500, 300, 17) == 1 && !updates_disabled && enable_calls == 2,
+               "failed update suspension never moves the native frame");
+        fail_disable = false;
+        fail_transform = true;
+        expect(request(0x17, owner, 500, 300, 17) == 1 && !updates_disabled && enable_calls == 3,
+               "failed presentation normalization always reenables updates and retains recovery state");
+        fail_transform = false;
+        expect(request(0x15, owner, 0, 0, 9) == 0, "failed handoff remains recoverable");
+        expect(scaledRequest(0x16, owner, 400, -100, 21, 500) == 0, "reenable retry fixture applies");
+        fail_first_enable = true;
+        expect(request(0x17, owner, 500, 300, 17) == 1 && !updates_disabled && enable_calls == 5,
+               "reenable failure is reported and retried without leaving presentation suspended");
+        expect(request(0x15, owner, 0, 0, 9) == 0, "reenable retry retains cleanup ownership");
         expect(scaledRequest(0x16, owner, 400, -100, 21, 250) == 0, "scaled crash fixture applies");
         minfwm_transforms[0].start_sec++;
         // Reap interval is monotonic; force the earlier test's owner check through the entry helper.

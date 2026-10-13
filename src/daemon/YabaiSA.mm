@@ -193,6 +193,7 @@ bool YabaiSA::handshake() {
     m_compatible = false;
     m_transformSupport = false;
     m_overviewSupport = false;
+    m_nativeHandoffSupport = false;
     if (!isOwnedSocket()) return false;
     UniqueFd fd(connectTo(m_socketPath));
     if (!fd) return false;
@@ -228,6 +229,7 @@ bool YabaiSA::handshake() {
         m_transformSupport = version == "2.1.29" && (attributes[0] & 0x80) != 0 &&
             (attributes[1] & 0x01) != 0; // Lifecycle v2 restores the current native baseline.
         m_overviewSupport = m_transformSupport && (attributes[1] & 0x02) != 0;
+        m_nativeHandoffSupport = m_overviewSupport && (attributes[1] & 0x04) != 0;
     }
     return result && m_compatible;
 }
@@ -258,6 +260,20 @@ bool YabaiSA::setWindowLayer(uint32_t wid, int layer) const {
 YabaiSABackend::YabaiSABackend(std::string socketPath, WindowPositionCheck check)
     : m_sa(std::move(socketPath)), m_checkPosition(std::move(check)) {}
 
+std::vector<uint8_t> YabaiSA::encodeNativeHandoffPacket(uint32_t wid, uint32_t owner, int x, int y) {
+    std::vector<uint8_t> body{0x17};
+    appendU32(body, wid);
+    appendU32(body, owner);
+    appendI32(body, x);
+    appendI32(body, y);
+    return finishPacket(std::move(body));
+}
+
+bool YabaiSA::nativeHandoff(uint32_t wid, int x, int y) const {
+    return wid && supportsNativeHandoff() &&
+        sendPacket(encodeNativeHandoffPacket(wid, static_cast<uint32_t>(getpid()), x, y), true);
+}
+
 std::vector<uint8_t> YabaiSA::encodeOverviewPacket(uint32_t wid, uint32_t owner, int x, int y, uint32_t scale) {
     std::vector<uint8_t> body{0x16};
     appendU32(body, wid);
@@ -277,6 +293,7 @@ BackendResult YabaiSABackend::presentOverview(AXUIElementRef element, uint32_t w
     if (!supportsOverview()) return {BackendCode::unsupported};
     if (!wid || !std::isfinite(scale) || scale < 0.2f || scale > 1) return {BackendCode::failed};
     m_transformed.insert(wid); // A missing ACK can follow a successful server operation.
+    m_transformOwners.insert(wid);
     const bool applied = m_sa.overviewWindow(wid, x, y, static_cast<uint32_t>(std::lround(scale * 1000))) &&
         m_checkPosition && m_checkPosition(element, wid, x, y);
     if (!applied) (void)resetTransform(wid);
@@ -310,13 +327,14 @@ bool YabaiSA::resetTransform(uint32_t wid) const {
 }
 
 YabaiSABackend::~YabaiSABackend() {
-    for (uint32_t wid : m_transformed) (void)m_sa.resetTransform(wid);
+    for (uint32_t wid : m_transformOwners) (void)m_sa.resetTransform(wid);
 }
 
 BackendResult YabaiSABackend::resetTransform(uint32_t wid) {
-    if (!m_transformed.contains(wid)) return {BackendCode::ok};
+    if (!m_transformOwners.contains(wid)) return {BackendCode::ok};
     if (!m_sa.resetTransform(wid)) return {BackendCode::failed};
     m_transformed.erase(wid);
+    m_transformOwners.erase(wid);
     return {BackendCode::ok};
 }
 
@@ -330,6 +348,7 @@ BackendResult YabaiSABackend::move(AXUIElementRef element, uint32_t wid, int x, 
         if (!wid) return {BackendCode::failed};
         // Track before sending: a lost ACK may follow a successful transform.
         m_transformed.insert(wid);
+        m_transformOwners.insert(wid);
         const bool applied = m_sa.transformWindow(wid, x, y) && m_checkPosition &&
             m_checkPosition(element, wid, x, y);
         if (!applied) (void)resetTransform(wid);
@@ -345,10 +364,16 @@ BackendResult YabaiSABackend::resize(AXUIElementRef, uint32_t, float, float) {
 
 BackendResult YabaiSABackend::moveNative(AXUIElementRef element, uint32_t wid, int x, int y) {
     if (!available() || !wid) return {BackendCode::unavailable};
+    if (m_sa.supportsNativeHandoff() && m_transformed.contains(wid)) {
+        const bool handedOff = m_sa.nativeHandoff(wid, x, y) && m_checkPosition && m_checkPosition(element, wid, x, y);
+        if (handedOff) m_transformed.erase(wid);
+        else (void)resetTransform(wid);
+        return {handedOff ? BackendCode::ok : BackendCode::failed};
+    }
     // Move the native frame first. Resetting first would expose its old
     // position for one frame before moving the application under the pointer.
     const bool moved = m_sa.moveWindow(wid, x, y);
-    const bool reset = resetTransform(wid).succeeded();
+    const bool reset = m_sa.supportsNativeHandoff() || resetTransform(wid).succeeded();
     return {moved && reset && m_checkPosition && m_checkPosition(element, wid, x, y) ? BackendCode::ok : BackendCode::failed};
 }
 

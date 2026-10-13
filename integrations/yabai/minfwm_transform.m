@@ -4,6 +4,8 @@
 #include <time.h>
 #include <sys/proc_info.h>
 #include <math.h>
+extern CGError SLSDisableUpdate(int cid);
+extern CGError SLSReenableUpdate(int cid);
 
 struct minfwm_transform_entry {
     uint32_t wid;
@@ -82,9 +84,11 @@ static void minfwm_reap_transforms(void)
 
 static bool minfwm_handle_transform(int sockfd, const char *message, int length)
 {
-    if (length < 1 || ((uint8_t)message[0] != 0x14 && (uint8_t)message[0] != 0x15 && (uint8_t)message[0] != 0x16)) return false;
+    if (length < 1 || ((uint8_t)message[0] != 0x14 && (uint8_t)message[0] != 0x15 &&
+        (uint8_t)message[0] != 0x16 && (uint8_t)message[0] != 0x17)) return false;
     uint8_t ack = 1;
     bool overview = (uint8_t)message[0] == 0x16;
+    bool native = (uint8_t)message[0] == 0x17;
     bool apply = (uint8_t)message[0] != 0x15;
     if (length != (overview ? 21 : apply ? 17 : 9)) goto respond;
     uint32_t wid, owner;
@@ -109,6 +113,31 @@ static bool minfwm_handle_transform(int sockfd, const char *message, int length)
     memcpy(&y, message + 13, 4);
     // WindowServer's documented native coordinate range.
     if (x < -16000 || x > 16000 || y < -16000 || y > 16000) goto respond;
+    if (native) {
+        // Only a window already owned by this peer can be handed back.
+        if (!entry) goto respond;
+        int cid = SLSMainConnectionID();
+        if (SLSDisableUpdate(cid) != kCGErrorSuccess) goto respond;
+        entry->transform_restored = false;
+        CGPoint point = CGPointMake(x, y);
+        bool moved = SLSMoveWindowWithGroup(cid, wid, &point) == kCGErrorSuccess;
+        CFNumberRef number = CFNumberCreate(NULL, kCFNumberSInt32Type, &wid);
+        CFArrayRef windows = number ? CFArrayCreate(NULL, (const void **)&number, 1, &kCFTypeArrayCallBacks) : NULL;
+        bool associated = moved && windows && SLSReassociateWindowsSpacesByGeometry(cid, windows) == kCGErrorSuccess;
+        if (windows) CFRelease(windows);
+        if (number) CFRelease(number);
+        CGRect frame;
+        bool normalized = moved && SLSGetWindowBounds(cid, wid, &frame) == kCGErrorSuccess &&
+            isfinite(frame.origin.x) && isfinite(frame.origin.y) &&
+            SLSSetWindowTransform(cid, wid, CGAffineTransformMakeTranslation(-frame.origin.x, -frame.origin.y)) == kCGErrorSuccess;
+        if (normalized) entry->transform_restored = true;
+        // No failure path may leave WindowServer presentation suspended.
+        bool enabled = SLSReenableUpdate(cid) == kCGErrorSuccess;
+        if (!enabled) (void)SLSReenableUpdate(cid);
+        // Keep the captured level until final reset/process-death cleanup.
+        ack = moved && associated && normalized && enabled ? 0 : 1;
+        goto respond;
+    }
     uint32_t scale = 1000;
     if (overview) memcpy(&scale, message + 17, 4);
     if (scale < 200 || scale > 1000) goto respond;

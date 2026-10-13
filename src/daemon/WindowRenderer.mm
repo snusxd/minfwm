@@ -60,7 +60,8 @@ BackendResult WindowRenderer::move(ClientWindow& window, int x, int y) {
     if (window.preferNativePosition && m_optional.usesTransforms()) {
         const bool hadTransform = m_optional.hasTransform(window.wid());
         const auto native = m_optional.moveNative(window.ref(), window.wid(), x, y);
-        if (hadTransform && !m_optional.hasTransform(window.wid())) {
+        if (hadTransform && !m_optional.hasTransform(window.wid()) &&
+            !(native.succeeded() && m_optional.nativeMovePreservesLayer())) {
             window.isLayerSet = false;
             window.layerAttempted = false;
         }

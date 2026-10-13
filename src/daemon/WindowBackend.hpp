@@ -25,6 +25,7 @@ public:
     virtual BackendResult move(AXUIElementRef element, uint32_t wid, int x, int y) = 0;
     virtual BackendResult moveNative(AXUIElementRef, uint32_t, int, int) { return {BackendCode::unsupported}; }
     virtual bool hasTransform(uint32_t) const { return false; }
+    virtual bool nativeMovePreservesLayer() const { return false; }
     virtual BackendResult resize(AXUIElementRef element, uint32_t wid, float width, float height) = 0;
     virtual BackendResult setLayer(AXUIElementRef element, uint32_t wid, int layer) = 0;
     virtual BackendResult setHidden(AXUIElementRef element, uint32_t wid, bool hidden) = 0;

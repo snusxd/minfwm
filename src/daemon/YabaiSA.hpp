@@ -22,6 +22,9 @@ public:
     bool compatible() const { return m_compatible; }
     bool supportsTransforms() const { return m_compatible && m_transformSupport; }
     bool supportsOverview() const { return supportsTransforms() && m_overviewSupport; }
+    bool supportsNativeHandoff() const { return supportsOverview() && m_nativeHandoffSupport; }
+    bool nativeHandoff(uint32_t wid, int x, int y) const;
+    static std::vector<uint8_t> encodeNativeHandoffPacket(uint32_t wid, uint32_t owner, int x, int y);
     bool overviewWindow(uint32_t wid, int x, int y, uint32_t scalePermille) const;
     bool transformWindow(uint32_t wid, int x, int y) const;
     bool resetTransform(uint32_t wid) const;
@@ -44,6 +47,7 @@ private:
     bool m_compatible = false;
     bool m_transformSupport = false;
     bool m_overviewSupport = false;
+    bool m_nativeHandoffSupport = false;
 };
 
 class YabaiSABackend final : public WindowBackend {
@@ -55,6 +59,7 @@ public:
     bool available() const { return m_sa.compatible(); }
     bool usesTransforms() const override { return m_sa.supportsTransforms(); }
     bool supportsOverview() const override { return m_sa.supportsOverview(); }
+    bool nativeMovePreservesLayer() const override { return m_sa.supportsNativeHandoff(); }
     BackendResult presentOverview(AXUIElementRef element, uint32_t wid, int x, int y, float scale) override;
     BackendResult resetTransform(uint32_t wid) override;
 
@@ -71,6 +76,7 @@ private:
     YabaiSA m_sa;
     WindowPositionCheck m_checkPosition;
     std::unordered_set<uint32_t> m_transformed;
+    std::unordered_set<uint32_t> m_transformOwners;
 };
 
 } // namespace minfwm

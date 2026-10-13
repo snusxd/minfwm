@@ -8,6 +8,7 @@
 #include "YabaiSA.hpp"
 
 #include <chrono>
+#include <atomic>
 #include <cmath>
 #include <csignal>
 #include <cstdlib>
@@ -177,6 +178,10 @@ int checkOverview(uint32_t wid, CGRect original, const char* executable) {
         std::cerr << "Overview SA extension unavailable (requires capability 0x200)" << std::endl;
         return 77;
     }
+    if (!sa.nativeMovePreservesLayer()) {
+        std::cerr << "Atomic native handoff extension unavailable (requires capability 0x400)" << std::endl;
+        return 77;
+    }
     minfwm::AXBackend ax;
     minfwm::WindowRenderer renderer(ax, sa);
     minfwm::ClientWindow window(nullptr, wid);
@@ -205,11 +210,39 @@ int checkOverview(uint32_t wid, CGRect original, const char* executable) {
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
     std::cout << "OVERVIEW 120 scaled frames=" << (good ? "PASS" : "FAIL") << std::endl;
+    CGRect beforeHandoff{};
+    readBounds(wid, beforeHandoff);
+    std::atomic<bool> sampling{true};
+    std::atomic<int> sampledFrames{0}, intermediateFrames{0};
+    std::thread sampler([&] {
+        while (sampling) {
+            CGRect observed{};
+            if (readBounds(wid, observed)) {
+                ++sampledFrames;
+                const bool oldFrame = CGPointEqualToPoint(observed.origin, beforeHandoff.origin);
+                const bool nativeFrame = minfwm::windowPositionMatches(observed.origin, 400, 200);
+                if (!oldFrame && !nativeFrame) ++intermediateFrames;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    const bool handedOff = sa.moveNative(nullptr, wid, 400, 200).succeeded();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    sampling = false;
+    sampler.join();
+    const bool cleanHandoff = handedOff && sampledFrames > 0 && intermediateFrames == 0;
+    std::cout << "OVERVIEW ATOMIC HANDOFF=" << (cleanHandoff ? "PASS" : "FAIL")
+              << " samples=" << sampledFrames << " intermediate=" << intermediateFrames << std::endl;
+    good = cleanHandoff && good;
+
     window.preferNativePosition = true;
     const bool returned = renderer.render(window, frame, 3).succeeded() && readBounds(wid, actual) &&
         CGRectEqualToRect(actual, original) && !sa.hasTransform(wid);
     std::cout << "OVERVIEW NATIVE RETURN=" << (returned ? "PASS" : "FAIL") << std::endl;
     if (!returned) return 1;
+    const bool released = sa.resetTransform(wid).succeeded();
+    std::cout << "OVERVIEW OWNERSHIP CLEANUP=" << (released ? "PASS" : "FAIL") << std::endl;
+    good = released && good;
     const std::string workerWid = std::to_string(wid), workerX = std::to_string(static_cast<int>(frame.x));
     const pid_t worker = fork();
     if (worker == 0) {
