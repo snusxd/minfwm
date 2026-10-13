@@ -398,5 +398,9 @@ Live checklist (pending new payload installation):
 - Repeat with popups/sheets and displays with negative origins. Check scroll
   without overview support still reaches applications normally.
 
-Live WindowServer scaling and event-tap behavior have not yet been validated
-with the new installed payload; automated checks do not establish those passes.
+After the user loaded the new payload, the isolated ordinary NSWindow fixture
+passed all 120 scaled-frame origin/size checks, returned to native geometry,
+and recovered from an owner process exiting without destructors. The fixture
+exited 0. Evidence: `build/zoom-live-fixture.log`. This establishes the isolated
+WindowServer path; production event-tap interaction, application compatibility
+and subjective smoothness remain separate checks.
