@@ -187,6 +187,19 @@ std::vector<std::shared_ptr<ClientWindow>> WindowPool::removeMissingWindows(cons
     return removed;
 }
 
+std::vector<std::shared_ptr<ClientWindow>> WindowPool::removeUnlistedWindows(pid_t pid, const std::vector<AXUIElementRef>& liveWindows) {
+    std::vector<std::shared_ptr<ClientWindow>> removed;
+    if (pid <= 0) return removed;
+    for (const auto& window : m_windows) {
+        if (window->pid() != pid) continue;
+        const bool listed = std::any_of(liveWindows.begin(), liveWindows.end(),
+            [&](AXUIElementRef ref) { return ref && CFEqual(window->ref(), ref); });
+        if (!listed) removed.push_back(window);
+    }
+    for (const auto& window : removed) removeWindow(window->ref());
+    return removed;
+}
+
 std::shared_ptr<ClientWindow> WindowPool::findWindowByWID(std::uint32_t wid) const {
     if (wid == 0) return nullptr;
 

@@ -76,6 +76,7 @@ public:
     void removeWindow(AXUIElementRef windowRef);
     void removeWindowsForPid(pid_t pid);
     std::vector<std::shared_ptr<ClientWindow>> removeMissingWindows(const std::unordered_set<uint32_t>& liveIds);
+    std::vector<std::shared_ptr<ClientWindow>> removeUnlistedWindows(pid_t pid, const std::vector<AXUIElementRef>& liveWindows);
 
     [[nodiscard]] std::shared_ptr<ClientWindow> findWindowByWID(std::uint32_t wid) const;
     [[nodiscard]] std::shared_ptr<ClientWindow> findWindowByAXRef(AXUIElementRef windowRef) const;

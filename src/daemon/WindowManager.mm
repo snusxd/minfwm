@@ -216,6 +216,17 @@ void WindowManager::setApplicationState(pid_t pid, std::string name, bool hidden
     else m_hiddenApplications.erase(pid);
 }
 
+void WindowManager::reconcileApplicationWindows(pid_t pid, const std::vector<AXUIElementRef>& liveWindows) {
+    for (auto& display : m_displays) {
+        for (const auto& window : display->windowPool().removeUnlistedWindows(pid, liveWindows)) {
+            (void)m_yabaiBackend.resetTransform(window->wid());
+            std::erase(m_nativeCandidates, window);
+            if (m_focusedWindow && CFEqual(m_focusedWindow.get(), window->ref())) m_focusedWindow.reset();
+            std::cout << "WindowManager: removed closed AX window WID=" << window->wid() << std::endl;
+        }
+    }
+}
+
 bool WindowManager::isWhitelisted(const ClientWindow& window) const {
     const auto name = m_applicationNames.find(window.pid());
     if (name == m_applicationNames.end()) return false;

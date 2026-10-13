@@ -78,6 +78,7 @@ public:
     void removeWindow(AXUIElementRef element);
     void removeWindowsForPid(pid_t pid);
     void setApplicationState(pid_t pid, std::string name, bool hidden);
+    void reconcileApplicationWindows(pid_t pid, const std::vector<AXUIElementRef>& liveWindows);
 
     bool isPanning() const { return m_isPanning; }
     void setPanning(bool panning) { m_isPanning = panning; }

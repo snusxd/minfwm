@@ -65,6 +65,7 @@ bool AXObserver::start() {
         }
     }
     m_registrationSucceeded = !registrationFailed;
+    WindowManager::instance().updateWindows();
     return m_registrationSucceeded;
 }
 
@@ -79,6 +80,7 @@ void AXObserver::stop() {
     m_activateObserver = nil;
     m_sessionIds.reset();
     m_nextReconcileTime = 0;
+    m_nextAXRefreshTime = 0;
     m_refreshPending = false;
     if (m_launchObserver) {
         [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:m_launchObserver];
@@ -141,11 +143,21 @@ bool AXObserver::refreshWindows(AppObserver& app, bool centerNewWindows) {
         !windowValue || CFGetTypeID(windowValue.get()) != CFArrayGetTypeID()) return false;
     bool succeeded = true;
     const auto windowList = static_cast<CFArrayRef>(windowValue.get());
+    std::vector<AXUIElementRef> liveWindows;
+    for (CFIndex i = 0; i < CFArrayGetCount(windowList); ++i) {
+        auto ref = static_cast<AXUIElementRef>(CFArrayGetValueAtIndex(windowList, i));
+        if (ref && CFGetTypeID(ref) == AXUIElementGetTypeID()) liveWindows.push_back(ref);
+        else return false; // A malformed snapshot is not a list of closed windows.
+    }
+    pid_t pid = 0;
+    if (AXUIElementGetPid(app.element.get(), &pid) != kAXErrorSuccess || pid <= 0) return false;
+    auto& wm = WindowManager::instance();
+    wm.reconcileApplicationWindows(pid, liveWindows);
+    std::erase_if(app.windows, [&](const auto& window) { return !wm.findWindow(window.get()); });
     for (CFIndex i = 0; i < CFArrayGetCount(windowList); ++i) {
         auto windowRef = static_cast<AXUIElementRef>(CFArrayGetValueAtIndex(windowList, i));
         succeeded = observeWindow(app, windowRef, centerNewWindows) && succeeded;
     }
-    WindowManager::instance().updateWindows();
     return succeeded;
 }
 
@@ -165,9 +177,13 @@ void AXObserver::reconcileWindows() {
         // the application never supports AX destruction notifications.
         std::erase_if(app.windows, [&](const auto& window) { return !wm.findWindow(window.get()); });
     }
-    if (!m_refreshPending || wm.isPanning() || wm.overviewActive()) return;
+    // Retained-but-closed windows need AX enumeration even if no WID was
+    // destroyed. Defer these cross-process reads during camera gestures.
+    if ((!m_refreshPending && now < m_nextAXRefreshTime) || wm.isPanning() || wm.overviewActive()) return;
     m_refreshPending = false;
+    m_nextAXRefreshTime = now + 2;
     for (auto& [pid, app] : m_appObservers) (void)refreshWindows(app, false);
+    wm.updateWindows();
 }
 
 bool AXObserver::observeWindow(AppObserver& app, AXUIElementRef element, bool center) {

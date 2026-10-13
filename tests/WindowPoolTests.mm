@@ -100,6 +100,13 @@ int main() {
         expect(reconciledPool.addWindow(secondRef) != stale, "a reopened window gets a fresh model");
         expect(refOnlyPool.addWindow(firstRef) && refOnlyPool.removeMissingWindows({}).empty() &&
                refOnlyPool.windows().size() == 1, "WindowServer reconciliation preserves public AX-only records");
+        minfwm::WindowPool retainedClosedPool;
+        const auto closed = retainedClosedPool.addWindow(secondRef);
+        retainedClosedPool.addWindow(firstRef);
+        expect(retainedClosedPool.removeUnlistedWindows(getpid(), {secondRef}).empty(), "AX reconciliation preserves listed windows");
+        const auto closedRemoved = retainedClosedPool.removeUnlistedWindows(getpid(), {});
+        expect(closedRemoved.size() == 1 && closedRemoved.front() == closed && retainedClosedPool.windows().size() == 1,
+               "closed retained windows are removed without removing another application's windows");
 
         CFRelease(firstRef);
         CFRelease(secondRef);

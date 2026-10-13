@@ -45,6 +45,7 @@ private:
     std::map<pid_t, AppObserver> m_appObservers;
     std::optional<std::unordered_set<uint32_t>> m_sessionIds;
     double m_nextReconcileTime = 0;
+    double m_nextAXRefreshTime = 0;
     bool m_refreshPending = false;
 };
 

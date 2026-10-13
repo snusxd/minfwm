@@ -5,6 +5,7 @@
 #include "CFRAII.hpp"
 #include "UniqueFd.hpp"
 #include "WindowRenderer.hpp"
+#include "WindowManager.hpp"
 #include "YabaiSA.hpp"
 
 #include <chrono>
@@ -47,12 +48,12 @@ namespace {
 volatile sig_atomic_t nativeFrameChangeRequested = 0;
 void requestNativeFrameChange(int) { nativeFrameChangeRequested = 1; }
 
-int showFixture(int readyFd, bool unconstrained, bool reportFrame, bool dragProbe) {
+int showFixture(int readyFd, bool unconstrained, bool reportFrame, bool dragProbe, bool lifecycle) {
     signal(SIGUSR1, requestNativeFrameChange);
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp finishLaunching];
-    NSWindow* window = [[unconstrained ? [UnconstrainedFixtureWindow class] : [NSWindow class] alloc]
+    __block NSWindow* window = [[unconstrained ? [UnconstrainedFixtureWindow class] : [NSWindow class] alloc]
         initWithContentRect:NSMakeRect(120, 200, 640, 400)
         styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
         backing:NSBackingStoreBuffered defer:NO];
@@ -70,6 +71,28 @@ int showFixture(int readyFd, bool unconstrained, bool reportFrame, bool dragProb
     [[window contentView] addSubview:field];
     [window makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
+    if (lifecycle) {
+        // Reproduce the observed zero-origin state on our own disposable window.
+        [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:NO block:^(NSTimer*) {
+            void* sky = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY);
+            auto cid = sky ? reinterpret_cast<int (*)()>(dlsym(sky, "SLSMainConnectionID")) : nullptr;
+            auto transform = sky ? reinterpret_cast<CGError (*)(int, uint32_t, CGAffineTransform)>(dlsym(sky, "SLSSetWindowTransform")) : nullptr;
+            if (cid && transform) std::cout << "FIXTURE ZERO PRESENTATION result="
+                << transform(cid(), static_cast<uint32_t>(window.windowNumber), CGAffineTransformIdentity) << std::endl;
+            if (sky) dlclose(sky);
+        }];
+        [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer*) {
+            if (!nativeFrameChangeRequested) return;
+            nativeFrameChangeRequested = 0;
+            NSWindow* previous = window;
+            window = [[NSWindow alloc] initWithContentRect:NSMakeRect(240, 220, 640, 400)
+                styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
+                backing:NSBackingStoreBuffered defer:NO];
+            [window setTitle:@"minfwm: reopened lifecycle fixture"];
+            [window makeKeyAndOrderFront:nil];
+            [previous close];
+        }];
+    }
     const uint32_t wid = static_cast<uint32_t>([window windowNumber]);
     const bool sent = ::write(readyFd, &wid, sizeof(wid)) == sizeof(wid);
     ::close(readyFd);
@@ -418,7 +441,55 @@ int checkNativeDragProbe(uint32_t wid) {
     return sa.resetTransform(wid).succeeded() ? 0 : 1;
 }
 
-int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute, bool dragProbe, bool overview, bool experimentalHandoff) {
+int checkLifecycle(uint32_t wid, pid_t pid, CGRect original) {
+    auto& wm = minfwm::WindowManager::instance();
+    if (!wm.initialize()) return 77;
+    auto element = fixtureAXWindow(pid);
+    auto window = wm.mainDisplay().windowPool().addWindow(element.get());
+    if (!window) { wm.shutdown(); return 1; }
+    wm.setApplicationState(pid, "Lifecycle fixture", false);
+    wm.updateWindows();
+    auto presentation = minfwm::readNativeWindowPresentation(wid);
+    bool good = presentation && CGAffineTransformEqualToTransform(presentation->transform,
+        CGAffineTransformMakeTranslation(-presentation->frame.origin.x, -presentation->frame.origin.y));
+    std::cout << "STARTUP PRESENTATION RECOVERY=" << (good ? "PASS" : "FAIL") << std::endl;
+    int misses = 0;
+    wm.setPanning(true);
+    for (int frame = 0; frame < 240; ++frame) {
+        const float phase = frame * 6.283185307f / 240;
+        wm.mainDisplay().camera().setPosition(900 * std::sin(phase), 700 * std::sin(phase));
+        wm.updateWindows();
+        const auto target = wm.mainDisplay().state().virtualToPhysical(window->virtualRect);
+        CGPoint actual{};
+        if (!minfwm::readWindowPosition(window->ref(), wid, actual) ||
+            !minfwm::windowPositionMatches(actual, std::lround(target.x), std::lround(target.y))) ++misses;
+        std::this_thread::sleep_for(std::chrono::milliseconds(8));
+    }
+    wm.setPanning(false);
+    std::cout << "CAMERA PAN frames=240 misses=" << misses << std::endl;
+    good = misses == 0 && good;
+    if (::kill(pid, SIGUSR1) != 0) good = false;
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    wm.updateWindows(); // No AX observer: deliberately omit the destroy callback.
+    auto replacement = fixtureAXWindow(pid);
+    if (replacement) wm.reconcileApplicationWindows(pid, {replacement.get()});
+    const bool removed = !wm.mainDisplay().windowPool().findWindowByWID(wid);
+    std::cout << "MISSING DESTROY NOTIFICATION=" << (removed ? "PASS" : "FAIL") << std::endl;
+    good = removed && good;
+    auto reopened = wm.mainDisplay().windowPool().addWindow(replacement.get());
+    if (!reopened || !reopened->wid() || reopened->wid() == wid) { wm.shutdown(); return 1; }
+    wm.adoptWindow(wm.mainDisplay(), reopened);
+    wm.requestOverviewZoom({960, 540}, -200);
+    for (int frame = 0; frame < 90; ++frame) { wm.updateWindows(); std::this_thread::sleep_for(std::chrono::milliseconds(8)); }
+    const bool zoomed = wm.mainDisplay().state().scale() < 0.5f && reopened->overviewPresented;
+    std::cout << "REOPENED WINDOW ZOOM=" << (zoomed ? "PASS" : "FAIL") << std::endl;
+    wm.exitOverview({960, 540}, false);
+    for (int frame = 0; frame < 90; ++frame) { wm.updateWindows(); std::this_thread::sleep_for(std::chrono::milliseconds(8)); }
+    wm.shutdown();
+    return good && zoomed ? 0 : 1;
+}
+
+int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute, bool dragProbe, bool overview, bool experimentalHandoff, bool lifecycle) {
     int readyPipe[2];
     if (::pipe(readyPipe) != 0) return 1;
     minfwm::UniqueFd readEnd(readyPipe[0]), writeEnd(readyPipe[1]);
@@ -430,7 +501,7 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
         const char* fixtureExecutable = std::getenv("MINFWM_FIXTURE_EXECUTABLE");
         if (!fixtureExecutable || !*fixtureExecutable) fixtureExecutable = executable;
         ::execl(fixtureExecutable, fixtureExecutable, "--fixture", fd.c_str(),
-            dragProbe ? "drag" : transform || absolute ? "transform" : unconstrained ? "unconstrained" : "normal", nullptr);
+            lifecycle ? "lifecycle" : dragProbe ? "drag" : transform || absolute ? "transform" : unconstrained ? "unconstrained" : "normal", nullptr);
         _exit(1);
     }
     FixtureProcess fixture{pid};
@@ -450,6 +521,7 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
         std::cerr << "WindowServer did not return fixture bounds" << std::endl;
         return 1;
     }
+    if (lifecycle) return checkLifecycle(wid, pid, original);
     if (overview) return checkOverview(wid, original, executable, experimentalHandoff);
     if (absolute) return checkAbsolute(wid, original, pid, executable);
     if (dragProbe) return checkNativeDragProbe(wid);
@@ -499,13 +571,15 @@ int main(int argc, char** argv) {
         }
         if (argc == 4 && std::string(argv[1]) == "--fixture") {
             return showFixture(std::atoi(argv[2]), std::string(argv[3]) == "unconstrained",
-                std::string(argv[3]) == "transform" || std::string(argv[3]) == "drag", std::string(argv[3]) == "drag");
+                std::string(argv[3]) == "transform" || std::string(argv[3]) == "drag", std::string(argv[3]) == "drag",
+                std::string(argv[3]) == "lifecycle");
         }
         return runCheck(argv[0], argc == 2 && std::string(argv[1]) == "--unconstrained-fixture",
             argc == 2 && std::string(argv[1]) == "--transform-fixture",
             argc == 2 && std::string(argv[1]) == "--absolute-fixture",
             argc == 2 && std::string(argv[1]) == "--drag-probe",
             argc == 2 && (std::string(argv[1]) == "--overview-fixture" || std::string(argv[1]) == "--overview-compatible-fixture"),
-            argc == 2 && std::string(argv[1]) == "--overview-fixture");
+            argc == 2 && std::string(argv[1]) == "--overview-fixture",
+            argc == 2 && std::string(argv[1]) == "--lifecycle-fixture");
     }
 }
