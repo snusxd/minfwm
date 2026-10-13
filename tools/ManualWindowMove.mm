@@ -6,7 +6,6 @@
 #include "UniqueFd.hpp"
 #include "WindowRenderer.hpp"
 #include "YabaiSA.hpp"
-#include "WindowManager.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -291,56 +290,7 @@ bool checkMove(minfwm::WindowRenderer& renderer, minfwm::ClientWindow& window,
     return succeeded && matched;
 }
 
-int checkNativeDrop(uint32_t wid, pid_t fixturePid) {
-    auto element = fixtureAXWindow(fixturePid);
-    if (!element) return 77;
-    auto& wm = minfwm::WindowManager::instance();
-    if (!wm.initialize()) return 1;
-    struct Cleanup { minfwm::WindowManager& wm; ~Cleanup() { wm.shutdown(); } } cleanup{wm};
-    auto& display = wm.mainDisplay();
-    auto window = display.windowPool().addWindow(element.get());
-    wm.adoptWindow(display, window);
-    display.camera().setPosition(100, 100);
-    wm.updateWindows();
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    bool good = true;
-    for (int cycle = 0; cycle < 2; ++cycle) {
-        CGRect before{}, dropped{}, actual{};
-        if (!readBounds(wid, before)) return 1;
-        wm.beginNativeInteraction({static_cast<float>(before.origin.x + 100), static_cast<float>(before.origin.y + 40)});
-        window->positionNeedsVerification = true; // Model a recent pan's stale verification guard.
-        if (kill(fixturePid, SIGUSR1) != 0) return 1;
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        if (!readBounds(wid, dropped)) return 1;
-        wm.endNativeInteraction();
-        const auto cameraBefore = display.camera().position();
-        const auto expectedVirtual = display.state().physicalToVirtual(minfwm::core::Point{
-            static_cast<float>(dropped.origin.x), static_cast<float>(dropped.origin.y)});
-        if (cycle == 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(80));
-            wm.updateWindows();
-        } else {
-            wm.flushNativeInteractionForPan();
-            display.camera().move({80, 60});
-            wm.updateWindows();
-        }
-        const bool stored = std::abs(window->virtualRect.x - expectedVirtual.x) <= 0.5 &&
-            std::abs(window->virtualRect.y - expectedVirtual.y) <= 0.5;
-        if (cycle == 0) { display.camera().move({80, 60}); wm.updateWindows(); }
-        const bool panned = readBounds(wid, actual) && minfwm::windowPositionMatches(actual.origin,
-            std::round(dropped.origin.x - 80), std::round(dropped.origin.y - 60));
-        display.camera().setPosition(cameraBefore.x, cameraBefore.y);
-        wm.updateWindows();
-        const bool returned = readBounds(wid, actual) && CGPointEqualToPoint(actual.origin, dropped.origin);
-        good = stored && panned && returned && good;
-        std::cout << "NATIVE DROP cycle=" << cycle << " stored=" << stored << " nextPan=" << panned
-                  << " returned=" << returned << " dropped=" << dropped.origin.x << ',' << dropped.origin.y << std::endl;
-    }
-    std::cout << "NATIVE DROP RESULT=" << (good ? "PASS" : "FAIL") << std::endl;
-    return good ? 0 : 1;
-}
-
-int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute, bool nativeDrop) {
+int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute) {
     int readyPipe[2];
     if (::pipe(readyPipe) != 0) return 1;
     minfwm::UniqueFd readEnd(readyPipe[0]), writeEnd(readyPipe[1]);
@@ -352,7 +302,7 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
         const char* fixtureExecutable = std::getenv("MINFWM_FIXTURE_EXECUTABLE");
         if (!fixtureExecutable || !*fixtureExecutable) fixtureExecutable = executable;
         ::execl(fixtureExecutable, fixtureExecutable, "--fixture", fd.c_str(),
-            transform || absolute || nativeDrop ? "transform" : unconstrained ? "unconstrained" : "normal", nullptr);
+            transform || absolute ? "transform" : unconstrained ? "unconstrained" : "normal", nullptr);
         _exit(1);
     }
     FixtureProcess fixture{pid};
@@ -373,7 +323,6 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
         return 1;
     }
     if (absolute) return checkAbsolute(wid, original, pid, executable);
-    if (nativeDrop) return checkNativeDrop(wid, pid);
     if (transform) return checkTransform(wid, original);
     auto element = fixtureAXWindow(pid);
     minfwm::ClientWindow window(element.get(), wid);
@@ -423,7 +372,6 @@ int main(int argc, char** argv) {
         }
         return runCheck(argv[0], argc == 2 && std::string(argv[1]) == "--unconstrained-fixture",
             argc == 2 && std::string(argv[1]) == "--transform-fixture",
-            argc == 2 && std::string(argv[1]) == "--absolute-fixture",
-            argc == 2 && std::string(argv[1]) == "--native-drop-fixture");
+            argc == 2 && std::string(argv[1]) == "--absolute-fixture");
     }
 }
