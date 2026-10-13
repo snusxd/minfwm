@@ -1,5 +1,11 @@
 # macOS Infinite Window Manager
 
+> Historical rollback checkpoint: this revision restores automatic lifecycle v1
+> transforms from before the reported system regression. It is an intermediate
+> comparison point, not a recommendation to reload the old payload. The lifecycle
+> v2/default-off descriptions below document the later recovery checkpoint
+> (`2809352`) and do not describe this historical source revision.
+
 `minfwm` provides an infinite 2D canvas by storing window positions in virtual
 coordinates and projecting the visible part onto macOS displays. The first
 phase targets macOS 14+ and keeps native Spaces out of scope.

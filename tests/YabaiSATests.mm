@@ -255,18 +255,8 @@ void testInvalidAckAndTimeout() {
 }
 
 void testAbsoluteTransforms() {
-    {
-        FakeSAServer server(false, false, 0x80, false, "2.1.29");
-        minfwm::YabaiSA sa(server.path());
-        expect(sa.handshake() && !sa.supportsTransforms(), "unsafe lifecycle-v1 payload is never selected");
-    }
-    {
-        FakeSAServer server(false, false, 0x180, false, "2.1.29");
-        minfwm::YabaiSABackend sa(server.path());
-        expect(sa.initialize() && !sa.usesTransforms(), "capable payload does not opt in automatically");
-    }
     for (const auto version : {"2.1.30", "2.1.29"}) {
-        FakeSAServer server(false, false, 0x180, false, version);
+        FakeSAServer server(false, false, 0x80, false, version);
         minfwm::YabaiSA sa(server.path());
         expect(sa.handshake(), "transform capability handshake is complete");
         const bool extension = std::string(version) == "2.1.29";
@@ -280,22 +270,22 @@ void testAbsoluteTransforms() {
         expect(sa.handshake() && !sa.supportsTransforms(), "version alone cannot enable transforms");
     }
     {
-        FakeSAServer server(false, false, 0x180, true, "2.1.29");
+        FakeSAServer server(false, false, 0x80, true, "2.1.29");
         minfwm::YabaiSA sa(server.path());
         expect(sa.handshake() && !sa.transformWindow(42, 0, -120), "EOF cannot acknowledge an absolute transform");
     }
     {
-        FakeSAServer server(false, false, 0x180, false, "2.1.29", false, 3);
+        FakeSAServer server(false, false, 0x80, false, "2.1.29", false, 3);
         minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; });
-        expect(sa.initialize(true) && sa.usesTransforms(), "backend selects translation instead of physical movement");
+        expect(sa.initialize() && sa.usesTransforms(), "backend selects translation instead of physical movement");
         expect(sa.move(nullptr, 42, 10, -120).succeeded(), "first absolute target applies");
         expect(sa.move(nullptr, 42, 20, -130).succeeded(), "second target does not toggle off the transform");
         expect(sa.resetTransform(42).succeeded() && sa.resetTransform(42).succeeded(), "reset is idempotent without a duplicate packet");
     }
     {
-        FakeSAServer server(false, false, 0x180, false, "2.1.29", false, 2);
+        FakeSAServer server(false, false, 0x80, false, "2.1.29", false, 2);
         minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return false; });
-        expect(sa.initialize(true), "failed readback test enables transform backend");
+        expect(sa.initialize(), "failed readback test enables transform backend");
         FallbackBackend ax;
         minfwm::WindowRenderer renderer(ax, sa);
         minfwm::ClientWindow window(nullptr, 42);

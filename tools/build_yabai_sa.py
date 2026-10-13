@@ -4,7 +4,6 @@ from pathlib import Path
 import os
 import shutil
 import subprocess
-import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "build" / "yabai-minfwm"
@@ -27,18 +26,6 @@ def main():
     applied = subprocess.run(["git", "apply", "--reverse", "--check", str(PATCH)],
                              cwd=SOURCE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if applied.returncode:
-        check = subprocess.run(["git", "apply", "--check", str(PATCH)], cwd=SOURCE,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if check.returncode:
-            # Upgrade only the exact previous generated patch, never an unknown
-            # dirty checkout. Its payload is not installed by this script.
-            previous = PATCH.read_text().replace("0x180", "0x80").replace(
-                "com.minfwm.yabai-sa.lifecycle2", "com.minfwm.yabai-sa")
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".patch") as old:
-                old.write(previous)
-                old.flush()
-                run("git", "apply", "--reverse", "--check", old.name)
-                run("git", "apply", "--reverse", old.name)
         run("git", "apply", "--check", str(PATCH))
         run("git", "apply", str(PATCH))
     shutil.copyfile(ROOT / "integrations/yabai/minfwm_transform.m", SOURCE / "src/osax/minfwm_transform.m")

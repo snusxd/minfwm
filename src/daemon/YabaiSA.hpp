@@ -47,9 +47,9 @@ public:
     explicit YabaiSABackend(std::string socketPath = {}, WindowPositionCheck check = isWindowAtPosition);
     ~YabaiSABackend() override;
 
-    bool initialize(bool enableTransforms = false);
+    bool initialize();
     bool available() const { return m_sa.compatible(); }
-    bool usesTransforms() const override { return m_transformsEnabled && m_sa.supportsTransforms(); }
+    bool usesTransforms() const override { return m_sa.supportsTransforms(); }
     BackendResult resetTransform(uint32_t wid) override;
 
     BackendResult move(AXUIElementRef element, uint32_t wid, int x, int y) override;
@@ -63,7 +63,6 @@ private:
     YabaiSA m_sa;
     WindowPositionCheck m_checkPosition;
     std::unordered_set<uint32_t> m_transformed;
-    bool m_transformsEnabled = false;
 };
 
 } // namespace minfwm

@@ -41,7 +41,7 @@ bool WindowManager::initialize() {
     std::cout << "WindowManager: Initializing public AX backend" << std::endl;
     ConfigManager::instance().load();
     m_displays.clear();
-    const bool yabaiAvailable = m_yabaiBackend.initialize(ConfigManager::instance().snapshot().experimentalWindowTransforms);
+    const bool yabaiAvailable = m_yabaiBackend.initialize();
 
     for (NSScreen* screen in [NSScreen screens]) {
         NSDictionary* description = [screen deviceDescription];
@@ -71,7 +71,7 @@ bool WindowManager::initialize() {
     if (yabaiAvailable) {
         std::cout << "WindowManager: Yabai SA backend enabled" << std::endl;
         std::cout << "WindowManager: absolute transforms "
-                  << (m_yabaiBackend.usesTransforms() ? "enabled (experimental)" : "disabled (requires explicit opt-in and lifecycle v2 SA)") << std::endl;
+                  << (m_yabaiBackend.usesTransforms() ? "enabled" : "unavailable") << std::endl;
     } else {
         std::cout << "WindowManager: Yabai SA unavailable; using AX fallback" << std::endl;
     }

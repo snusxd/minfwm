@@ -163,7 +163,7 @@ int checkTransform(uint32_t wid, CGRect original) {
 
 int checkAbsolute(uint32_t wid, CGRect original, const char* executable) {
     minfwm::YabaiSABackend sa;
-    if (!sa.initialize(true) || !sa.usesTransforms()) {
+    if (!sa.initialize() || !sa.usesTransforms()) {
         std::cerr << "Absolute-transform extension unavailable" << std::endl;
         return 77;
     }

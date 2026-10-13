@@ -3,13 +3,12 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/proc_info.h>
-#include <math.h>
 
 struct minfwm_transform_entry {
     uint32_t wid;
     pid_t owner;
     uint64_t start_sec, start_usec;
-    bool transform_restored;
+    CGAffineTransform original;
     int original_level;
 };
 static struct minfwm_transform_entry minfwm_transforms[4096];
@@ -43,19 +42,7 @@ static bool minfwm_restore_entry(struct minfwm_transform_entry *entry)
         entry->wid = 0; // Destroyed windows need no restoration.
         return true;
     }
-    if (!entry->transform_restored) {
-        // A native drag/resize can change the frame while its presentation is
-        // transformed. Replaying the first translation leaves a persistent
-        // offset that survives daemon/Dock exit and breaks native dragging.
-        CGRect native_frame;
-        if (SLSGetWindowBounds(cid, entry->wid, &native_frame) != kCGErrorSuccess ||
-            !isfinite(native_frame.origin.x) || !isfinite(native_frame.origin.y)) return false;
-        if (SLSSetWindowTransform(cid, entry->wid,
-                CGAffineTransformMakeTranslation(-native_frame.origin.x, -native_frame.origin.y)) != kCGErrorSuccess) return false;
-        entry->transform_restored = true;
-    }
-    // Layer cleanup must not reapply a transform on every watchdog retry.
-    bool restored = true;
+    bool restored = SLSSetWindowTransform(cid, entry->wid, entry->original) == kCGErrorSuccess;
     restored = (SLSSetWindowSubLevel(cid, entry->wid, entry->original_level) == kCGErrorSuccess) && restored;
     if (restored) entry->wid = 0;
     return restored;
@@ -111,17 +98,13 @@ static bool minfwm_handle_transform(int sockfd, const char *message, int length)
     if (!entry) {
         if (!free_entry) goto respond;
         CGAffineTransform original;
-        CGRect native_frame;
         uint64_t sec, usec;
         if (!minfwm_process_identity(peer, &sec, &usec) ||
             SLSGetWindowTransform(SLSMainConnectionID(), wid, &original) != kCGErrorSuccess ||
-            SLSGetWindowBounds(SLSMainConnectionID(), wid, &native_frame) != kCGErrorSuccess ||
-            !CGAffineTransformEqualToTransform(original,
-                CGAffineTransformMakeTranslation(-native_frame.origin.x, -native_frame.origin.y))) goto respond;
+            original.a != 1 || original.b != 0 || original.c != 0 || original.d != 1) goto respond;
         entry = free_entry;
-        *entry = (struct minfwm_transform_entry){wid, peer, sec, usec, false, minfwm_window_level(wid)};
+        *entry = (struct minfwm_transform_entry){wid, peer, sec, usec, original, minfwm_window_level(wid)};
     }
-    entry->transform_restored = false;
     ack = SLSSetWindowTransform(SLSMainConnectionID(), wid, CGAffineTransformMakeTranslation(-x, -y)) == kCGErrorSuccess ? 0 : 1;
 respond:
     (void)send(sockfd, &ack, 1, MSG_NOSIGNAL);

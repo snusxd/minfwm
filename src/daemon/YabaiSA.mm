@@ -223,8 +223,7 @@ bool YabaiSA::handshake() {
         // depend on that flag. Still require the complete versioned handshake.
         m_compatible = parseVersion(version);
         // This extension is shipped with the pinned minfwm SA patch only.
-        m_transformSupport = version == "2.1.29" && (attributes[0] & 0x80) != 0 &&
-            (attributes[1] & 0x01) != 0; // 0x100: current-native-frame cleanup, never stale replay.
+        m_transformSupport = version == "2.1.29" && (attributes[0] & 0x80) != 0;
     }
     return result && m_compatible;
 }
@@ -292,9 +291,7 @@ BackendResult YabaiSABackend::resetTransform(uint32_t wid) {
     return {BackendCode::ok};
 }
 
-bool YabaiSABackend::initialize(bool enableTransforms) {
-    if (!m_transformed.empty()) return false;
-    m_transformsEnabled = enableTransforms;
+bool YabaiSABackend::initialize() {
     return m_sa.handshake();
 }
 
