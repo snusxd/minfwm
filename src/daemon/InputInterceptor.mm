@@ -42,6 +42,8 @@ bool InputInterceptor::start() {
 }
 
 void InputInterceptor::stop() {
+    m_panGesture.reset();
+    WindowManager::instance().setPanning(false);
     if (m_eventTap) {
         CGEventTapEnable(m_eventTap.get(), false);
         if (m_runLoopSource) {
@@ -54,44 +56,43 @@ void InputInterceptor::stop() {
 
 CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon) {
     auto* interceptor = static_cast<InputInterceptor*>(refcon);
+    if (!interceptor) return event;
     if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
-        if (interceptor && interceptor->m_eventTap) {
+        interceptor->m_panGesture.reset();
+        WindowManager::instance().setPanning(false);
+        if (interceptor->m_eventTap) {
             std::cerr << "InputInterceptor: event tap disabled; re-enabling" << std::endl;
             CGEventTapEnable(interceptor->m_eventTap.get(), true);
         }
         return event;
     }
+    if (!event) return event;
 
     auto& wm = WindowManager::instance();
 
-    // Check modifiers for any mouse event in our mask
-    if (type == kCGEventLeftMouseDown || type == kCGEventLeftMouseUp || type == kCGEventLeftMouseDragged) {
-        CGEventFlags flags = CGEventGetFlags(event);
-        bool cmd = flags & kCGEventFlagMaskCommand;
-        bool opt = flags & kCGEventFlagMaskAlternate;
-
-        if (cmd && opt) {
-            if (type == kCGEventLeftMouseDown || type == kCGEventLeftMouseDragged) {
-                wm.setPanning(true);
-            }
-            if (type == kCGEventLeftMouseUp) {
-                wm.setPanning(false);
-            }
-
-            if (type == kCGEventLeftMouseDragged) {
-                int64_t dx = CGEventGetIntegerValueField(event, kCGMouseEventDeltaX);
-                int64_t dy = CGEventGetIntegerValueField(event, kCGMouseEventDeltaY);
-
-                if (dx != 0 || dy != 0) {
-                    wm.mainDisplay().camera().move(-dx, -dy);
-                }
-            }
-            
-            // CONSUME ALL PART OF THE GESTURE (Down, Drag, Up) 
-            // if Cmd+Opt are held. This prevents macOS from seeing the click 
-            // on the wallpaper or windows.
-            return NULL; 
+    if (type == kCGEventLeftMouseDown || type == kCGEventLeftMouseUp ||
+        type == kCGEventLeftMouseDragged || type == kCGEventFlagsChanged) {
+        const CGEventFlags flags = CGEventGetFlags(event);
+        const bool modifiersHeld = (flags & kCGEventFlagMaskCommand) && (flags & kCGEventFlagMaskAlternate);
+        const core::PanEvent panEvent = type == kCGEventLeftMouseDown ? core::PanEvent::mouseDown :
+            type == kCGEventLeftMouseUp ? core::PanEvent::mouseUp :
+            type == kCGEventLeftMouseDragged ? core::PanEvent::mouseDragged : core::PanEvent::modifiersChanged;
+        int64_t displayId = 0;
+        if (type == kCGEventLeftMouseDown && modifiersHeld) {
+            const CGPoint point = CGEventGetLocation(event);
+            displayId = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)}).id();
         }
+        core::Point delta;
+        if (type == kCGEventLeftMouseDragged) {
+            delta = {static_cast<float>(CGEventGetIntegerValueField(event, kCGMouseEventDeltaX)),
+                     static_cast<float>(CGEventGetIntegerValueField(event, kCGMouseEventDeltaY))};
+        }
+        const core::PanUpdate update = interceptor->m_panGesture.handle(panEvent, modifiersHeld, displayId, delta);
+        wm.setPanning(interceptor->m_panGesture.isPanning());
+        if (update.displayId && (update.delta.x != 0 || update.delta.y != 0)) {
+            if (Display* display = wm.displayById(*update.displayId)) display->camera().move(update.delta);
+        }
+        if (update.consume) return nullptr;
     }
 
     if (type == kCGEventKeyDown) {
@@ -109,21 +110,14 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         else if (keycode == 25) index = 9;
 
         if (index != -1 && cmd) {
+            const CGPoint point = CGEventGetLocation(event);
+            Display& display = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)});
             if (shift) {
-                wm.mainDisplay().saveBookmark(index);
+                display.saveBookmark(index);
             } else {
-                wm.mainDisplay().loadBookmark(index);
+                display.loadBookmark(index);
             }
             return NULL;
-        }
-    }
-
-    if (type == kCGEventFlagsChanged) {
-        CGEventFlags flags = CGEventGetFlags(event);
-        bool cmd = flags & kCGEventFlagMaskCommand;
-        bool opt = flags & kCGEventFlagMaskAlternate;
-        if (!cmd || !opt) {
-            wm.setPanning(false);
         }
     }
 

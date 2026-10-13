@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <limits>
 
 namespace {
 
@@ -36,6 +37,18 @@ int main() {
     expectNear(camera.y(), 80.0f, "camera keeps y movement");
     camera.setPosition(400.0f, -900.0f);
     expectNear(camera.position().y, -900.0f, "camera supports negative virtual y");
+
+    const float maximum = std::numeric_limits<float>::max();
+    camera.setPosition(maximum, 10);
+    camera.move(maximum, 20);
+    expect(camera.x() == maximum && camera.y() == 10,
+           "overflowing camera movement keeps both coordinates unchanged");
+    camera.setPosition(std::numeric_limits<float>::quiet_NaN(), 20);
+    expect(camera.x() == maximum && camera.y() == 10,
+           "non-finite camera position cannot corrupt the active viewport");
+    expect(!camera.move(maximum, 0), "overflowing camera movement reports rejection");
+    expect(camera.move(-maximum, -10) && camera.x() == 0 && camera.y() == 0,
+           "valid camera movement recovers from a large finite position");
 
     DisplayState display({ 7, { -1920.0f, -300.0f, 1920.0f, 1080.0f } });
     display.camera().setPosition(-500.0f, 200.0f);

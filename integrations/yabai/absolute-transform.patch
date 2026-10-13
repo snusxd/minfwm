@@ -1,0 +1,85 @@
+--- a/src/osax/payload.m
++++ b/src/osax/payload.m
+@@ -929,9 +929,13 @@
+     CFRelease(window_list_ref);
+ }
+ 
++#include <poll.h>
++#include <limits.h>
++#include "minfwm_transform.m"
++
+ static void do_handshake(int sockfd)
+ {
+-    uint32_t attrib = 0;
++    uint32_t attrib = 0x180; // minfwm absolute translation + reset extension
+ 
+     if (dock_spaces != nil)                attrib |= OSAX_ATTRIB_DOCK_SPACES;
+     if (dp_desktop_picture_manager != nil) attrib |= OSAX_ATTRIB_DPPM;
+@@ -1018,7 +1022,7 @@
+     }
+ }
+ 
+-static inline bool read_message(int sockfd, char *message)
++static inline int read_message(int sockfd, char *message)
+ {
+     int bytes_read    = 0;
+     int bytes_to_read = 0;
+@@ -1034,7 +1038,7 @@
+             bytes_read += cur_read;
+         } while (bytes_read < bytes_to_read);
+ 
+-        return bytes_read == bytes_to_read;
++        return bytes_read == bytes_to_read ? bytes_read : 0;
+     }
+ 
+     return false;
+@@ -1043,11 +1047,18 @@
+ static void *handle_connection(void *unused)
+ {
+     for (;;) {
++        minfwm_reap_transforms();
++        struct pollfd listener = {daemon_sockfd, POLLIN, 0};
++        if (poll(&listener, 1, 250) <= 0) continue;
+         int sockfd = accept(daemon_sockfd, NULL, 0);
+         if (sockfd == -1) continue;
+ 
++        struct timeval timeout = {0, 250000};
++        setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
++        setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+         char message[SA_SOCKET_BUFF_LEN];
+-        if (read_message(sockfd, message)) {
++        int length = read_message(sockfd, message);
++        if (length && !minfwm_handle_transform(sockfd, message, length)) {
+             handle_message(sockfd, message);
+         }
+ 
+--- a/src/sa.m
++++ b/src/sa.m
+@@ -57,7 +57,7 @@
+     "<key>CFBundleExecutable</key>\n"
+     "<string>payload</string>\n"
+     "<key>CFBundleIdentifier</key>\n"
+-    "<string>com.asmvik.yabai-sa</string>\n"
++    "<string>com.minfwm.yabai-sa.lifecycle2</string>\n"
+     "<key>CFBundleInfoDictionaryVersion</key>\n"
+     "<string>6.0</string>\n"
+     "<key>CFBundleName</key>\n"
+@@ -180,7 +180,8 @@
+         NSBundle *payload_bundle = [NSBundle bundleWithPath:payload_path];
+         NSString *ns_version = [payload_bundle objectForInfoDictionaryKey:@"CFBundleVersion"];
+ 
+-        bool status = string_equals([ns_version UTF8String], OSAX_VERSION);
++        bool status = string_equals([ns_version UTF8String], OSAX_VERSION) &&
++                      [[payload_bundle objectForInfoDictionaryKey:@"CFBundleIdentifier"] isEqualToString:@"com.minfwm.yabai-sa.lifecycle2"];
+         result = status ? 0 : 1;
+     } else {
+         result = 1;
+@@ -279,7 +280,7 @@
+     }
+ 
+     if (string_equals(version, OSAX_VERSION)) {
+-        if ((attrib & OSAX_ATTRIB_ALL) == OSAX_ATTRIB_ALL) {
++        if ((attrib & 0x80) != 0) {
+             notify("scripting-addition", "payload v%s", version);
+             return 0;
+         }

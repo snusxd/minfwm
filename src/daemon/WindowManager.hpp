@@ -9,6 +9,7 @@
 #include "../core/DisplayState.hpp"
 #include "AXBackend.hpp"
 #include "YabaiSA.hpp"
+#include "WindowRenderer.hpp"
 
 namespace minfwm {
 
@@ -51,6 +52,8 @@ public:
     
     // Get display for a window or camera
     Display& mainDisplay();
+    Display& displayForPoint(core::Point point);
+    Display* displayById(int64_t id);
     Display& displayForWindow(AXUIElementRef window);
     
     void updateWindows();
@@ -62,6 +65,7 @@ public:
     // Helpers to find window across pools
     std::shared_ptr<ClientWindow> findWindow(AXUIElementRef element);
     void removeWindow(AXUIElementRef element);
+    void removeWindowsForPid(pid_t pid);
 
     bool isPanning() const { return m_isPanning; }
     void setPanning(bool panning) { m_isPanning = panning; }
@@ -78,6 +82,7 @@ private:
     bool m_initialized = false;
     AXBackend m_axBackend;
     YabaiSABackend m_yabaiBackend;
+    WindowRenderer m_renderer{m_axBackend, m_yabaiBackend};
 };
 
 } // namespace minfwm

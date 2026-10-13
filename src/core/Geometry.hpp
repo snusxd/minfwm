@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
+#include <span>
 
 namespace minfwm::core {
 
@@ -34,6 +36,9 @@ struct DisplayGeometry {
     std::int64_t id = 0;
     Rect bounds;
 };
+
+[[nodiscard]] std::optional<std::int64_t> nearestDisplay(
+    std::span<const DisplayGeometry> displays, Point point) noexcept;
 
 } // namespace minfwm::core
 

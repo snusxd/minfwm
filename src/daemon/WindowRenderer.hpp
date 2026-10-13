@@ -1,0 +1,31 @@
+#pragma once
+
+#include "WindowBackend.hpp"
+#include "WindowPool.hpp"
+#include "WindowPosition.hpp"
+#include <utility>
+
+namespace minfwm {
+
+// Backend operations are injected so partial failures exercise the same
+// hide/show and restoration path as the daemon, without live AX windows.
+class WindowRenderer final {
+public:
+    WindowRenderer(WindowBackend& ax, WindowBackend& optional, WindowPositionCheck check = isWindowAtPosition)
+        : m_ax(ax), m_optional(optional), m_checkPosition(std::move(check)) {}
+
+    BackendResult render(ClientWindow& window, core::Rect physical, double now);
+    BackendResult hide(ClientWindow& window, core::Rect physical, core::Rect displayBounds, double now);
+    BackendResult restore(ClientWindow& window, double now);
+
+private:
+    BackendResult move(ClientWindow& window, int x, int y);
+    BackendResult setLayer(ClientWindow& window, int layer);
+    BackendResult resetTransform(ClientWindow& window);
+
+    WindowBackend& m_ax;
+    WindowBackend& m_optional;
+    WindowPositionCheck m_checkPosition;
+};
+
+} // namespace minfwm

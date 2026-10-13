@@ -1,5 +1,6 @@
 #import "AXBackend.hpp"
 #include "CFRAII.hpp"
+#include <cmath>
 
 namespace minfwm {
 
@@ -15,7 +16,8 @@ BackendResult setPosition(AXUIElementRef element, int x, int y) {
 }
 
 BackendResult setSize(AXUIElementRef element, float width, float height) {
-    if (!element || width <= 0.0f || height <= 0.0f) return {BackendCode::failed};
+    if (!element || !std::isfinite(width) || !std::isfinite(height) ||
+        width <= 0.0f || height <= 0.0f) return {BackendCode::failed};
     const CGSize size = CGSizeMake(width, height);
     CFRef<AXValueRef> value = CFRef<AXValueRef>::adopt(AXValueCreate(kAXValueTypeCGSize, &size));
     if (!value) return {BackendCode::failed};
@@ -25,8 +27,19 @@ BackendResult setSize(AXUIElementRef element, float width, float height) {
 
 } // namespace
 
-BackendResult AXBackend::move(AXUIElementRef element, uint32_t, int x, int y) {
-    return setPosition(element, x, y);
+BackendResult AXBackend::move(AXUIElementRef element, uint32_t wid, int x, int y) {
+    const BackendResult result = setPosition(element, x, y);
+    if (!result.succeeded()) return result;
+    return {m_checkPosition && m_checkPosition(element, wid, x, y) ? BackendCode::ok : BackendCode::failed};
+}
+
+BackendResult AXBackend::restore(AXUIElementRef element, uint32_t wid, int x, int y,
+                                float width, float height) {
+    // A resize can constrain the frame again. Position and verify afterwards,
+    // and attempt both operations even if either one fails.
+    const BackendResult resized = resize(element, wid, width, height);
+    const BackendResult moved = move(element, wid, x, y);
+    return resized.succeeded() ? moved : resized;
 }
 
 BackendResult AXBackend::resize(AXUIElementRef element, uint32_t, float width, float height) {
@@ -42,13 +55,6 @@ BackendResult AXBackend::setHidden(AXUIElementRef element, uint32_t, bool hidden
     CFBooleanRef value = hidden ? kCFBooleanTrue : kCFBooleanFalse;
     const AXError error = AXUIElementSetAttributeValue(element, kAXHiddenAttribute, value);
     return {error == kAXErrorSuccess ? BackendCode::ok : BackendCode::failed};
-}
-
-BackendResult AXBackend::restore(AXUIElementRef element, uint32_t wid, int x, int y,
-                                 float width, float height) {
-    const BackendResult moved = move(element, wid, x, y);
-    if (!moved.succeeded()) return moved;
-    return resize(element, wid, width, height);
 }
 
 } // namespace minfwm

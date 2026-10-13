@@ -27,3 +27,10 @@ the catalog's source attribution table is authoritative for imported content.
 Only the selected skill directories are vendored here. No complete AAS catalog,
 catalog documentation, executable, package manager, or runtime dependency is
 vendored here.
+## Yabai scripting addition integration
+
+The optional absolute-transform integration patches Yabai 7.1.25, commit
+`02de172f8706c3e2eaa679478897d7346e82b564`, by Åsmund Vikane and contributors.
+Yabai is MIT licensed. Its license is included in
+`integrations/yabai/LICENSE.txt`; upstream source is downloaded only into the
+local build directory by `tools/build_yabai_sa.py`.

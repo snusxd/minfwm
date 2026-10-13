@@ -69,6 +69,26 @@ int main() {
 
         expect(pool.addWindow(nullptr) == nullptr, "null AX ref is rejected");
 
+        minfwm::WindowPool processPool;
+        const auto applicationWindow = processPool.addWindow(secondRef);
+        processPool.addWindow(firstRef);
+        expect(applicationWindow->pid() == getpid(), "window captures its application owner");
+        processPool.removeWindowsForPid(getpid());
+        expect(processPool.findWindowByAXRef(secondRef) == nullptr,
+               "application termination removes its windows from the AX index");
+        expect(processPool.windows().size() == 1,
+               "application termination preserves other owners");
+        processPool.removeWindowsForPid(getpid());
+        expect(processPool.windows().size() == 1, "application termination is idempotent");
+        processPool.removeWindowsForPid(0);
+        expect(processPool.windows().size() == 1, "unknown owner is not an application termination");
+
+        minfwm::WindowPool ownedWidPool(&fixedWindowId);
+        ownedWidPool.addWindow(secondRef);
+        ownedWidPool.removeWindowsForPid(getpid());
+        expect(ownedWidPool.windows().empty() && !ownedWidPool.findWindowByWID(42),
+               "application termination also erases the WID index");
+
         CFRelease(firstRef);
         CFRelease(secondRef);
     }

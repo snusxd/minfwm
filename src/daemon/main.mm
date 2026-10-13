@@ -31,9 +31,16 @@ int main(int argc, const char * argv[]) {
             return 1;
         }
 
+        minfwm::IPCServer server;
+        if (!server.start()) {
+            std::cerr << "minfwmd: failed to start IPC server: " << server.lastError() << std::endl;
+            return 1;
+        }
+
         auto& wm = minfwm::WindowManager::instance();
         if (!wm.initialize()) {
             std::cerr << "minfwmd: failed to initialize display state" << std::endl;
+            server.stop();
             return 1;
         }
 
@@ -45,15 +52,6 @@ int main(int argc, const char * argv[]) {
         minfwm::InputInterceptor interceptor;
         if (!interceptor.start()) {
             std::cerr << "minfwmd: event tap unavailable; continuing without global input" << std::endl;
-        }
-
-        minfwm::IPCServer server;
-        if (!server.start()) {
-            std::cerr << "minfwmd: failed to start IPC server: " << server.lastError() << std::endl;
-            interceptor.stop();
-            observer.stop();
-            wm.shutdown();
-            return 1;
         }
 
         // High-frequency timer for window updates (60Hz)

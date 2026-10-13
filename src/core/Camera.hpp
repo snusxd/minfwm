@@ -9,9 +9,10 @@ public:
     Camera() noexcept;
     Camera(float x, float y) noexcept;
 
-    void move(float dx, float dy) noexcept;
-    void move(Point delta) noexcept;
-    void setPosition(float x, float y) noexcept;
+    // Invalid or overflowing updates leave both coordinates unchanged.
+    bool move(float dx, float dy) noexcept;
+    bool move(Point delta) noexcept;
+    bool setPosition(float x, float y) noexcept;
 
     [[nodiscard]] float x() const noexcept;
     [[nodiscard]] float y() const noexcept;

@@ -1,0 +1,201 @@
+#include "WindowRenderer.hpp"
+
+#include <cmath>
+#include <limits>
+#include <iostream>
+
+namespace minfwm {
+namespace {
+
+bool pixelPosition(core::Rect rect, int& x, int& y) {
+    if (!std::isfinite(rect.x) || !std::isfinite(rect.y) ||
+        !std::isfinite(rect.w) || !std::isfinite(rect.h) || rect.w <= 0 || rect.h <= 0) return false;
+    const double roundedX = std::round(static_cast<double>(rect.x));
+    const double roundedY = std::round(static_cast<double>(rect.y));
+    if (roundedX < std::numeric_limits<int>::min() || roundedX > std::numeric_limits<int>::max() ||
+        roundedY < std::numeric_limits<int>::min() || roundedY > std::numeric_limits<int>::max()) return false;
+    x = static_cast<int>(roundedX);
+    y = static_cast<int>(roundedY);
+    return true;
+}
+
+void invalidatePosition(ClientWindow& window) {
+    window.lastRenderedX = std::numeric_limits<float>::quiet_NaN();
+    window.lastRenderedY = std::numeric_limits<float>::quiet_NaN();
+}
+
+} // namespace
+
+BackendResult WindowRenderer::move(ClientWindow& window, int x, int y) {
+    const BackendResult result = m_optional.move(window.ref(), window.wid(), x, y);
+    if (result.succeeded()) return result;
+    (void)resetTransform(window);
+    return m_ax.move(window.ref(), window.wid(), x, y);
+}
+
+BackendResult WindowRenderer::resetTransform(ClientWindow& window) {
+    const BackendResult result = m_optional.resetTransform(window.wid());
+    if (result.succeeded() && m_optional.usesTransforms()) {
+        // The payload restores the captured level along with the transform.
+        window.isLayerSet = false;
+        window.layerAttempted = false;
+    }
+    return result;
+}
+
+BackendResult WindowRenderer::setLayer(ClientWindow& window, int layer) {
+    const BackendResult result = m_optional.setLayer(window.ref(), window.wid(), layer);
+    return result.succeeded() ? result : m_ax.setLayer(window.ref(), window.wid(), layer);
+}
+
+BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, double now) {
+    int x = 0, y = 0;
+    if (!window.originalPhysicalRect || !pixelPosition(physical, x, y)) return {BackendCode::failed};
+    if (window.rejectedPosition) {
+        if (window.rejectedPosition->x == x && window.rejectedPosition->y == y) return {BackendCode::failed};
+        window.rejectedPosition.reset();
+    }
+    const bool geometryDirty = window.isHidden || window.needsGeometryRestore ||
+        window.lastRenderedX != physical.x || window.lastRenderedY != physical.y;
+    if (!geometryDirty && window.positionNeedsVerification && now >= window.positionVerificationTime) {
+        const bool matched = m_checkPosition && m_checkPosition(window.ref(), window.wid(), x, y);
+        if (matched) {
+            window.positionNeedsVerification = false;
+        } else {
+            // AppKit may correct the position after the synchronous SA readback.
+            // Attempt AX once, then stop fighting an application that constrains
+            // the frame. A new camera target allows movement again.
+            (void)resetTransform(window);
+            const bool recovered = !window.positionFallbackAttempted &&
+                m_ax.move(window.ref(), window.wid(), x, y).succeeded();
+            window.positionFallbackAttempted = true;
+            if (!recovered) {
+                window.positionNeedsVerification = false;
+                window.rejectedPosition = core::Point{static_cast<float>(x), static_cast<float>(y)};
+                invalidatePosition(window);
+                std::cerr << "WindowRenderer: position rejected after readback (WID " << window.wid()
+                          << ", target " << x << ',' << y << ")" << std::endl;
+                return {BackendCode::failed};
+            }
+            window.lastProgrammaticMoveTime = now;
+            window.positionVerificationTime = now + 0.25;
+        }
+    }
+    if (!geometryDirty && window.layerAttempted) return {BackendCode::ok};
+
+    window.lastProgrammaticMoveTime = now;
+    if (geometryDirty) {
+        if (window.isAXHidden) {
+            const BackendResult shown = m_ax.setHidden(window.ref(), window.wid(), false);
+            if (!shown.succeeded()) return shown;
+            window.isAXHidden = false;
+            window.isHidden = false;
+            window.needsGeometryRestore = true;
+        }
+        BackendResult geometry;
+        if (window.needsGeometryRestore) {
+            // Resizing via AX can pull the frame below the menu bar. Apply the
+            // final position through SA (with AX fallback) after restoring size.
+            (void)resetTransform(window);
+            const BackendResult resized = m_ax.resize(window.ref(), window.wid(), physical.w, physical.h);
+            const BackendResult moved = move(window, x, y);
+            geometry = resized.succeeded() ? moved : resized;
+        } else {
+            geometry = move(window, x, y);
+        }
+        if (!geometry.succeeded()) {
+            // A failed operation may still have changed or clamped the frame.
+            // Do not reuse the previously cached position on the next render.
+            invalidatePosition(window);
+            return geometry;
+        }
+        window.isHidden = false;
+        window.needsGeometryRestore = false;
+        window.lastRenderedX = physical.x;
+        window.lastRenderedY = physical.y;
+        window.positionNeedsVerification = true;
+        window.positionFallbackAttempted = false;
+        window.positionVerificationTime = now + 0.25;
+    }
+    if (!window.layerAttempted) {
+        window.isLayerSet = setLayer(window, kCGPopUpMenuWindowLevelKey).succeeded();
+        window.layerAttempted = true;
+    }
+    return {BackendCode::ok};
+}
+
+BackendResult WindowRenderer::hide(ClientWindow& window, core::Rect physical,
+                                    core::Rect displayBounds, double now) {
+    if (!window.originalPhysicalRect) return {BackendCode::failed};
+    if (window.isHidden) return {BackendCode::ok};
+    if (!resetTransform(window).succeeded()) return {BackendCode::failed};
+    window.positionNeedsVerification = false;
+    window.rejectedPosition.reset();
+    window.lastProgrammaticMoveTime = now;
+    const BackendResult hidden = m_ax.setHidden(window.ref(), window.wid(), true);
+    if (hidden.succeeded()) {
+        window.isHidden = true;
+        window.isAXHidden = true;
+        invalidatePosition(window);
+        return hidden;
+    }
+
+    core::Rect previous = physical;
+    if (std::isfinite(window.lastRenderedX) && std::isfinite(window.lastRenderedY)) {
+        previous.x = window.lastRenderedX;
+        previous.y = window.lastRenderedY;
+    }
+    int previousX = 0, previousY = 0, cornerX = 0, cornerY = 0;
+    if (!pixelPosition(previous, previousX, previousY) ||
+        !pixelPosition({displayBounds.right() - 1, displayBounds.bottom() - 1, 1, 1}, cornerX, cornerY)) {
+        return {BackendCode::failed};
+    }
+    const BackendResult resized = m_ax.resize(window.ref(), window.wid(), 1, 1);
+    if (!resized.succeeded()) return resized;
+    window.needsGeometryRestore = true;
+    const BackendResult parked = m_ax.move(window.ref(), window.wid(), cornerX, cornerY);
+    if (!parked.succeeded()) {
+        // A successful shrink must be undone even if the subsequent move fails.
+        const BackendResult rollback = m_ax.restore(window.ref(), window.wid(), previousX, previousY,
+                                                     previous.w, previous.h);
+        window.needsGeometryRestore = !rollback.succeeded();
+        if (!rollback.succeeded()) invalidatePosition(window);
+        return parked;
+    }
+    window.isHidden = true;
+    window.isAXHidden = false;
+    invalidatePosition(window);
+    return {BackendCode::ok};
+}
+
+BackendResult WindowRenderer::restore(ClientWindow& window, double now) {
+    int x = 0, y = 0;
+    if (!window.originalPhysicalRect || !pixelPosition(*window.originalPhysicalRect, x, y)) {
+        return {BackendCode::failed};
+    }
+    window.lastProgrammaticMoveTime = now;
+    window.positionNeedsVerification = false;
+    window.rejectedPosition.reset();
+    bool shown = true;
+    const bool transformReset = resetTransform(window).succeeded();
+    if (window.isAXHidden) {
+        shown = m_ax.setHidden(window.ref(), window.wid(), false).succeeded();
+        if (shown) window.isAXHidden = false;
+    }
+    const core::Rect original = *window.originalPhysicalRect;
+    const BackendResult geometry = m_ax.restore(window.ref(), window.wid(), x, y, original.w, original.h);
+    window.needsGeometryRestore = !geometry.succeeded();
+    if (geometry.succeeded()) {
+        if (shown) window.isHidden = false;
+        window.lastRenderedX = original.x;
+        window.lastRenderedY = original.y;
+    }
+    bool layerRestored = true;
+    if (window.isLayerSet) {
+        layerRestored = setLayer(window, kCGNormalWindowLevelKey).succeeded();
+        if (layerRestored) window.isLayerSet = false;
+    }
+    return {transformReset && shown && geometry.succeeded() && layerRestored ? BackendCode::ok : BackendCode::failed};
+}
+
+} // namespace minfwm

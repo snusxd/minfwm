@@ -7,6 +7,7 @@
 namespace minfwm {
 
 struct ConfigSnapshot {
+    bool experimentalWindowTransforms = false;
     bool enableWindowShadows = false;
     std::string multiDisplayMode = "isolated";
     float overscanBufferPx = 500.0f;

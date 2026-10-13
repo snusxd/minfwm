@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <optional>
 
 #include "CFRAII.hpp"
 #include "Geometry.hpp"
@@ -24,19 +25,30 @@ public:
 
     [[nodiscard]] AXUIElementRef ref() const noexcept { return m_windowRef.get(); }
     [[nodiscard]] std::uint32_t wid() const noexcept { return m_wid; }
+    [[nodiscard]] pid_t pid() const noexcept { return m_pid; }
+    bool captureInitialGeometry();
 
     VirtualRect virtualRect;
+    std::optional<VirtualRect> originalPhysicalRect;
     float lastRenderedX = -99999.0f;
     float lastRenderedY = -99999.0f;
     double lastProgrammaticMoveTime = 0.0;
+    double positionVerificationTime = 0.0;
+    bool positionNeedsVerification = false;
+    bool positionFallbackAttempted = false;
+    std::optional<core::Point> rejectedPosition;
     bool isHidden = false;
     bool isAXHidden = false;
+    bool needsGeometryRestore = false;
     bool isLayerSet = false;
+    bool layerAttempted = false;
     bool virtualCoordinatesInitialized = false;
+    bool centerOnAdoption = false;
 
 private:
     CFRef<AXUIElementRef> m_windowRef;
     std::uint32_t m_wid;
+    pid_t m_pid = 0;
 };
 
 class WindowPool {
@@ -53,6 +65,7 @@ public:
 
     std::shared_ptr<ClientWindow> addWindow(AXUIElementRef windowRef);
     void removeWindow(AXUIElementRef windowRef);
+    void removeWindowsForPid(pid_t pid);
 
     [[nodiscard]] std::shared_ptr<ClientWindow> findWindowByWID(std::uint32_t wid) const;
     [[nodiscard]] std::shared_ptr<ClientWindow> findWindowByAXRef(AXUIElementRef windowRef) const;

@@ -1,6 +1,7 @@
 #include "WindowPool.hpp"
 #import <AppKit/AppKit.h>
 #include <algorithm>
+#include <cmath>
 #include <dlfcn.h>
 #include <iostream>
 #include <string>
@@ -57,26 +58,18 @@ ClientWindow::ClientWindow(AXUIElementRef windowRef, std::uint32_t windowId)
     if (!m_windowRef) return;
 
     try {
-        CGPoint pos = { 0.0, 0.0 };
-        readPoint(m_windowRef.get(), kAXPositionAttribute, pos);
+        (void)captureInitialGeometry();
 
-        CGSize size = { 0.0, 0.0 };
-        readSize(m_windowRef.get(), kAXSizeAttribute, size);
-
-        virtualRect = { static_cast<float>(pos.x), static_cast<float>(pos.y),
-                        static_cast<float>(size.width), static_cast<float>(size.height) };
-
-        pid_t pid = 0;
         std::string appName = "Unknown";
-        if (AXUIElementGetPid(m_windowRef.get(), &pid) == kAXErrorSuccess && pid > 0) {
-            NSRunningApplication* app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+        if (AXUIElementGetPid(m_windowRef.get(), &m_pid) == kAXErrorSuccess && m_pid > 0) {
+            NSRunningApplication* app = [NSRunningApplication runningApplicationWithProcessIdentifier:m_pid];
             NSString* localizedName = app.localizedName;
             const char* utf8Name = [localizedName UTF8String];
             if (utf8Name) appName = utf8Name;
         }
 
         std::cout << "WindowPool: Added window WID:" << m_wid << " [" << appName
-                  << "] at " << pos.x << "," << pos.y << std::endl;
+                  << "] at " << virtualRect.x << "," << virtualRect.y << std::endl;
     } catch (...) {
         m_windowRef.reset();
         throw;
@@ -84,6 +77,24 @@ ClientWindow::ClientWindow(AXUIElementRef windowRef, std::uint32_t windowId)
 }
 
 ClientWindow::~ClientWindow() noexcept = default;
+
+bool ClientWindow::captureInitialGeometry() {
+    if (originalPhysicalRect) return true;
+    if (!m_windowRef) return false;
+    CGPoint position{};
+    CGSize size{};
+    if (!readPoint(m_windowRef.get(), kAXPositionAttribute, position) ||
+        !readSize(m_windowRef.get(), kAXSizeAttribute, size)) return false;
+    const VirtualRect physical{static_cast<float>(position.x), static_cast<float>(position.y),
+                               static_cast<float>(size.width), static_cast<float>(size.height)};
+    if (!std::isfinite(physical.x) || !std::isfinite(physical.y) ||
+        !std::isfinite(physical.w) || !std::isfinite(physical.h) || physical.w <= 0 || physical.h <= 0) return false;
+    virtualRect = physical;
+    originalPhysicalRect = physical;
+    lastRenderedX = physical.x;
+    lastRenderedY = physical.y;
+    return true;
+}
 
 WindowPool::WindowPool(WindowIdResolver windowIdResolver)
     : m_windowIdResolver(windowIdResolver ? windowIdResolver : &WindowPool::defaultWindowIdResolver) {}
@@ -150,6 +161,16 @@ void WindowPool::removeWindow(AXUIElementRef windowRef) {
         m_windows.begin(), m_windows.end(),
         [&](const std::shared_ptr<ClientWindow>& candidate) { return candidate == window; });
     if (windowEntry != m_windows.end()) m_windows.erase(windowEntry);
+}
+
+void WindowPool::removeWindowsForPid(pid_t pid) {
+    if (pid <= 0) return;
+    // Copy the matching owners before removeWindow mutates the vector/indexes.
+    std::vector<std::shared_ptr<ClientWindow>> removed;
+    for (const auto& window : m_windows) {
+        if (window->pid() == pid) removed.push_back(window);
+    }
+    for (const auto& window : removed) removeWindow(window->ref());
 }
 
 std::shared_ptr<ClientWindow> WindowPool::findWindowByWID(std::uint32_t wid) const {

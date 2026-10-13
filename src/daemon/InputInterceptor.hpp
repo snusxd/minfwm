@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #include "CFRAII.hpp"
+#include "../core/PanGesture.hpp"
 
 namespace minfwm {
 
@@ -19,6 +20,7 @@ private:
     
     CFRef<CFMachPortRef> m_eventTap;
     CFRef<CFRunLoopSourceRef> m_runLoopSource;
+    core::PanGesture m_panGesture;
 };
 
 } // namespace minfwm

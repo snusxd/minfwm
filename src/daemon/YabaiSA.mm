@@ -1,6 +1,8 @@
 #import "YabaiSA.hpp"
 #import <Foundation/Foundation.h>
+#include "UniqueFd.hpp"
 #include <chrono>
+#include <charconv>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
@@ -18,7 +20,6 @@ namespace {
 constexpr uint8_t kHandshakeOpcode = 0x01;
 constexpr uint8_t kWindowMoveOpcode = 0x06;
 constexpr uint8_t kWindowLayerOpcode = 0x09;
-constexpr uint32_t kSetWindowAttribute = 0x20;
 constexpr size_t kMaxPacketLength = 0x1000;
 constexpr int kTimeoutMilliseconds = 100;
 
@@ -101,14 +102,14 @@ bool receiveExact(int fd, uint8_t* data, size_t size, Deadline deadline) {
     return true;
 }
 
-bool receiveAckOrEof(int fd) {
+bool receiveAckOrEof(int fd, bool explicitAck) {
     const Deadline deadline = Clock::now() + std::chrono::milliseconds(kTimeoutMilliseconds);
     for (;;) {
         if (!waitFor(fd, POLLIN, deadline)) return false;
 
         uint8_t ack = 0;
         const ssize_t received = recv(fd, &ack, 1, MSG_DONTWAIT);
-        if (received == 0) return true;
+        if (received == 0) return !explicitAck;
         if (received == 1) return ack == 0;
         if (received < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) {
             continue;
@@ -133,7 +134,18 @@ int connectTo(const std::string& path) {
 }
 
 bool parseVersion(const std::string& version) {
-    return version.size() >= 2 && version[0] == '2' && version[1] == '.';
+    // Accept the existing 2.x.y wire family, with three numeric components.
+    const char* cursor = version.data();
+    const char* end = cursor + version.size();
+    for (int component = 0; component < 3; ++component) {
+        unsigned value = 0;
+        const auto parsed = std::from_chars(cursor, end, value);
+        if (parsed.ec != std::errc{} || parsed.ptr == cursor || (component == 0 && value != 2)) return false;
+        if (component == 2) return parsed.ptr == end;
+        if (parsed.ptr == end || *parsed.ptr != '.') return false;
+        cursor = parsed.ptr + 1;
+    }
+    return false;
 }
 
 } // namespace
@@ -178,18 +190,19 @@ std::vector<uint8_t> YabaiSA::encodeLayerPacket(uint32_t wid, int layer) {
 
 bool YabaiSA::handshake() {
     m_compatible = false;
+    m_transformSupport = false;
     if (!isOwnedSocket()) return false;
-    const int fd = connectTo(m_socketPath);
-    if (fd < 0) return false;
+    UniqueFd fd(connectTo(m_socketPath));
+    if (!fd) return false;
 
     const std::vector<uint8_t> packet = encodeHandshakePacket();
-    bool result = sendAll(fd, packet.data(), packet.size());
+    bool result = sendAll(fd.get(), packet.data(), packet.size());
     std::string version;
     uint8_t byte = 0;
     const Deadline deadline = Clock::now() + std::chrono::milliseconds(kTimeoutMilliseconds);
     if (result) {
         for (size_t i = 0; i < 64; ++i) {
-            if (!receiveExact(fd, &byte, 1, deadline)) {
+            if (!receiveExact(fd.get(), &byte, 1, deadline)) {
                 result = false;
                 break;
             }
@@ -200,35 +213,34 @@ bool YabaiSA::handshake() {
 
     uint8_t attributes[sizeof(uint32_t)]{};
     if (result && (version.empty() || version.size() >= 64 ||
-                   !receiveExact(fd, attributes, sizeof(attributes), deadline))) {
+                   !receiveExact(fd.get(), attributes, sizeof(attributes), deadline))) {
         result = false;
     }
 
-    uint32_t attributeBits = 0;
     if (result) {
-        attributeBits = static_cast<uint32_t>(attributes[0]) |
-                        (static_cast<uint32_t>(attributes[1]) << 8) |
-                        (static_cast<uint32_t>(attributes[2]) << 16) |
-                        (static_cast<uint32_t>(attributes[3]) << 24);
-        m_compatible = parseVersion(version) && (attributeBits & kSetWindowAttribute) != 0;
+        // SET_WINDOW (0x20) advertises set_front_window_fp, used for focus.
+        // WINDOW_MOVE and WINDOW_LAYER call SkyLight directly and do not
+        // depend on that flag. Still require the complete versioned handshake.
+        m_compatible = parseVersion(version);
+        // This extension is shipped with the pinned minfwm SA patch only.
+        m_transformSupport = version == "2.1.29" && (attributes[0] & 0x80) != 0 &&
+            (attributes[1] & 0x01) != 0; // 0x100: current-native-frame cleanup, never stale replay.
     }
-    close(fd);
     return result && m_compatible;
 }
 
-bool YabaiSA::sendPacket(const std::vector<uint8_t>& packet) const {
+bool YabaiSA::sendPacket(const std::vector<uint8_t>& packet, bool explicitAck) const {
     if (packet.size() < 3 || packet.size() > kMaxPacketLength || !isOwnedSocket()) return false;
-    const int fd = connectTo(m_socketPath);
-    if (fd < 0) return false;
+    UniqueFd fd(connectTo(m_socketPath));
+    if (!fd) return false;
 
-    bool result = sendAll(fd, packet.data(), packet.size());
+    bool result = sendAll(fd.get(), packet.data(), packet.size());
     if (result) {
         // Current Yabai closes the request socket without a payload for these
         // operations. A zero byte is accepted by test doubles as an explicit ACK.
-        result = receiveAckOrEof(fd);
+        result = receiveAckOrEof(fd.get(), explicitAck);
     }
-    shutdown(fd, SHUT_RDWR);
-    close(fd);
+    shutdown(fd.get(), SHUT_RDWR);
     return result;
 }
 
@@ -240,15 +252,65 @@ bool YabaiSA::setWindowLayer(uint32_t wid, int layer) const {
     return wid != 0 && m_compatible && sendPacket(encodeLayerPacket(wid, layer));
 }
 
-YabaiSABackend::YabaiSABackend(std::string socketPath) : m_sa(std::move(socketPath)) {}
+YabaiSABackend::YabaiSABackend(std::string socketPath, WindowPositionCheck check)
+    : m_sa(std::move(socketPath)), m_checkPosition(std::move(check)) {}
 
-bool YabaiSABackend::initialize() {
+std::vector<uint8_t> YabaiSA::encodeTransformPacket(uint32_t wid, uint32_t ownerPid, int x, int y) {
+    std::vector<uint8_t> body{0x14};
+    appendU32(body, wid);
+    appendU32(body, ownerPid);
+    appendI32(body, x);
+    appendI32(body, y);
+    return finishPacket(std::move(body));
+}
+
+std::vector<uint8_t> YabaiSA::encodeResetTransformPacket(uint32_t wid, uint32_t ownerPid) {
+    std::vector<uint8_t> body{0x15};
+    appendU32(body, wid);
+    appendU32(body, ownerPid);
+    return finishPacket(std::move(body));
+}
+
+bool YabaiSA::transformWindow(uint32_t wid, int x, int y) const {
+    return wid && supportsTransforms() &&
+        sendPacket(encodeTransformPacket(wid, static_cast<uint32_t>(getpid()), x, y), true);
+}
+
+bool YabaiSA::resetTransform(uint32_t wid) const {
+    return wid && supportsTransforms() &&
+        sendPacket(encodeResetTransformPacket(wid, static_cast<uint32_t>(getpid())), true);
+}
+
+YabaiSABackend::~YabaiSABackend() {
+    for (uint32_t wid : m_transformed) (void)m_sa.resetTransform(wid);
+}
+
+BackendResult YabaiSABackend::resetTransform(uint32_t wid) {
+    if (!m_transformed.contains(wid)) return {BackendCode::ok};
+    if (!m_sa.resetTransform(wid)) return {BackendCode::failed};
+    m_transformed.erase(wid);
+    return {BackendCode::ok};
+}
+
+bool YabaiSABackend::initialize(bool enableTransforms) {
+    if (!m_transformed.empty()) return false;
+    m_transformsEnabled = enableTransforms;
     return m_sa.handshake();
 }
 
-BackendResult YabaiSABackend::move(AXUIElementRef, uint32_t wid, int x, int y) {
+BackendResult YabaiSABackend::move(AXUIElementRef element, uint32_t wid, int x, int y) {
     if (!available()) return {BackendCode::unavailable};
-    return {m_sa.moveWindow(wid, x, y) ? BackendCode::ok : BackendCode::failed};
+    if (usesTransforms()) {
+        if (!wid) return {BackendCode::failed};
+        // Track before sending: a lost ACK may follow a successful transform.
+        m_transformed.insert(wid);
+        const bool applied = m_sa.transformWindow(wid, x, y) && m_checkPosition &&
+            m_checkPosition(element, wid, x, y);
+        if (!applied) (void)resetTransform(wid);
+        return {applied ? BackendCode::ok : BackendCode::failed};
+    }
+    const bool moved = m_sa.moveWindow(wid, x, y) && m_checkPosition && m_checkPosition(element, wid, x, y);
+    return {moved ? BackendCode::ok : BackendCode::failed};
 }
 
 BackendResult YabaiSABackend::resize(AXUIElementRef, uint32_t, float, float) {

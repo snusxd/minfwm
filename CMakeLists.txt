@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(minfwm LANGUAGES CXX OBJCXX)
+project(minfwm LANGUAGES CXX OBJCXX OBJC)
 
 include(CTest)
 
@@ -30,12 +30,16 @@ set(COMMON_LIBS
 add_library(minfwm_common INTERFACE)
 target_include_directories(minfwm_common INTERFACE src/common)
 
+add_library(minfwm_ipc_transport STATIC src/common/LocalSocketListener.cpp)
+target_link_libraries(minfwm_ipc_transport PUBLIC minfwm_common)
+
 # Pure C++ state and geometry core.
 add_library(minfwm_core STATIC
     src/core/Geometry.cpp
     src/core/Camera.cpp
     src/core/Visibility.cpp
     src/core/DisplayState.cpp
+    src/core/PanGesture.cpp
 )
 target_compile_features(minfwm_core PUBLIC cxx_std_20)
 target_include_directories(minfwm_core PUBLIC src/core)
@@ -46,18 +50,26 @@ target_compile_features(minfwm_window_pool PUBLIC cxx_std_20)
 target_include_directories(minfwm_window_pool PUBLIC src/daemon src/core)
 target_link_libraries(minfwm_window_pool PUBLIC minfwm_core ${COMMON_LIBS})
 
-# Daemon
-add_executable(minfwmd
-    src/daemon/main.mm
+add_library(minfwm_window_runtime STATIC
+    src/daemon/WindowRenderer.mm
+    src/daemon/AXBackend.mm
+    src/daemon/WindowPosition.mm
+)
+target_link_libraries(minfwm_window_runtime PUBLIC minfwm_window_pool)
+
+# Daemon adapters, also linked by socket lifecycle tests without starting AX.
+add_library(minfwm_daemon_runtime STATIC
     src/daemon/WindowManager.mm
     src/daemon/AXObserver.mm
     src/daemon/InputInterceptor.mm
     src/daemon/IPCServer.mm
-    src/daemon/AXBackend.mm
     src/daemon/YabaiSA.mm
     src/daemon/ConfigManager.mm
 )
-target_link_libraries(minfwmd PRIVATE minfwm_common minfwm_window_pool ${COMMON_LIBS})
+target_link_libraries(minfwm_daemon_runtime PUBLIC minfwm_ipc_transport minfwm_window_runtime ${COMMON_LIBS})
+
+add_executable(minfwmd src/daemon/main.mm)
+target_link_libraries(minfwmd PRIVATE minfwm_daemon_runtime)
 
 # CLI
 add_executable(minfwmc
@@ -67,7 +79,14 @@ add_executable(minfwmc
 )
 target_link_libraries(minfwmc PRIVATE minfwm_common ${COMMON_LIBS})
 
+# Run explicitly on a desktop session; never run as part of automated CTest.
+add_executable(minfwm_manual_window_move EXCLUDE_FROM_ALL tools/ManualWindowMove.mm)
+target_link_libraries(minfwm_manual_window_move PRIVATE minfwm_daemon_runtime)
+
 if(BUILD_TESTING)
+    add_executable(minfwm_transform_payload_tests tests/TransformPayloadTests.m)
+    target_link_libraries(minfwm_transform_payload_tests PRIVATE ${COMMON_LIBS})
+    add_test(NAME minfwm_transform_payload_tests COMMAND minfwm_transform_payload_tests)
     add_executable(minfwm_ipc_tests
         tests/IPCProtocolTests.cpp
         src/cli/CommandLine.cpp
@@ -75,6 +94,15 @@ if(BUILD_TESTING)
     target_include_directories(minfwm_ipc_tests PRIVATE src/cli)
     target_link_libraries(minfwm_ipc_tests PRIVATE minfwm_common)
     add_test(NAME minfwm_ipc_protocol COMMAND minfwm_ipc_tests)
+
+    add_executable(minfwm_local_socket_tests tests/LocalSocketTests.cpp)
+    target_link_libraries(minfwm_local_socket_tests PRIVATE minfwm_ipc_transport)
+    add_test(NAME minfwm_local_socket_tests COMMAND minfwm_local_socket_tests)
+
+    add_executable(minfwm_ipc_server_tests tests/IPCServerTests.cpp)
+    target_link_libraries(minfwm_ipc_server_tests PRIVATE minfwm_daemon_runtime)
+    add_test(NAME minfwm_ipc_server_tests COMMAND minfwm_ipc_server_tests)
+    set_tests_properties(minfwm_ipc_server_tests PROPERTIES TIMEOUT 10)
 endif()
 
 if(BUILD_TESTING)
@@ -82,9 +110,17 @@ if(BUILD_TESTING)
     target_link_libraries(minfwm_geometry_tests PRIVATE minfwm_core)
     add_test(NAME minfwm_geometry_tests COMMAND minfwm_geometry_tests)
 
+    add_executable(minfwm_pan_gesture_tests tests/PanGestureTests.cpp)
+    target_link_libraries(minfwm_pan_gesture_tests PRIVATE minfwm_core)
+    add_test(NAME minfwm_pan_gesture_tests COMMAND minfwm_pan_gesture_tests)
+
     add_executable(minfwm_window_pool_tests tests/WindowPoolTests.mm)
     target_link_libraries(minfwm_window_pool_tests PRIVATE minfwm_window_pool)
     add_test(NAME minfwm_window_pool_tests COMMAND minfwm_window_pool_tests)
+
+    add_executable(minfwm_window_renderer_tests tests/WindowRendererTests.mm)
+    target_link_libraries(minfwm_window_renderer_tests PRIVATE minfwm_window_runtime)
+    add_test(NAME minfwm_window_renderer_tests COMMAND minfwm_window_renderer_tests)
 
     add_executable(minfwm_config_tests
         tests/ConfigTests.mm
@@ -99,6 +135,6 @@ if(BUILD_TESTING)
         src/daemon/YabaiSA.mm
     )
     target_include_directories(minfwm_yabai_sa_tests PRIVATE src/daemon)
-    target_link_libraries(minfwm_yabai_sa_tests PRIVATE ${COMMON_LIBS})
+    target_link_libraries(minfwm_yabai_sa_tests PRIVATE minfwm_window_runtime minfwm_common ${COMMON_LIBS})
     add_test(NAME minfwm_yabai_sa_tests COMMAND minfwm_yabai_sa_tests)
 endif()

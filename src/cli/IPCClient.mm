@@ -1,4 +1,5 @@
 #include "IPCClient.hpp"
+#include "UniqueFd.hpp"
 
 #include <cstring>
 #include <sys/stat.h>
@@ -38,14 +39,7 @@ IPCClient::Result IPCClient::sendMessage(const Request& request) {
         return Result{false, {}, "failed to create socket"};
     }
 
-    struct ScopedDescriptor {
-        int value;
-        ~ScopedDescriptor() {
-            if (value != -1) {
-                close(value);
-            }
-        }
-    } descriptor{clientFd};
+    UniqueFd descriptor(clientFd);
 
     if (!setClientTimeouts(clientFd)) {
         return Result{false, {}, "failed to configure socket timeouts"};

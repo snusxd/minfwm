@@ -20,6 +20,14 @@ void expect(bool condition, const char* message) {
 int main() {
     minfwm::ConfigSnapshot parsed;
     std::string error;
+    expect(!parsed.experimentalWindowTransforms, "experimental transforms default to disabled");
+    expect(minfwm::ConfigManager::parseText("experimental-window-transforms = false\n", parsed, error),
+           "explicitly disabling experimental transforms is accepted");
+    expect(minfwm::ConfigManager::parseText("experimental-window-transforms = true\n", parsed, error),
+           "experimental transforms require explicit opt-in");
+    expect(!minfwm::ConfigManager::parseText("experimental-window-transforms = maybe\n", parsed, error),
+           "invalid experimental opt-in is rejected");
+    expect(parsed.experimentalWindowTransforms, "invalid opt-in preserves the last valid snapshot");
     const bool valid = minfwm::ConfigManager::parseText(
         "enable-window-shadows = true\n"
         "multi-display-mode = \"isolated\"\n"

@@ -26,8 +26,14 @@ public:
     virtual BackendResult resize(AXUIElementRef element, uint32_t wid, float width, float height) = 0;
     virtual BackendResult setLayer(AXUIElementRef element, uint32_t wid, int layer) = 0;
     virtual BackendResult setHidden(AXUIElementRef element, uint32_t wid, bool hidden) = 0;
+    virtual BackendResult resetTransform(uint32_t) { return {BackendCode::ok}; }
+    virtual bool usesTransforms() const { return false; }
     virtual BackendResult restore(AXUIElementRef element, uint32_t wid, int x, int y,
-                                  float width, float height) = 0;
+                                  float width, float height) {
+        const BackendResult moved = move(element, wid, x, y);
+        const BackendResult resized = resize(element, wid, width, height);
+        return moved.succeeded() ? resized : moved;
+    }
 };
 
 } // namespace minfwm
