@@ -434,3 +434,28 @@ no `NSRunningApplication.isHidden` or `localizedName` stack in frame processing.
 measured presentation FPS or a subjective smoothness pass. Evidence:
 `build/zoom-input-fixed-sample.txt`, `build/zoom-metadata-sample.txt` and
 `build/zoom-metadata-live.log`. Full build and 12/12 CTests pass after these fixes.
+
+### Unpresented auxiliary dialog regression
+
+The user confirmed much smoother ordinary canvas movement after the input and
+application-state fixes, but still saw position changes without sustained zoom.
+Wheel traces now show `requested=1`; every negative scroll was followed by an
+overview failure and return to unit scale. This supersedes the earlier missing
+wheel-delivery failure.
+
+With the daemon stopped, direct real-window checks passed scale 0.5 and reset
+for Zen (1117x959 -> 559x480), ChatGPT (1378x804 -> 689x402) and Antigravity
+(1400x900 -> 700x450). An unpresented ChatGPT AXDialog (WID 7727, 64x64) failed
+the same operation. Yabai's read-only metadata reported that dialog invisible,
+with a zero AX frame, while the three main windows were AXStandardWindow and
+visible. Evidence: `build/zoom-real-window-probe.log`,
+`build/zoom-metadata-live.log`.
+
+The adapter now records auxiliary subroles when first capturing geometry and
+uses a batch onscreen-ID snapshot to suspend unpresented auxiliaries without
+moving/resizing/unhiding them. Windows culled by minfwm retain their canvas
+participation. Unknown WID 0 cannot receive overview commands. Suspended
+auxiliaries are not restored with AX geometry on shutdown. Snapshot parsing
+regressions failed before implementation and pass now; full build and all
+12 CTests pass. Commit `f8ce7dd`; sustained human zoom/selection validation is
+pending on the restarted daemon.
