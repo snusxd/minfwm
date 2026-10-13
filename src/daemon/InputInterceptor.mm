@@ -1,6 +1,7 @@
 #import "InputInterceptor.hpp"
 #import "WindowManager.hpp"
 #import <iostream>
+#include <cmath>
 
 namespace minfwm {
 
@@ -19,7 +20,13 @@ bool InputInterceptor::start() {
                             (1 << kCGEventLeftMouseUp) | 
                             (1 << kCGEventLeftMouseDragged) | 
                             (1 << kCGEventFlagsChanged) | 
-                            (1 << kCGEventKeyDown);
+                            (1 << kCGEventKeyDown) |
+                            (1 << kCGEventKeyUp) |
+                            (1 << kCGEventScrollWheel) |
+                            (1 << kCGEventRightMouseDown) | (1 << kCGEventRightMouseUp) |
+                            (1 << kCGEventRightMouseDragged) |
+                            (1 << kCGEventOtherMouseDown) | (1 << kCGEventOtherMouseUp) |
+                            (1 << kCGEventOtherMouseDragged);
                             
     m_eventTap = CFRef<CFMachPortRef>::adopt(CGEventTapCreate(
         kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, eventMask, eventTapCallback, this));
@@ -43,6 +50,9 @@ bool InputInterceptor::start() {
 
 void InputInterceptor::stop() {
     m_panGesture.reset();
+    m_overviewButtons = 0;
+    m_overviewKeys.reset();
+    m_zoomScrollCaptured = false;
     WindowManager::instance().setPanning(false);
     if (m_eventTap) {
         CGEventTapEnable(m_eventTap.get(), false);
@@ -61,6 +71,8 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         interceptor->m_panGesture.reset();
         WindowManager::instance().setPanning(false);
         WindowManager::instance().endNativeInteraction();
+        const CGPoint pointer = event ? CGEventGetLocation(event) : CGPointZero;
+        WindowManager::instance().exitOverview({static_cast<float>(pointer.x), static_cast<float>(pointer.y)}, false);
         if (interceptor->m_eventTap) {
             std::cerr << "InputInterceptor: event tap disabled; re-enabling" << std::endl;
             CGEventTapEnable(interceptor->m_eventTap.get(), true);
@@ -70,6 +82,68 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (!event) return event;
 
     auto& wm = WindowManager::instance();
+    const CGEventFlags currentFlags = CGEventGetFlags(event);
+    const bool zoomModifiers = (currentFlags & kCGEventFlagMaskCommand) && (currentFlags & kCGEventFlagMaskAlternate);
+    const CGPoint location = CGEventGetLocation(event);
+    const core::Point pointer{static_cast<float>(location.x), static_cast<float>(location.y)};
+
+    if (type == kCGEventScrollWheel) {
+        const auto phase = CGEventGetIntegerValueField(event, kCGScrollWheelEventScrollPhase);
+        const auto momentum = CGEventGetIntegerValueField(event, kCGScrollWheelEventMomentumPhase);
+        const bool continuous = CGEventGetIntegerValueField(event, kCGScrollWheelEventIsContinuous) != 0;
+        const float delta = continuous ? CGEventGetDoubleValueField(event, kCGScrollWheelEventPointDeltaAxis1) :
+            CGEventGetDoubleValueField(event, kCGScrollWheelEventDeltaAxis1) * 8;
+        if (zoomModifiers && wm.requestOverviewZoom(pointer, delta)) {
+            interceptor->m_zoomScrollCaptured = phase != 0 || momentum != 0;
+            return nullptr;
+        }
+        // Consume the tail of a trackpad gesture even if modifiers are released
+        // before momentum ends; it must not scroll the underlying application.
+        if (interceptor->m_zoomScrollCaptured) {
+            if (phase == kCGScrollPhaseEnded || phase == kCGScrollPhaseCancelled ||
+                momentum == kCGMomentumScrollPhaseEnd || (phase == 0 && momentum == 0)) interceptor->m_zoomScrollCaptured = false;
+            return nullptr;
+        }
+        if (wm.overviewActive()) return nullptr;
+    }
+    if (type == kCGEventKeyUp || type == kCGEventKeyDown) {
+        const auto code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+        if (code >= 0 && code < 256) {
+            if (type == kCGEventKeyUp && interceptor->m_overviewKeys.test(code)) {
+                interceptor->m_overviewKeys.reset(code);
+                return nullptr;
+            }
+            if (wm.overviewActive()) {
+                if (type == kCGEventKeyDown) {
+                    interceptor->m_overviewKeys.set(code);
+                    if (code == 53) wm.exitOverview(pointer, false);
+                }
+                return nullptr;
+            }
+        }
+    }
+    const bool mouseDown = type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown || type == kCGEventOtherMouseDown;
+    const bool mouseUp = type == kCGEventLeftMouseUp || type == kCGEventRightMouseUp || type == kCGEventOtherMouseUp;
+    const bool mouseDrag = type == kCGEventLeftMouseDragged || type == kCGEventRightMouseDragged || type == kCGEventOtherMouseDragged;
+    if (mouseDown || mouseUp || mouseDrag) {
+        const auto button = CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber);
+        const uint64_t mask = button >= 0 && button < 64 ? uint64_t{1} << button : 0;
+        if (interceptor->m_overviewButtons & mask) {
+            if (mouseUp) interceptor->m_overviewButtons &= ~mask;
+            return nullptr;
+        }
+        const bool overviewClick = mouseDown && !(zoomModifiers && type == kCGEventLeftMouseDown);
+        const bool secondaryButton = type == kCGEventRightMouseDown || type == kCGEventRightMouseUp ||
+            type == kCGEventRightMouseDragged || type == kCGEventOtherMouseDown ||
+            type == kCGEventOtherMouseUp || type == kCGEventOtherMouseDragged;
+        if (wm.overviewActive() && (overviewClick || secondaryButton)) {
+            if (mouseDown) {
+                interceptor->m_overviewButtons |= mask;
+                if (type == kCGEventLeftMouseDown) wm.exitOverview(pointer, true);
+            }
+            return nullptr;
+        }
+    }
 
     if (type == kCGEventLeftMouseDown || type == kCGEventLeftMouseUp ||
         type == kCGEventLeftMouseDragged || type == kCGEventFlagsChanged) {
@@ -100,9 +174,11 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         }
         wm.setPanning(interceptor->m_panGesture.isPanning());
         if (update.displayId && (update.delta.x != 0 || update.delta.y != 0)) {
-            if (Display* display = wm.displayById(*update.displayId)) display->camera().move(update.delta);
+            if (Display* display = wm.displayById(*update.displayId)) {
+                display->camera().move(update.delta.x / display->state().scale(), update.delta.y / display->state().scale());
+            }
         }
-        if (update.consume) return nullptr;
+        if (update.consume || (wm.overviewActive() && type != kCGEventFlagsChanged)) return nullptr;
     }
 
     if (type == kCGEventKeyDown) {

@@ -67,6 +67,9 @@ public:
     void beginNativeInteraction(core::Point pointer);
     void endNativeInteraction();
     void flushNativeInteractionForPan();
+    bool requestOverviewZoom(core::Point pointer, float delta);
+    bool overviewActive() const;
+    void exitOverview(core::Point pointer, bool selectWindow);
 
     // Helpers to find window across pools
     std::shared_ptr<ClientWindow> findWindow(AXUIElementRef element);
@@ -84,6 +87,8 @@ private:
     bool isWhitelisted(AXUIElementRef element) const;
     void commitNativeInteraction();
     void addNativeCandidate(const std::shared_ptr<ClientWindow>& window);
+    std::shared_ptr<ClientWindow> windowAtPoint(core::Point pointer) const;
+    void applyOverviewExit();
 
     std::vector<std::unique_ptr<Display>> m_displays;
     bool m_isPanning = false;
@@ -95,6 +100,12 @@ private:
     double m_nativeCommitTime = 0;
     std::map<int64_t, core::Point> m_nativeCameras;
     std::vector<std::shared_ptr<ClientWindow>> m_nativeCandidates;
+    struct ZoomRequest { int64_t displayId; core::Point anchor; float delta; };
+    std::optional<ZoomRequest> m_zoomRequest;
+    struct OverviewExit { core::Point pointer; bool selectWindow; };
+    std::optional<OverviewExit> m_overviewExit;
+    std::map<int64_t, double> m_zoomFrameTimes;
+    std::shared_ptr<ClientWindow> m_overviewFocus;
     AXBackend m_axBackend;
     YabaiSABackend m_yabaiBackend;
     WindowRenderer m_renderer{m_axBackend, m_yabaiBackend};

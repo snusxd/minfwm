@@ -128,6 +128,10 @@ void WindowManager::shutdown() {
     m_nativeCommitPending = false;
     m_nativeCameras.clear();
     m_nativeCandidates.clear();
+    m_zoomRequest.reset();
+    m_overviewExit.reset();
+    m_overviewFocus.reset();
+    m_zoomFrameTimes.clear();
     m_displays.clear();
     m_initialized = false;
 }
@@ -184,7 +188,10 @@ void WindowManager::removeWindowsForPid(pid_t pid) {
 void WindowManager::adoptWindow(Display& display, const std::shared_ptr<ClientWindow>& window) {
     if (!window || window->virtualCoordinatesInitialized) return;
     if (!window->captureInitialGeometry()) return;
-    window->virtualRect = display.state().physicalToVirtual(window->virtualRect);
+    // Newly created windows have native sizes even while the camera is zoomed.
+    const auto origin = display.state().physicalToVirtual(core::Point{window->virtualRect.x, window->virtualRect.y});
+    window->virtualRect.x = origin.x;
+    window->virtualRect.y = origin.y;
     window->virtualCoordinatesInitialized = true;
     if (window->centerOnAdoption) {
         centerWindow(window);
@@ -213,6 +220,13 @@ void WindowManager::updateWindows(int64_t displayId) {
     // Do not turn its first AX notification into another programmatic move.
     if (m_nativePointerHeld || (m_nativeCommitPending && now < m_nativeCommitTime)) return;
     if (m_nativeCommitPending) commitNativeInteraction();
+    if (m_zoomRequest) {
+        if (auto* display = displayById(m_zoomRequest->displayId)) {
+            display->state().requestZoom(m_zoomRequest->delta, m_zoomRequest->anchor);
+        }
+        m_zoomRequest.reset();
+    }
+    if (m_overviewExit) applyOverviewExit();
     // Focus queries cross into another process; they must not run on every
     // presentation frame (especially on high-refresh-rate displays).
     if (now >= m_focusRefreshTime) {
@@ -236,11 +250,22 @@ void WindowManager::updateWindows(int64_t displayId) {
 
     for (auto& display : m_displays) {
         if (displayId && display->id() != displayId) continue;
+        double& previousFrame = m_zoomFrameTimes[display->id()];
+        display->state().advanceZoom(previousFrame ? now - previousFrame : 0);
+        previousFrame = now;
         const core::DisplayState& state = display->state();
+        bool overviewFailed = false;
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref()) continue;
             adoptWindow(*display, window);
             if (!window->virtualCoordinatesInitialized) continue;
+            if (state.overviewActive()) {
+                if (!m_renderer.renderOverview(*window, state.virtualToPhysical(window->virtualRect), state.scale(), now).succeeded()) {
+                    overviewFailed = true;
+                    break;
+                }
+                continue;
+            }
             window->preferNativePosition = core::canUseNativePosition(state.virtualToPhysical(window->virtualRect), display->usableBounds());
             const bool focused = m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get());
             const bool protectedWindow = focused || isWhitelisted(window->ref());
@@ -254,6 +279,28 @@ void WindowManager::updateWindows(int64_t displayId) {
             }
             (void)m_renderer.render(*window, state.virtualToPhysical(window->virtualRect), now);
         }
+        if (overviewFailed) {
+            std::cerr << "WindowManager: overview unavailable for a window; returning to native scale" << std::endl;
+            display->state().resetZoom({state.geometry().bounds.x + state.geometry().bounds.w / 2,
+                                        state.geometry().bounds.y + state.geometry().bounds.h / 2});
+            // Restore every already-scaled window in the same frame. The
+            // ordinary renderer retains the transform/AX failure fallback.
+            for (const auto& window : display->windowPool().windows()) {
+                if (!window || !window->ref() || !window->virtualCoordinatesInitialized) continue;
+                const auto physical = state.virtualToPhysical(window->virtualRect);
+                window->preferNativePosition = core::canUseNativePosition(physical, display->usableBounds());
+                (void)m_renderer.render(*window, physical, now);
+            }
+        }
+    }
+    if (m_overviewFocus && !overviewActive()) {
+        const auto selected = std::exchange(m_overviewFocus, {});
+        // Focus only after all presentation transforms have returned to 100%.
+        NSRunningApplication* app = [NSRunningApplication runningApplicationWithProcessIdentifier:selected->pid()];
+        [app activateWithOptions:NSApplicationActivateIgnoringOtherApps];
+        if (AXUIElementPerformAction(selected->ref(), kAXRaiseAction) != kAXErrorSuccess) {
+            std::cerr << "WindowManager: failed to raise overview selection" << std::endl;
+        }
     }
 }
 
@@ -262,13 +309,13 @@ void WindowManager::centerWindow(std::shared_ptr<ClientWindow> window) {
     Display& display = displayForWindow(window->ref());
     const core::Rect bounds = display.state().geometry().bounds;
     window->lastProgrammaticMoveTime = CACurrentMediaTime();
-    window->virtualRect.x = display.camera().x() + bounds.w / 2.0f - window->virtualRect.w / 2.0f;
-    window->virtualRect.y = display.camera().y() + bounds.h / 2.0f - window->virtualRect.h / 2.0f;
+    window->virtualRect.x = display.camera().x() + bounds.w / display.state().scale() / 2.0f - window->virtualRect.w / 2.0f;
+    window->virtualRect.y = display.camera().y() + bounds.h / display.state().scale() / 2.0f - window->virtualRect.h / 2.0f;
 }
 
 void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
     m_focusedWindow = CFRef<AXUIElementRef>::retain(element);
-    if (m_nativePointerHeld || m_nativeCommitPending || m_isPanning || CACurrentMediaTime() < m_nativeCommitTime + 0.25) return;
+    if (overviewActive() || m_nativePointerHeld || m_nativeCommitPending || m_isPanning || CACurrentMediaTime() < m_nativeCommitTime + 0.25) return;
     const auto window = findWindow(element);
     if (!window || !window->virtualCoordinatesInitialized) return;
     for (auto& display : m_displays) {
@@ -283,6 +330,7 @@ void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
 }
 
 void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
+    if (overviewActive()) return; // Presentation scaling is never a native model resize.
     const auto window = findWindow(element);
     if (m_nativePointerHeld || m_nativeCommitPending) {
         if (window) addNativeCandidate(window);
@@ -315,6 +363,66 @@ void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
 void WindowManager::addNativeCandidate(const std::shared_ptr<ClientWindow>& window) {
     if (std::find(m_nativeCandidates.begin(), m_nativeCandidates.end(), window) == m_nativeCandidates.end()) {
         m_nativeCandidates.push_back(window);
+    }
+}
+
+bool WindowManager::requestOverviewZoom(core::Point pointer, float delta) {
+    if (!m_initialized || !m_yabaiBackend.supportsOverview() || m_nativePointerHeld ||
+        !std::isfinite(delta) || !std::isfinite(pointer.x) || !std::isfinite(pointer.y)) return false;
+    const auto id = displayForPoint(pointer).id();
+    if (m_zoomRequest && m_zoomRequest->displayId == id) delta += m_zoomRequest->delta;
+    m_zoomRequest = ZoomRequest{id, pointer, std::clamp(delta, -1000.0f, 1000.0f)};
+    flushNativeInteractionForPan();
+    return true;
+}
+
+bool WindowManager::overviewActive() const {
+    if (m_zoomRequest || m_overviewExit) return true;
+    for (const auto& display : m_displays) {
+        if (display->state().overviewActive()) return true;
+        for (const auto& window : display->windowPool().windows()) {
+            if (window && window->overviewPresented) return true;
+        }
+    }
+    return false;
+}
+
+void WindowManager::exitOverview(core::Point pointer, bool selectWindow) {
+    if (overviewActive()) m_overviewExit = OverviewExit{pointer, selectWindow};
+}
+
+std::shared_ptr<ClientWindow> WindowManager::windowAtPoint(core::Point pointer) const {
+    auto windows = CFRef<CFArrayRef>::adopt(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
+    for (CFIndex i = 0; windows && i < CFArrayGetCount(windows.get()); ++i) {
+        auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows.get(), i));
+        if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID()) continue;
+        auto number = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowNumber));
+        auto bounds = static_cast<CFDictionaryRef>(CFDictionaryGetValue(info, kCGWindowBounds));
+        uint32_t wid = 0;
+        CGRect frame{};
+        if (!number || CFGetTypeID(number) != CFNumberGetTypeID() ||
+            !CFNumberGetValue(number, kCGWindowIDCFNumberType, &wid) || !bounds ||
+            CFGetTypeID(bounds) != CFDictionaryGetTypeID() || !CGRectMakeWithDictionaryRepresentation(bounds, &frame) ||
+            !CGRectContainsPoint(frame, CGPointMake(pointer.x, pointer.y))) continue;
+        for (const auto& display : m_displays) {
+            if (auto window = display->windowPool().findWindowByWID(wid)) return window;
+        }
+    }
+    return {};
+}
+
+void WindowManager::applyOverviewExit() {
+    const auto request = *std::exchange(m_overviewExit, {});
+    m_overviewFocus = request.selectWindow ? windowAtPoint(request.pointer) : nullptr;
+    m_zoomRequest.reset();
+    for (auto& display : m_displays) {
+        const auto bounds = display->state().geometry().bounds;
+        display->state().resetZoom({bounds.x + bounds.w / 2, bounds.y + bounds.h / 2});
+        if (m_overviewFocus && display->windowPool().findWindowByWID(m_overviewFocus->wid())) {
+            const auto frame = m_overviewFocus->virtualRect;
+            display->camera().setPosition(frame.x + frame.w / 2 - bounds.w / 2,
+                                          frame.y + frame.h / 2 - bounds.h / 2);
+        }
     }
 }
 

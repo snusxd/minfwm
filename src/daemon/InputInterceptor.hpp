@@ -4,6 +4,7 @@
 #import <CoreGraphics/CoreGraphics.h>
 #include "CFRAII.hpp"
 #include "../core/PanGesture.hpp"
+#include <bitset>
 
 namespace minfwm {
 
@@ -21,6 +22,9 @@ private:
     CFRef<CFMachPortRef> m_eventTap;
     CFRef<CFRunLoopSourceRef> m_runLoopSource;
     core::PanGesture m_panGesture;
+    uint64_t m_overviewButtons = 0;
+    std::bitset<256> m_overviewKeys;
+    bool m_zoomScrollCaptured = false;
 };
 
 } // namespace minfwm
