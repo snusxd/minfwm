@@ -223,6 +223,10 @@ void WindowManager::updateWindows(int64_t displayId) {
     if (m_zoomRequest) {
         if (auto* display = displayById(m_zoomRequest->displayId)) {
             display->state().requestZoom(m_zoomRequest->delta, m_zoomRequest->anchor);
+            if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+                std::cout << "ZOOM display=" << display->id() << " delta=" << m_zoomRequest->delta
+                          << " active=" << display->state().overviewActive() << std::endl;
+            }
         }
         m_zoomRequest.reset();
     }

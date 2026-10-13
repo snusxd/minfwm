@@ -93,7 +93,12 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         const bool continuous = CGEventGetIntegerValueField(event, kCGScrollWheelEventIsContinuous) != 0;
         const float delta = continuous ? CGEventGetDoubleValueField(event, kCGScrollWheelEventPointDeltaAxis1) :
             CGEventGetDoubleValueField(event, kCGScrollWheelEventDeltaAxis1) * 8;
-        if (zoomModifiers && wm.requestOverviewZoom(pointer, delta)) {
+        const bool requested = zoomModifiers && wm.requestOverviewZoom(pointer, delta);
+        if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+            std::cout << "SCROLL delta=" << delta << " continuous=" << continuous << " modifiers=" << zoomModifiers
+                      << " requested=" << requested << " phase=" << phase << " momentum=" << momentum << std::endl;
+        }
+        if (requested) {
             interceptor->m_zoomScrollCaptured = phase != 0 || momentum != 0;
             return nullptr;
         }
