@@ -45,17 +45,21 @@ static CFArrayRef fakeWindowInfo(CGWindowListOption options, CGWindowID wid) {
 static void expect(bool value, const char *message) {
     if (!value) { fprintf(stderr, "FAIL: %s\n", message); ++failures; }
 }
-static int request(uint8_t op, uint32_t owner, int x, int y, int length) {
+static int scaledRequest(uint8_t op, uint32_t owner, int x, int y, int length, uint32_t scale) {
     int pair[2];
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair) != 0) return -1;
-    char message[17] = {op}; uint32_t wid = 42;
+    char message[21] = {op}; uint32_t wid = 42;
     memcpy(message + 1, &wid, 4); memcpy(message + 5, &owner, 4);
     memcpy(message + 9, &x, 4); memcpy(message + 13, &y, 4);
+    memcpy(message + 17, &scale, 4);
     bool handled = minfwm_handle_transform(pair[0], message, length);
     uint8_t ack = 2;
     if (handled && read(pair[1], &ack, 1) != 1) ack = 2;
     close(pair[0]); close(pair[1]);
     return handled ? ack : -1;
+}
+static int request(uint8_t op, uint32_t owner, int x, int y, int length) {
+    return scaledRequest(op, owner, x, y, length, 1000);
 }
 int main(void) {
     @autoreleasepool {
@@ -101,6 +105,25 @@ int main(void) {
                "layer retries must never replay an already-restored transform during native dragging");
         fail_level = false;
         expect(request(0x15, owner, 0, 0, 9) == 0, "layer-only retry completes cleanup");
+        count = transform_calls;
+        expect(scaledRequest(0x16, owner, 400, -100, 20, 500) == 1 && transform_calls == count,
+               "truncated overview is rejected without mutation");
+        expect(scaledRequest(0x16, owner, 400, -100, 21, 199) == 1 &&
+               scaledRequest(0x16, owner, 400, -100, 21, 1001) == 1 && transform_calls == count,
+               "overview scale is bounded before a recovery entry is acquired");
+        expect(scaledRequest(0x16, owner + 1, 400, -100, 21, 500) == 1, "overview checks peer ownership");
+        expect(scaledRequest(0x16, owner, 400, -100, 21, 500) == 0 &&
+               current.a == 2 && current.d == 2 && current.tx == -800 && current.ty == 200,
+               "overview uses inverse WindowServer scale and translation");
+        native_frame.origin = CGPointMake(700, 600);
+        expect(request(0x15, owner, 0, 0, 9) == 0 && current.a == 1 && current.d == 1 && current.tx == -700 && current.ty == -600,
+               "overview cleanup restores unit scale at the current native frame");
+        expect(scaledRequest(0x16, owner, 400, -100, 21, 250) == 0, "scaled crash fixture applies");
+        minfwm_transforms[0].start_sec++;
+        // Reap interval is monotonic; force the earlier test's owner check through the entry helper.
+        expect(minfwm_restore_entry(&minfwm_transforms[0]) && current.a == 1 && !minfwm_transforms[0].wid,
+               "scaled owner recovery uses the same idempotent cleanup");
+
     }
     return failures ? 1 : 0;
 }

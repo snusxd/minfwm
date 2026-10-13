@@ -347,6 +347,24 @@ int main() {
         expect(minfwm::YabaiSA::encodeResetTransformPacket(42, 123),
                {9, 0, 0x15, 42, 0, 0, 0, 123, 0, 0, 0},
                "transform reset carries the owner and is a separate operation");
+        expect(minfwm::YabaiSA::encodeOverviewPacket(42, 123, -100, -120, 500),
+               {21, 0, 0x16, 42, 0, 0, 0, 123, 0, 0, 0,
+                0x9c, 0xff, 0xff, 0xff, 0x88, 0xff, 0xff, 0xff, 0xf4, 1, 0, 0},
+               "overview packet adds a bounded integer scale to absolute coordinates");
+        for (uint32_t flags : {0x180u, 0x200u, 0x380u}) {
+            FakeSAServer server(false, false, flags, false, "2.1.29", false, flags == 0x380 ? 2 : 0);
+            minfwm::YabaiSABackend backend(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; });
+            expect(backend.initialize() && backend.supportsOverview() == (flags == 0x380),
+                   "overview requires both lifecycle flags and the new scale capability");
+            expect(backend.presentOverview(nullptr, 42, -100, -120, 0.5f).succeeded() == (flags == 0x380),
+                   "old payloads never receive scale commands");
+            if (flags == 0x380) expect(backend.resetTransform(42).succeeded(), "scaled window uses existing lifecycle cleanup");
+        }
+        {
+            FakeSAServer server(false, false, 0x380, true);
+            minfwm::YabaiSA sa(server.path());
+            expect(sa.handshake() && !sa.overviewWindow(42, 0, 0, 500), "scaled presentation requires explicit ACK, never EOF");
+        }
         testInvalidAckAndTimeout();
         testMovementWithoutFocusCapability();
         testVerifiedMoveAndFallback();

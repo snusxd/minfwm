@@ -30,6 +30,8 @@ public:
     virtual BackendResult setHidden(AXUIElementRef element, uint32_t wid, bool hidden) = 0;
     virtual BackendResult resetTransform(uint32_t) { return {BackendCode::ok}; }
     virtual bool usesTransforms() const { return false; }
+    virtual bool supportsOverview() const { return false; }
+    virtual BackendResult presentOverview(AXUIElementRef, uint32_t, int, int, float) { return {BackendCode::unsupported}; }
     virtual BackendResult restore(AXUIElementRef element, uint32_t wid, int x, int y,
                                   float width, float height) {
         const BackendResult moved = move(element, wid, x, y);

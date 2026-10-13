@@ -2,6 +2,7 @@
 #import <Foundation/Foundation.h>
 #include "UniqueFd.hpp"
 #include <chrono>
+#include <cmath>
 #include <charconv>
 #include <cerrno>
 #include <cstdlib>
@@ -191,6 +192,7 @@ std::vector<uint8_t> YabaiSA::encodeLayerPacket(uint32_t wid, int layer) {
 bool YabaiSA::handshake() {
     m_compatible = false;
     m_transformSupport = false;
+    m_overviewSupport = false;
     if (!isOwnedSocket()) return false;
     UniqueFd fd(connectTo(m_socketPath));
     if (!fd) return false;
@@ -225,6 +227,7 @@ bool YabaiSA::handshake() {
         // This extension is shipped with the pinned minfwm SA patch only.
         m_transformSupport = version == "2.1.29" && (attributes[0] & 0x80) != 0 &&
             (attributes[1] & 0x01) != 0; // Lifecycle v2 restores the current native baseline.
+        m_overviewSupport = m_transformSupport && (attributes[1] & 0x02) != 0;
     }
     return result && m_compatible;
 }
@@ -254,6 +257,31 @@ bool YabaiSA::setWindowLayer(uint32_t wid, int layer) const {
 
 YabaiSABackend::YabaiSABackend(std::string socketPath, WindowPositionCheck check)
     : m_sa(std::move(socketPath)), m_checkPosition(std::move(check)) {}
+
+std::vector<uint8_t> YabaiSA::encodeOverviewPacket(uint32_t wid, uint32_t owner, int x, int y, uint32_t scale) {
+    std::vector<uint8_t> body{0x16};
+    appendU32(body, wid);
+    appendU32(body, owner);
+    appendI32(body, x);
+    appendI32(body, y);
+    appendU32(body, scale);
+    return finishPacket(std::move(body));
+}
+
+bool YabaiSA::overviewWindow(uint32_t wid, int x, int y, uint32_t scale) const {
+    return wid && supportsOverview() && scale >= 200 && scale <= 1000 &&
+        sendPacket(encodeOverviewPacket(wid, static_cast<uint32_t>(getpid()), x, y, scale), true);
+}
+
+BackendResult YabaiSABackend::presentOverview(AXUIElementRef element, uint32_t wid, int x, int y, float scale) {
+    if (!supportsOverview()) return {BackendCode::unsupported};
+    if (!wid || !std::isfinite(scale) || scale < 0.2f || scale > 1) return {BackendCode::failed};
+    m_transformed.insert(wid); // A missing ACK can follow a successful server operation.
+    const bool applied = m_sa.overviewWindow(wid, x, y, static_cast<uint32_t>(std::lround(scale * 1000))) &&
+        m_checkPosition && m_checkPosition(element, wid, x, y);
+    if (!applied) (void)resetTransform(wid);
+    return {applied ? BackendCode::ok : BackendCode::failed};
+}
 
 std::vector<uint8_t> YabaiSA::encodeTransformPacket(uint32_t wid, uint32_t ownerPid, int x, int y) {
     std::vector<uint8_t> body{0x14};

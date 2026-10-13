@@ -82,10 +82,11 @@ static void minfwm_reap_transforms(void)
 
 static bool minfwm_handle_transform(int sockfd, const char *message, int length)
 {
-    if (length < 1 || ((uint8_t)message[0] != 0x14 && (uint8_t)message[0] != 0x15)) return false;
+    if (length < 1 || ((uint8_t)message[0] != 0x14 && (uint8_t)message[0] != 0x15 && (uint8_t)message[0] != 0x16)) return false;
     uint8_t ack = 1;
-    bool apply = (uint8_t)message[0] == 0x14;
-    if (length != (apply ? 17 : 9)) goto respond;
+    bool overview = (uint8_t)message[0] == 0x16;
+    bool apply = (uint8_t)message[0] != 0x15;
+    if (length != (overview ? 21 : apply ? 17 : 9)) goto respond;
     uint32_t wid, owner;
     memcpy(&wid, message + 1, 4);
     memcpy(&owner, message + 5, 4);
@@ -108,6 +109,9 @@ static bool minfwm_handle_transform(int sockfd, const char *message, int length)
     memcpy(&y, message + 13, 4);
     // WindowServer's documented native coordinate range.
     if (x < -16000 || x > 16000 || y < -16000 || y > 16000) goto respond;
+    uint32_t scale = 1000;
+    if (overview) memcpy(&scale, message + 17, 4);
+    if (scale < 200 || scale > 1000) goto respond;
     if (!entry) {
         if (!free_entry) goto respond;
         CGAffineTransform original;
@@ -122,7 +126,11 @@ static bool minfwm_handle_transform(int sockfd, const char *message, int length)
         *entry = (struct minfwm_transform_entry){wid, peer, sec, usec, false, minfwm_window_level(wid)};
     }
     entry->transform_restored = false;
-    ack = SLSSetWindowTransform(SLSMainConnectionID(), wid, CGAffineTransformMakeTranslation(-x, -y)) == kCGErrorSuccess ? 0 : 1;
+    // WindowServer expects the inverse presentation transform: native local
+    // coordinates = (screen coordinates - presentation origin) / scale.
+    CGFloat inverse = 1000.0 / scale;
+    CGAffineTransform transform = CGAffineTransformMake(inverse, 0, 0, inverse, -x * inverse, -y * inverse);
+    ack = SLSSetWindowTransform(SLSMainConnectionID(), wid, transform) == kCGErrorSuccess ? 0 : 1;
 respond:
     (void)send(sockfd, &ack, 1, MSG_NOSIGNAL);
     return true;

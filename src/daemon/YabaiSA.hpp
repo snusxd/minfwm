@@ -21,6 +21,8 @@ public:
     bool handshake();
     bool compatible() const { return m_compatible; }
     bool supportsTransforms() const { return m_compatible && m_transformSupport; }
+    bool supportsOverview() const { return supportsTransforms() && m_overviewSupport; }
+    bool overviewWindow(uint32_t wid, int x, int y, uint32_t scalePermille) const;
     bool transformWindow(uint32_t wid, int x, int y) const;
     bool resetTransform(uint32_t wid) const;
 
@@ -32,6 +34,7 @@ public:
     static std::vector<uint8_t> encodeHandshakePacket();
     static std::vector<uint8_t> encodeTransformPacket(uint32_t wid, uint32_t ownerPid, int x, int y);
     static std::vector<uint8_t> encodeResetTransformPacket(uint32_t wid, uint32_t ownerPid);
+    static std::vector<uint8_t> encodeOverviewPacket(uint32_t wid, uint32_t ownerPid, int x, int y, uint32_t scalePermille);
 
 private:
     bool sendPacket(const std::vector<uint8_t>& packet, bool explicitAck = false) const;
@@ -40,6 +43,7 @@ private:
     std::string m_socketPath;
     bool m_compatible = false;
     bool m_transformSupport = false;
+    bool m_overviewSupport = false;
 };
 
 class YabaiSABackend final : public WindowBackend {
@@ -50,6 +54,8 @@ public:
     bool initialize();
     bool available() const { return m_sa.compatible(); }
     bool usesTransforms() const override { return m_sa.supportsTransforms(); }
+    bool supportsOverview() const override { return m_sa.supportsOverview(); }
+    BackendResult presentOverview(AXUIElementRef element, uint32_t wid, int x, int y, float scale) override;
     BackendResult resetTransform(uint32_t wid) override;
 
     BackendResult move(AXUIElementRef element, uint32_t wid, int x, int y) override;
