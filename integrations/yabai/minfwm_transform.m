@@ -133,7 +133,9 @@ static bool minfwm_handle_transform(int sockfd, const char *message, int length)
         if (normalized) entry->transform_restored = true;
         // No failure path may leave WindowServer presentation suspended.
         bool enabled = SLSReenableUpdate(cid) == kCGErrorSuccess;
-        if (!enabled) (void)SLSReenableUpdate(cid);
+        if (!enabled && SLSReenableUpdate(cid) != kCGErrorSuccess) {
+            fprintf(stderr, "minfwm: failed to resume WindowServer presentation updates\n");
+        }
         // Keep the captured level until final reset/process-death cleanup.
         ack = moved && associated && normalized && enabled ? 0 : 1;
         goto respond;

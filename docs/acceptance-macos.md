@@ -484,3 +484,36 @@ Escape anchor and cancellation, plus true/false/default parsing and atomic
 rejection of non-boolean/duplicate config values. Full build and all 12 CTests
 pass. Subjective return smoothness and live inversion/reload remain manual
 checks for this follow-up.
+
+### Escape anchor and native handoff (2026-10-14)
+
+The user confirmed the smooth return behavior, but reported a one-frame flash
+at completion and requested `zoomed-esc-center`. Config now accepts the strings
+`"screen"` (default), `"mouse"`, and `"focus"`. Screen keeps the virtual display
+center; mouse fixes the point under the cursor throughout the transition on
+that display; focus centers the last valid focused managed window, falling
+back to screen center if it has closed/hidden. Selection clicks retain their
+existing center-on-window behavior. The live config received only the missing
+new key, preserving other settings. Focus is frozen while overview owns input.
+
+A disposable-window probe reproduced the handoff gap: its presentation origin
+was (319,19), but the separate stock native move exposed (599,-229) before
+reset. Evidence: `build/zoom-handoff-position-probe.log`. Coordinate checks
+after the complete move/reset pair had missed this intermediate state.
+
+SA overview2 adds capability 0x400 (total 0x780), opcode 0x17 and a new installer
+identifier. The owned native move, geometry association and unit transform now
+run in one payload operation with WindowServer updates suspended until all
+geometry changes finish. Every post-suspension failure reenables updates;
+reenable failure is reported and retried. Layer ownership remains captured
+until final reset/process death; native interaction itself clears the active
+transform. Clients require all prior capabilities before using the new opcode;
+older payloads retain the separate native-move/reset fallback.
+
+Focused tests failed before implementation and now pass: strict Escape enum
+validation, negative-origin cursor anchoring through the animation, native
+handoff framing/capabilities, single-command handoff, preserved cleanup ownership,
+peer/length rejection before suspension and release after move/transform/enable
+failures. Full build and 12/12 CTests pass. The pinned SA builds successfully;
+live atomic-handoff sampling and subjective flash validation remain pending
+installation of the new payload. Commits: `a9ff13f`, `7a4b70c`, `58ff911`.
