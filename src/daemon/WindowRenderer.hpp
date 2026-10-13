@@ -16,6 +16,7 @@ public:
         : m_ax(ax), m_optional(optional), m_checkPosition(std::move(check)) {}
 
     BackendResult render(ClientWindow& window, core::Rect physical, double now);
+    BackendResult renderOverview(ClientWindow& window, core::Rect physical, float scale, double now);
     BackendResult hide(ClientWindow& window, core::Rect physical, core::Rect displayBounds, double now);
     BackendResult restore(ClientWindow& window, double now);
     bool acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state);

@@ -66,6 +66,8 @@ BackendResult WindowRenderer::resetTransform(ClientWindow& window) {
         // The payload restores the captured level along with the transform.
         window.isLayerSet = false;
         window.layerAttempted = false;
+        window.lastRenderedScale = 1;
+        window.overviewPresented = false;
     }
     return result;
 }
@@ -78,6 +80,12 @@ BackendResult WindowRenderer::setLayer(ClientWindow& window, int layer) {
 BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, double now) {
     int x = 0, y = 0;
     if (!window.originalPhysicalRect || !pixelPosition(physical, x, y)) return {BackendCode::failed};
+    if (window.overviewPresented || window.lastRenderedScale != 1) {
+        invalidatePosition(window);
+        window.positionNeedsVerification = false;
+        window.rejectedPosition.reset();
+        window.positionRetryTime = 0;
+    }
     if (now < window.positionRetryTime) return {BackendCode::failed};
     window.hideRetryTime = 0;
     if (window.rejectedPosition) {
@@ -148,6 +156,8 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
         window.needsGeometryRestore = false;
         window.lastRenderedX = x;
         window.lastRenderedY = y;
+        window.lastRenderedScale = 1;
+        window.overviewPresented = false;
         window.positionRetryTime = 0;
         window.positionNeedsVerification = true;
         window.positionFallbackAttempted = false;
@@ -158,6 +168,48 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
         window.layerAttempted = true;
     }
     return {BackendCode::ok};
+}
+
+BackendResult WindowRenderer::renderOverview(ClientWindow& window, core::Rect physical, float scale, double now) {
+    int x = 0, y = 0;
+    if (!m_optional.supportsOverview()) return {BackendCode::unsupported};
+    if (!window.originalPhysicalRect || !pixelPosition(physical, x, y) ||
+        !std::isfinite(scale) || scale < 0.2f || scale > 1) return {BackendCode::failed};
+    scale = std::round(scale * 1000) / 1000;
+    if (window.lastRenderedX == x && window.lastRenderedY == y && window.lastRenderedScale == scale &&
+        !window.isHidden && !window.needsGeometryRestore) return {BackendCode::ok};
+    window.lastProgrammaticMoveTime = now;
+    window.positionNeedsVerification = false;
+    window.rejectedPosition.reset();
+    window.positionRetryTime = 0;
+    if (window.isAXHidden) {
+        if (!m_ax.setHidden(window.ref(), window.wid(), false).succeeded()) return {BackendCode::failed};
+        window.isAXHidden = false;
+    }
+    if (window.needsGeometryRestore) {
+        if (!resetTransform(window).succeeded() ||
+            !m_ax.resize(window.ref(), window.wid(), window.virtualRect.w, window.virtualRect.h).succeeded()) {
+            return {BackendCode::failed};
+        }
+        window.needsGeometryRestore = false;
+    }
+    // Scale presentation only. AX resize would relayout the application and
+    // cannot provide an overview of its existing content.
+    const auto result = m_optional.presentOverview(window.ref(), window.wid(), x, y, scale);
+    if (!result.succeeded()) {
+        invalidatePosition(window);
+        return result;
+    }
+    window.lastRenderedX = x;
+    window.lastRenderedY = y;
+    window.lastRenderedScale = scale;
+    window.overviewPresented = true;
+    window.isHidden = false;
+    if (!window.layerAttempted) {
+        window.isLayerSet = setLayer(window, kCGPopUpMenuWindowLevelKey).succeeded();
+        window.layerAttempted = true;
+    }
+    return result;
 }
 
 BackendResult WindowRenderer::hide(ClientWindow& window, core::Rect physical,
@@ -175,6 +227,8 @@ BackendResult WindowRenderer::hide(ClientWindow& window, core::Rect physical,
         const BackendResult translated = m_optional.move(window.ref(), window.wid(), translatedX, translatedY);
         if (translated.succeeded()) {
             window.isHidden = true;
+            window.lastRenderedScale = 1;
+            window.overviewPresented = false;
             window.positionNeedsVerification = false;
             window.rejectedPosition.reset();
             window.hideRetryTime = 0;

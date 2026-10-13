@@ -5,6 +5,7 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 namespace {
 using namespace minfwm;
@@ -31,6 +32,15 @@ public:
     int x = 0, y = 0, layer = 0;
     float width = 0, height = 0;
     std::vector<std::string> calls;
+    float scale = 1;
+    BackendCode overviewCode = BackendCode::ok;
+    bool supportsOverview() const override { return transforms; }
+    BackendResult presentOverview(AXUIElementRef, uint32_t, int targetX, int targetY, float targetScale) override {
+        calls.push_back("overview");
+        x = targetX; y = targetY; scale = targetScale;
+        transformed = true;
+        return {overviewCode};
+    }
     bool usesTransforms() const override { return transforms; }
     bool hasTransform(uint32_t) const override { return transformed; }
     BackendResult moveNative(AXUIElementRef, uint32_t, int targetX, int targetY) override {
@@ -378,7 +388,29 @@ void testVisibleFrameReturnsToNativeGeometry() {
 }
 }
 
+void testOverviewPresentationAndReturn() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    sa.layerCode = BackendCode::ok;
+    ClientWindow window(nullptr, 42);
+    initializeWindow(window);
+    WindowRenderer renderer(ax, sa);
+    expect(renderer.renderOverview(window, {200, 100, 320, 240}, 0.5f, 1).succeeded(), "overview applies presentation scale");
+    expect(sa.x == 200 && sa.y == 100 && sa.scale == 0.5f && ax.calls.empty(), "overview does not resize or move the native frame through AX");
+    const auto before = sa.calls;
+    renderer.renderOverview(window, {200, 100, 320, 240}, 0.5f, 2);
+    expect(sa.calls == before, "unchanged overview does not send redundant packets");
+    window.preferNativePosition = true;
+    expect(renderer.render(window, {200, 100, 640, 480}, 3).succeeded() && std::find(sa.calls.begin(), sa.calls.end(), "native") != sa.calls.end(),
+           "return at identical origin still hands scaled geometry back to native movement");
+    sa.overviewCode = BackendCode::failed;
+    ax.calls.clear();
+    expect(!renderer.renderOverview(window, {220, 100, 320, 240}, 0.5f, 4).succeeded() && ax.calls.empty(),
+           "failed overview leaves normal scale recovery to caller instead of AX shrinking applications");
+}
+
 int main() {
+    testOverviewPresentationAndReturn();
     testFallbackAndShutdown();
     testPartialHideAndRestore();
     testInvalidGeometry();

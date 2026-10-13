@@ -32,6 +32,8 @@ public:
     std::optional<VirtualRect> originalPhysicalRect;
     float lastRenderedX = -99999.0f;
     float lastRenderedY = -99999.0f;
+    float lastRenderedScale = 1;
+    bool overviewPresented = false;
     double lastProgrammaticMoveTime = 0.0;
     double positionVerificationTime = 0.0;
     double positionRetryTime = 0.0;
