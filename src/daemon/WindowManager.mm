@@ -9,6 +9,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
+#include <cstdlib>
 
 namespace minfwm {
 
@@ -341,6 +342,11 @@ void WindowManager::beginNativeInteraction(core::Point pointer) {
         for (const auto& display : m_displays) {
             if (auto window = display->windowPool().findWindowByWID(wid)) {
                 addNativeCandidate(window);
+                if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+                    std::cout << "INPUT down WID=" << wid << " visual=" << frame.origin.x << ',' << frame.origin.y
+                              << " cached=" << window->lastRenderedX << ',' << window->lastRenderedY
+                              << " virtual=" << window->virtualRect.x << ',' << window->virtualRect.y << std::endl;
+                }
                 return;
             }
         }
@@ -376,7 +382,13 @@ void WindowManager::commitNativeInteraction() {
                 physical.w = size.width;
                 physical.h = size.height;
             }
-            (void)m_renderer.acceptNativeGeometry(*window, physical, observationState);
+            const bool accepted = m_renderer.acceptNativeGeometry(*window, physical, observationState);
+            if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+                std::cout << "INPUT drop WID=" << window->wid() << " physical=" << physical.x << ',' << physical.y
+                          << " camera=" << observationState.camera().x() << ',' << observationState.camera().y()
+                          << " virtual=" << window->virtualRect.x << ',' << window->virtualRect.y
+                          << " accepted=" << accepted << std::endl;
+            }
         }
     }
     m_nativeCommitPending = false;

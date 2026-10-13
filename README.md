@@ -115,8 +115,8 @@ restarts; its lock is released automatically when the process exits. Invalid
 CLI arguments return a nonzero exit code.
 
 Cmd+Option dragging pans the display under the pointer when the gesture starts.
-Window updates follow each display's presentation cadence. Pointer movement is
-direct. Windows in the usable screen area prefer native positioning so their
+Window updates follow each display's presentation cadence.
+Windows in the usable screen area prefer native positioning so their
 input geometry follows their visible frame; offscreen/above-menu-bar positions
 use the transform extension. Final native drops update the canvas and rendered
 cache before the next pan. Pointer movement is
