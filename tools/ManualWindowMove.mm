@@ -19,7 +19,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <cstring>
-#include <sys/wait.h>
+#include <dlfcn.h>
 
 @interface FixtureInputTarget : NSObject <NSTextFieldDelegate>
 - (void)click:(id)sender;
@@ -43,7 +43,11 @@
 
 namespace {
 
+volatile sig_atomic_t nativeFrameChangeRequested = 0;
+void requestNativeFrameChange(int) { nativeFrameChangeRequested = 1; }
+
 int showFixture(int readyFd, bool unconstrained, bool reportFrame) {
+    signal(SIGUSR1, requestNativeFrameChange);
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp finishLaunching];
@@ -73,6 +77,12 @@ int showFixture(int readyFd, bool unconstrained, bool reportFrame) {
     [NSTimer scheduledTimerWithTimeInterval:90 repeats:NO block:^(NSTimer*) { [NSApp terminate:nil]; }];
     if (reportFrame) {
         [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:YES block:^(NSTimer*) {
+            if (nativeFrameChangeRequested) {
+                nativeFrameChangeRequested = 0;
+                const NSRect current = window.frame;
+                [window setFrameOrigin:NSMakePoint(current.origin.x + 80, current.origin.y + 40)];
+                std::cout << "NATIVE FRAME CHANGE requested by fixture" << std::endl;
+            }
             const NSRect frame = [window frame];
             std::cout << "AppKit frame=" << frame.origin.x << ',' << frame.origin.y << std::endl;
         }];
@@ -161,7 +171,7 @@ int checkTransform(uint32_t wid, CGRect original) {
     return sent && stayed && reset && returned ? 0 : 1;
 }
 
-int checkAbsolute(uint32_t wid, CGRect original, const char* executable) {
+int checkAbsolute(uint32_t wid, CGRect original, pid_t fixturePid, const char* executable) {
     minfwm::YabaiSABackend sa;
     if (!sa.initialize() || !sa.usesTransforms()) {
         std::cerr << "Absolute-transform extension unavailable" << std::endl;
@@ -174,28 +184,77 @@ int checkAbsolute(uint32_t wid, CGRect original, const char* executable) {
         static_cast<float>(original.size.width), static_cast<float>(original.size.height)};
     window.originalPhysicalRect = frame;
     window.layerAttempted = true;
+    const auto started = std::chrono::steady_clock::now();
+    const auto elapsed = [&] {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    };
     bool good = true;
     for (int tick = 0; tick < 120; ++tick) {
         auto target = frame;
         target.x += tick % 60;
         target.y = -120 - tick % 60;
-        good = renderer.render(window, target, tick / 60.0).succeeded() && good;
+        good = renderer.render(window, target, elapsed()).succeeded() && good;
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
         CGRect actual{};
         good = readBounds(wid, actual) && minfwm::windowPositionMatches(actual.origin, target.x, target.y) && good;
     }
-    auto target = frame; target.y = -120;
-    good = renderer.render(window, target, 3).succeeded() && good;
     std::cout << "PAN 120 frames=" << (good ? "PASS" : "FAIL") << std::endl;
+    const CGRect display = CGDisplayBounds(CGMainDisplayID());
+    const minfwm::core::Rect displayBounds{static_cast<float>(display.origin.x), static_cast<float>(display.origin.y),
+        static_cast<float>(display.size.width), static_cast<float>(display.size.height)};
+    auto target = frame; target.y = -120;
+    bool culled = true;
+    for (int cycle = 0; cycle < 20; ++cycle) {
+        auto outside = frame;
+        outside.x = cycle % 2 ? displayBounds.right() + 100 : displayBounds.x - frame.w - 100;
+        outside.y = displayBounds.y - frame.h - 100;
+        culled = renderer.hide(window, outside, displayBounds, elapsed()).succeeded() && culled;
+        CGRect actual{};
+        culled = readBounds(wid, actual) && minfwm::windowPositionMatches(actual.origin, outside.x, outside.y) &&
+            actual.size.width == original.size.width && actual.size.height == original.size.height && culled;
+        culled = renderer.render(window, target, elapsed()).succeeded() && culled;
+        culled = readBounds(wid, actual) && minfwm::windowPositionMatches(actual.origin, target.x, target.y) && culled;
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+    good = culled && good;
+    std::cout << "OFFSCREEN 20 round trips=" << (culled ? "PASS" : "FAIL") << std::endl;
     std::cout << "INPUT READY: test button and field for 45 seconds" << std::endl;
     for (int tick = 1; tick <= 450; ++tick) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        good = renderer.render(window, target, 3 + tick / 10.0).succeeded() && good;
+        good = renderer.render(window, target, elapsed()).succeeded() && good;
+    }
+    // Ask only the disposable fixture to move its own native AppKit frame.
+    // This tests cleanup against frame changes without requiring AX permission.
+    using NativeBounds = CGError (*)(int, uint32_t, CGRect*);
+    using ConnectionId = int (*)();
+    void* sky = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY);
+    auto nativeBounds = sky ? reinterpret_cast<NativeBounds>(dlsym(sky, "SLSGetWindowBounds")) : nullptr;
+    auto connectionId = sky ? reinterpret_cast<ConnectionId>(dlsym(sky, "SLSMainConnectionID")) : nullptr;
+    CGRect changedNative{};
+    bool nativeChanged = nativeBounds && connectionId && kill(fixturePid, SIGUSR1) == 0;
+    if (nativeChanged) {
+        nativeChanged = false;
+        for (int tick = 0; tick < 20; ++tick) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            if (nativeBounds(connectionId(), wid, &changedNative) == kCGErrorSuccess &&
+                !CGPointEqualToPoint(changedNative.origin, original.origin)) {
+                nativeChanged = true;
+                break;
+            }
+        }
     }
     good = sa.resetTransform(wid).succeeded() && good;
     CGRect actual{};
-    good = readBounds(wid, actual) && CGPointEqualToPoint(actual.origin, original.origin) && good;
-    std::cout << "STABLE AND RESET=" << (good ? "PASS" : "FAIL") << std::endl;
+    const bool normalized = nativeChanged && readBounds(wid, actual) && CGPointEqualToPoint(actual.origin, changedNative.origin);
+    good = normalized && good;
+    std::cout << "RESET AFTER NATIVE FRAME CHANGE=" << (normalized ? "PASS" : "FAIL")
+              << " visual=" << actual.origin.x << ',' << actual.origin.y
+              << " native=" << changedNative.origin.x << ',' << changedNative.origin.y << std::endl;
+    if (sky) dlclose(sky);
+    if (!normalized) return 1;
+    original = changedNative;
+    frame.x = original.origin.x;
+    frame.y = original.origin.y;
     // A worker exits without destructors; the Dock-side watchdog must recover.
     const std::string workerWid = std::to_string(wid), workerX = std::to_string(static_cast<int>(frame.x));
     const pid_t worker = fork();
@@ -263,7 +322,7 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
         std::cerr << "WindowServer did not return fixture bounds" << std::endl;
         return 1;
     }
-    if (absolute) return checkAbsolute(wid, original, executable);
+    if (absolute) return checkAbsolute(wid, original, pid, executable);
     if (transform) return checkTransform(wid, original);
     auto element = fixtureAXWindow(pid);
     minfwm::ClientWindow window(element.get(), wid);
