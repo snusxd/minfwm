@@ -26,6 +26,24 @@ void invalidatePosition(ClientWindow& window) {
 
 } // namespace
 
+bool WindowRenderer::acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state) {
+    int x = 0, y = 0;
+    if (!pixelPosition(physical, x, y)) return false;
+    const auto virtualFrame = state.physicalToVirtual(physical);
+    if (!std::isfinite(virtualFrame.x) || !std::isfinite(virtualFrame.y)) return false;
+    window.virtualRect = virtualFrame;
+    window.virtualCoordinatesInitialized = true;
+    window.lastRenderedX = x;
+    window.lastRenderedY = y;
+    window.positionNeedsVerification = false;
+    window.positionFallbackAttempted = false;
+    window.rejectedPosition.reset();
+    window.positionRetryTime = 0;
+    window.hideRetryTime = 0;
+    window.lastProgrammaticMoveTime = 0;
+    return true;
+}
+
 BackendResult WindowRenderer::move(ClientWindow& window, int x, int y) {
     const BackendResult result = m_optional.move(window.ref(), window.wid(), x, y);
     if (result.succeeded()) return result;

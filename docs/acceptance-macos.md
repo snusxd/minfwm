@@ -298,3 +298,34 @@ Full build and all **12 CTests pass**. Commit `38ded66` contains the readback
 fix; `127120f` adds the expanded manual fixture. Human assessment of panning
 smoothness, ordinary native dragging, sheets/popups and multiple displays
 remains separate from coordinate readback and timed-exit checks.
+
+## Native drop followed by canvas pan (2026-10-13)
+
+The user reported that native dragging could look correct until the next
+Cmd+Option pan, which moved the window from an older canvas position. Native
+AX movement updates had been discarded during the 250 ms programmatic guard,
+pending verification and rejected-position state. The first accepted native
+notification also changed the virtual position without updating the rendered
+cache, generating another programmatic move and suppressing later drag events.
+There was no final mouse-up readback.
+
+The event adapter now marks ordinary pointer gestures separately from captured
+camera gestures. Rendering pauses during native interaction. The hit-tested
+managed window and windows delivering native move/resize notifications become
+drop candidates. After mouse-up, a 50 ms delay lets the client process the final
+event, then the daemon adopts observed visual geometry and updates its rendered
+cache without sending a move. It uses the camera captured before the native
+gesture, including when Cmd+Option panning begins before delayed adoption.
+Focus notifications do not recenter the camera during that interaction.
+
+The renderer regression failed before implementation and passes with negative
+display origins, nonzero camera offsets, stale verification/rejection state,
+invalid observations, next-pan movement and camera return. The explicit manual
+`--native-drop-fixture` passed two production-WindowManager scenarios using a
+disposable NSWindow's own native frame changes: delayed adoption then pan, and
+immediate pan before the adoption delay. Both stored the final position and
+returned to it after panning. Evidence: `build/drop-manual-live.log`.
+This fixture drives gesture lifecycle methods directly; human pointer/event-tap
+validation remains separate. Its immediate shutdown geometry readback reported
+a restoration failure; this result is not claimed as a shutdown restoration
+pass. The fixture process was removed by its driver.

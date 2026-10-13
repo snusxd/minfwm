@@ -61,6 +61,9 @@ public:
     void centerWindow(std::shared_ptr<ClientWindow> window);
     void centerCameraOnWindow(AXUIElementRef element);
     void syncPhysicalToVirtual(AXUIElementRef element);
+    void beginNativeInteraction(core::Point pointer);
+    void endNativeInteraction();
+    void flushNativeInteractionForPan();
 
     // Helpers to find window across pools
     std::shared_ptr<ClientWindow> findWindow(AXUIElementRef element);
@@ -76,12 +79,19 @@ private:
     NSScreen* screenForDisplay(int64_t displayId) const;
     float axTopOriginForScreen(NSScreen* screen) const;
     bool isWhitelisted(AXUIElementRef element) const;
+    void commitNativeInteraction();
+    void addNativeCandidate(const std::shared_ptr<ClientWindow>& window);
 
     std::vector<std::unique_ptr<Display>> m_displays;
     bool m_isPanning = false;
     bool m_initialized = false;
     CFRef<AXUIElementRef> m_focusedWindow;
     double m_focusRefreshTime = 0;
+    bool m_nativePointerHeld = false;
+    bool m_nativeCommitPending = false;
+    double m_nativeCommitTime = 0;
+    std::map<int64_t, core::Point> m_nativeCameras;
+    std::vector<std::shared_ptr<ClientWindow>> m_nativeCandidates;
     AXBackend m_axBackend;
     YabaiSABackend m_yabaiBackend;
     WindowRenderer m_renderer{m_axBackend, m_yabaiBackend};

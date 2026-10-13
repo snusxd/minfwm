@@ -60,6 +60,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
         interceptor->m_panGesture.reset();
         WindowManager::instance().setPanning(false);
+        WindowManager::instance().endNativeInteraction();
         if (interceptor->m_eventTap) {
             std::cerr << "InputInterceptor: event tap disabled; re-enabling" << std::endl;
             CGEventTapEnable(interceptor->m_eventTap.get(), true);
@@ -88,6 +89,15 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
                      static_cast<float>(CGEventGetIntegerValueField(event, kCGMouseEventDeltaY))};
         }
         const core::PanUpdate update = interceptor->m_panGesture.handle(panEvent, modifiersHeld, displayId, delta);
+        if (type == kCGEventLeftMouseDown) {
+            if (update.consume) wm.flushNativeInteractionForPan();
+            else {
+                const CGPoint point = CGEventGetLocation(event);
+                wm.beginNativeInteraction({static_cast<float>(point.x), static_cast<float>(point.y)});
+            }
+        } else if (type == kCGEventLeftMouseUp && !update.consume) {
+            wm.endNativeInteraction();
+        }
         wm.setPanning(interceptor->m_panGesture.isPanning());
         if (update.displayId && (update.delta.x != 0 || update.delta.y != 0)) {
             if (Display* display = wm.displayById(*update.displayId)) display->camera().move(update.delta);

@@ -131,6 +131,7 @@ cmake --build build --target minfwm_manual_window_move
 ./build/minfwm_manual_window_move --unconstrained-fixture
 ./build/minfwm_manual_window_move --transform-fixture
 ./build/minfwm_manual_window_move --absolute-fixture
+./build/minfwm_manual_window_move --native-drop-fixture
 ```
 
 This target is excluded from the default build and CTest. Give the manual tool
@@ -147,6 +148,9 @@ for input testing, resets it, and checks recovery after its owner exits without
 cleanup. This mode requires the lifecycle v2
 extension and exits 77 when it is unavailable. It does not replace native
 dragging tests with third-party applications.
+The native-drop fixture exercises final geometry adoption followed by camera
+movement, including a pan started before the mouse-up adoption delay. It drives
+the daemon's interaction methods directly and does not synthesize pointer input.
 
 ## Configuration
 

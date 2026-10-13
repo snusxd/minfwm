@@ -3,6 +3,7 @@
 #include "WindowBackend.hpp"
 #include "WindowPool.hpp"
 #include "WindowPosition.hpp"
+#include "../core/DisplayState.hpp"
 #include <utility>
 
 namespace minfwm {
@@ -17,6 +18,7 @@ public:
     BackendResult render(ClientWindow& window, core::Rect physical, double now);
     BackendResult hide(ClientWindow& window, core::Rect physical, core::Rect displayBounds, double now);
     BackendResult restore(ClientWindow& window, double now);
+    bool acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state);
 
 private:
     BackendResult move(ClientWindow& window, int x, int y);

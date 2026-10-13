@@ -311,6 +311,39 @@ void testFailedParkingDoesNotLoop() {
     renderer.hide(window, {-3010, 100, 640, 480}, {0, 0, 1000, 800}, 1.016);
     expect(ax.calls == calls, "failed parking does not shrink and roll back again at 60 Hz");
 }
+
+void testNativeDropSurvivesNextPan() {
+    RecordingBackend ax, sa;
+    ClientWindow window(nullptr, 42);
+    initializeWindow(window);
+    window.layerAttempted = true;
+    window.positionNeedsVerification = true;
+    window.positionFallbackAttempted = true;
+    window.rejectedPosition = core::Point{100, 100};
+    window.positionRetryTime = 100;
+    window.lastProgrammaticMoveTime = 99;
+    core::DisplayState state({1, {-1920, -300, 1920, 1080}});
+    state.camera().setPosition(600, -200);
+    WindowRenderer renderer(ax, sa);
+    const core::Rect dropped{-1500, 120, 640, 480};
+    expect(renderer.acceptNativeGeometry(window, dropped, state), "mouse release adopts final observed geometry");
+    const auto expected = state.physicalToVirtual(dropped);
+    expect(window.virtualRect.x == expected.x && window.virtualRect.y == expected.y,
+           "drop uses the camera and negative display origin exactly once");
+    expect(!window.positionNeedsVerification && !window.rejectedPosition && window.positionRetryTime == 0,
+           "native drop overrides stale verification and rejected-move state");
+    expect(renderer.render(window, state.virtualToPhysical(window.virtualRect), 1).succeeded() && sa.calls.empty() && ax.calls.empty(),
+           "adopting a native drop does not send a move back to the old position");
+    state.camera().move({100, -80});
+    expect(renderer.render(window, state.virtualToPhysical(window.virtualRect), 2).succeeded() && sa.x == -1600 && sa.y == 200,
+           "next pan starts from the final drop, not the first native movement event");
+    state.camera().move({-100, 80});
+    renderer.render(window, state.virtualToPhysical(window.virtualRect), 3);
+    expect(sa.x == dropped.x && sa.y == dropped.y, "returning camera preserves the chosen drop position");
+    const auto before = window.virtualRect;
+    expect(!renderer.acceptNativeGeometry(window, {NAN, 0, 640, 480}, state) && window.virtualRect.x == before.x,
+           "invalid native observation leaves canvas position intact");
+}
 }
 
 int main() {
@@ -324,5 +357,6 @@ int main() {
     testRejectedMovementDoesNotLoop();
     testPixelCacheAndOffscreenTranslation();
     testFailedParkingDoesNotLoop();
+    testNativeDropSurvivesNextPan();
     return failures == 0 ? 0 : 1;
 }
