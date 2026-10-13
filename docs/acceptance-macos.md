@@ -217,3 +217,16 @@ backend again selects transforms automatically, but requires lifecycle v2
 capability 0x180. This supersedes the earlier startup opt-in/default-off policy.
 The current-native-frame and partial-cleanup regression tests are retained.
 Stock SA remains a fallback and does not guarantee above-menu-bar placement.
+
+## Movement failure and offscreen culling (2026-10-13)
+
+New fake-backend regressions failed before the fix: immediate rejection was
+resent on each render; a changing camera bypassed suppression; fractional
+positions resent identical integer commands; failed AX parking repeatedly
+shrunk/restored windows; transformed culling reset and resized the native frame.
+The renderer now caches integer targets, suppresses unchanged rejected targets,
+backs off changed rejected targets for 250 ms and failed parking for 500 ms.
+Partial geometry restoration remains retryable. With lifecycle v2 transforms,
+fully offscreen windows keep their native size and use translation-only culling.
+The new and existing renderer tests pass. Desktop smoothness and minimum-size
+behavior still require a live check with the corresponding payload installed.

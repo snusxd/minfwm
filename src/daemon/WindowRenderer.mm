@@ -51,12 +51,14 @@ BackendResult WindowRenderer::setLayer(ClientWindow& window, int layer) {
 BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, double now) {
     int x = 0, y = 0;
     if (!window.originalPhysicalRect || !pixelPosition(physical, x, y)) return {BackendCode::failed};
+    if (now < window.positionRetryTime) return {BackendCode::failed};
+    window.hideRetryTime = 0;
     if (window.rejectedPosition) {
         if (window.rejectedPosition->x == x && window.rejectedPosition->y == y) return {BackendCode::failed};
         window.rejectedPosition.reset();
     }
     const bool geometryDirty = window.isHidden || window.needsGeometryRestore ||
-        window.lastRenderedX != physical.x || window.lastRenderedY != physical.y;
+        window.lastRenderedX != x || window.lastRenderedY != y;
     if (!geometryDirty && window.positionNeedsVerification && now >= window.positionVerificationTime) {
         const bool matched = m_checkPosition && m_checkPosition(window.ref(), window.wid(), x, y);
         if (matched) {
@@ -72,6 +74,7 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
             if (!recovered) {
                 window.positionNeedsVerification = false;
                 window.rejectedPosition = core::Point{static_cast<float>(x), static_cast<float>(y)};
+                window.positionRetryTime = now + 0.25;
                 invalidatePosition(window);
                 std::cerr << "WindowRenderer: position rejected after readback (WID " << window.wid()
                           << ", target " << x << ',' << y << ")" << std::endl;
@@ -107,12 +110,18 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
             // A failed operation may still have changed or clamped the frame.
             // Do not reuse the previously cached position on the next render.
             invalidatePosition(window);
+            window.positionNeedsVerification = false;
+            if (!window.needsGeometryRestore) {
+                window.rejectedPosition = core::Point{static_cast<float>(x), static_cast<float>(y)};
+            }
+            window.positionRetryTime = now + 0.25;
             return geometry;
         }
         window.isHidden = false;
         window.needsGeometryRestore = false;
-        window.lastRenderedX = physical.x;
-        window.lastRenderedY = physical.y;
+        window.lastRenderedX = x;
+        window.lastRenderedY = y;
+        window.positionRetryTime = 0;
         window.positionNeedsVerification = true;
         window.positionFallbackAttempted = false;
         window.positionVerificationTime = now + 0.25;
@@ -128,6 +137,26 @@ BackendResult WindowRenderer::hide(ClientWindow& window, core::Rect physical,
                                     core::Rect displayBounds, double now) {
     if (!window.originalPhysicalRect) return {BackendCode::failed};
     if (window.isHidden) return {BackendCode::ok};
+    if (now < window.hideRetryTime) return {BackendCode::failed};
+    window.hideRetryTime = now + 0.5;
+    // A fully culled window can retain its native frame. Resetting a transform
+    // and AX-shrinking it exposes it to AppKit's minimum-size/edge corrections.
+    const bool outside = physical.right() <= displayBounds.x || physical.x >= displayBounds.right() ||
+        physical.bottom() <= displayBounds.y || physical.y >= displayBounds.bottom();
+    int translatedX = 0, translatedY = 0;
+    if (m_optional.usesTransforms() && outside && pixelPosition(physical, translatedX, translatedY)) {
+        const BackendResult translated = m_optional.move(window.ref(), window.wid(), translatedX, translatedY);
+        if (translated.succeeded()) {
+            window.isHidden = true;
+            window.positionNeedsVerification = false;
+            window.rejectedPosition.reset();
+            window.hideRetryTime = 0;
+            window.positionRetryTime = 0;
+            window.lastProgrammaticMoveTime = now;
+            invalidatePosition(window);
+            return translated;
+        }
+    }
     if (!resetTransform(window).succeeded()) return {BackendCode::failed};
     window.positionNeedsVerification = false;
     window.rejectedPosition.reset();
@@ -136,6 +165,7 @@ BackendResult WindowRenderer::hide(ClientWindow& window, core::Rect physical,
     if (hidden.succeeded()) {
         window.isHidden = true;
         window.isAXHidden = true;
+        window.hideRetryTime = 0;
         invalidatePosition(window);
         return hidden;
     }
@@ -164,6 +194,7 @@ BackendResult WindowRenderer::hide(ClientWindow& window, core::Rect physical,
     }
     window.isHidden = true;
     window.isAXHidden = false;
+    window.hideRetryTime = 0;
     invalidatePosition(window);
     return {BackendCode::ok};
 }
@@ -176,6 +207,8 @@ BackendResult WindowRenderer::restore(ClientWindow& window, double now) {
     window.lastProgrammaticMoveTime = now;
     window.positionNeedsVerification = false;
     window.rejectedPosition.reset();
+    window.positionRetryTime = 0;
+    window.hideRetryTime = 0;
     bool shown = true;
     const bool transformReset = resetTransform(window).succeeded();
     if (window.isAXHidden) {

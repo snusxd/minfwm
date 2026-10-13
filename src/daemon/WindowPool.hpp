@@ -34,6 +34,8 @@ public:
     float lastRenderedY = -99999.0f;
     double lastProgrammaticMoveTime = 0.0;
     double positionVerificationTime = 0.0;
+    double positionRetryTime = 0.0;
+    double hideRetryTime = 0.0;
     bool positionNeedsVerification = false;
     bool positionFallbackAttempted = false;
     std::optional<core::Point> rejectedPosition;

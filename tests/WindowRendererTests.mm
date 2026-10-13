@@ -259,6 +259,58 @@ void testRestoreFailures() {
     expect(!window.isHidden && !window.isAXHidden && !window.isLayerSet && !window.needsGeometryRestore,
            "successful restoration clears only the state it recovered");
 }
+
+void testRejectedMovementDoesNotLoop() {
+    RecordingBackend ax, sa;
+    ax.moveCode = sa.moveCode = BackendCode::failed;
+    ClientWindow window(nullptr, 42);
+    initializeWindow(window);
+    WindowRenderer renderer(ax, sa);
+    renderer.render(window, {100, -120, 640, 480}, 1);
+    const auto axCalls = ax.calls;
+    const auto saCalls = sa.calls;
+    renderer.render(window, {100, -120, 640, 480}, 1.016);
+    expect(ax.calls == axCalls && sa.calls == saCalls, "immediately rejected target is not resent every frame");
+    renderer.render(window, {100, -121, 640, 480}, 1.032);
+    expect(ax.calls == axCalls && sa.calls == saCalls, "moving camera does not bypass failed-operation backoff");
+    ax.moveCode = BackendCode::ok;
+    expect(renderer.render(window, {100, 100, 640, 480}, 2).succeeded(), "a later valid target recovers after failure");
+}
+
+void testPixelCacheAndOffscreenTranslation() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    ClientWindow window(nullptr, 42);
+    initializeWindow(window);
+    WindowRenderer renderer(ax, sa);
+    renderer.render(window, {100.1f, -120.1f, 640, 480}, 1);
+    const auto calls = sa.calls;
+    renderer.render(window, {100.2f, -120.2f, 640, 480}, 1.016);
+    expect(sa.calls == calls, "subpixel camera changes do not resend identical integer positions");
+    ax.calls.clear(); sa.calls.clear();
+    expect(renderer.hide(window, {-3000, -2000, 640, 480}, {0, 0, 1000, 800}, 2).succeeded(),
+           "offscreen transformed window is culled without changing native size");
+    expect(ax.calls.empty() && sa.calls == std::vector<std::string>{"move"},
+           "offscreen translation does not reset, shrink, park or restore the native frame");
+    expect(window.isHidden && !window.needsGeometryRestore && !window.isAXHidden,
+           "translation-only culling retains native geometry");
+    sa.calls.clear();
+    renderer.render(window, {100, -120, 640, 480}, 3);
+    expect(ax.calls.empty() && sa.calls == std::vector<std::string>{"move"},
+           "returning translated window does not resize through AX");
+}
+
+void testFailedParkingDoesNotLoop() {
+    RecordingBackend ax, sa;
+    ax.moveCode = BackendCode::failed;
+    ClientWindow window(nullptr, 42);
+    initializeWindow(window);
+    WindowRenderer renderer(ax, sa);
+    renderer.hide(window, {-3000, 100, 640, 480}, {0, 0, 1000, 800}, 1);
+    const auto calls = ax.calls;
+    renderer.hide(window, {-3010, 100, 640, 480}, {0, 0, 1000, 800}, 1.016);
+    expect(ax.calls == calls, "failed parking does not shrink and roll back again at 60 Hz");
+}
 }
 
 int main() {
@@ -269,5 +321,8 @@ int main() {
     testUnverifiedMoveIsRetried();
     testApplicationCorrectsPositionLater();
     testTransformLifecycle();
+    testRejectedMovementDoesNotLoop();
+    testPixelCacheAndOffscreenTranslation();
+    testFailedParkingDoesNotLoop();
     return failures == 0 ? 0 : 1;
 }
