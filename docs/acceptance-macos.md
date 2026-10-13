@@ -298,3 +298,42 @@ Full build and all **12 CTests pass**. Commit `38ded66` contains the readback
 fix; `127120f` adds the expanded manual fixture. Human assessment of panning
 smoothness, ordinary native dragging, sheets/popups and multiple displays
 remains separate from coordinate readback and timed-exit checks.
+
+## Native input geometry and hybrid positioning (2026-10-13)
+
+The first final-drop patch (`d7277d2`) passed state/fixture checks but the user
+still observed a pickup jump and incorrect placement on the next pan. It was
+reverted in `6182605`; the daemon was stopped before further investigation.
+
+The isolated drag probe made the mismatch explicit: a window rendered at
+(450,200) retained native/AppKit geometry at (120,448). Computer-use coordinate
+validation refused a title-bar drag at the visible location. AX-only rebasing
+then showed asynchronous native movement; resetting immediately exposed the
+old native frame. A native SA move followed by transform reset aligned native
+and visual bounds immediately without an AX-driven animation. The user dragged
+the aligned fixture normally; logged native and visual positions followed the
+drag together. Evidence: `build/drag-probe-live.log`,
+`build/rebase-drag-live.log`, `build/rebase-server-live.log` and
+`build/native-only-probe-live.log`. This proves the isolated aligned case, not
+the complete daemon's interactive behavior.
+
+The daemon now prefers native SA positioning where the frame's top is at/below
+the display's usable top edge and at least 40 logical points remain visible on
+each axis (or the whole axis for smaller windows). Elsewhere it keeps absolute
+translation. The margin is a conservative placement policy, not a guarantee
+that every application accepts the frame. Native failure still reaches the
+transform/AX fallback. Native handoff moves the frame before clearing the
+transform, and invalidates level bookkeeping after successful cleanup.
+The final mouse-up adoption/cache fix is retained together with this geometry
+change; it is no longer presented as sufficient on its own.
+
+New geometry, renderer and transport regressions failed before implementation
+and pass now, including negative origins and command order 0x14, 0x06, 0x15.
+Full build and all 12 CTests pass. A repeat production-daemon test passed the
+five windows still present under their original IDs: Zen, Feishin, ChatGPT,
+Ghostty and Discord. All followed offsets 400/2200, returned and restored on
+exit; all five returned with native/visual baselines aligned. Exit took 0.074 s.
+Evidence: `build/hybrid-real-pan-result.log` and corresponding snapshots.
+The other earlier application windows had closed or changed IDs and were not
+counted as passes in this repetition. Complete pointer/event-tap validation of
+the hybrid daemon remains pending human verification.

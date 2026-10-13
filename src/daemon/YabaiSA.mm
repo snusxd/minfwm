@@ -315,6 +315,15 @@ BackendResult YabaiSABackend::resize(AXUIElementRef, uint32_t, float, float) {
     return {BackendCode::unsupported};
 }
 
+BackendResult YabaiSABackend::moveNative(AXUIElementRef element, uint32_t wid, int x, int y) {
+    if (!available() || !wid) return {BackendCode::unavailable};
+    // Move the native frame first. Resetting first would expose its old
+    // position for one frame before moving the application under the pointer.
+    const bool moved = m_sa.moveWindow(wid, x, y);
+    const bool reset = resetTransform(wid).succeeded();
+    return {moved && reset && m_checkPosition && m_checkPosition(element, wid, x, y) ? BackendCode::ok : BackendCode::failed};
+}
+
 BackendResult YabaiSABackend::setLayer(AXUIElementRef, uint32_t wid, int layer) {
     if (!available()) return {BackendCode::unavailable};
     return {m_sa.setWindowLayer(wid, layer) ? BackendCode::ok : BackendCode::failed};

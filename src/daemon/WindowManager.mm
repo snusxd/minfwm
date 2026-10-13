@@ -8,6 +8,7 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <algorithm>
 
 namespace minfwm {
 
@@ -57,8 +58,12 @@ bool WindowManager::initialize() {
             static_cast<float>(frame.size.height),
         };
         const int64_t id = [displayID longLongValue];
+        const NSRect usable = [screen visibleFrame];
+        const core::Rect usableBounds{static_cast<float>(usable.origin.x),
+            topOrigin + static_cast<float>(NSMaxY(frame) - NSMaxY(usable)),
+            static_cast<float>(usable.size.width), static_cast<float>(usable.size.height)};
         m_displays.push_back(std::make_unique<Display>(
-            id, bounds, yabaiAvailable ? WindowPool::optionalWindowIdResolver() : nullptr));
+            id, bounds, yabaiAvailable ? WindowPool::optionalWindowIdResolver() : nullptr, usableBounds));
         std::cout << "WindowManager: Found display " << id << " ["
                   << frame.size.width << "x" << frame.size.height << "]" << std::endl;
     }
@@ -118,6 +123,10 @@ void WindowManager::shutdown() {
     m_isPanning = false;
     m_focusedWindow.reset();
     m_focusRefreshTime = 0;
+    m_nativePointerHeld = false;
+    m_nativeCommitPending = false;
+    m_nativeCameras.clear();
+    m_nativeCandidates.clear();
     m_displays.clear();
     m_initialized = false;
 }
@@ -199,6 +208,10 @@ bool WindowManager::isWhitelisted(AXUIElementRef element) const {
 void WindowManager::updateWindows(int64_t displayId) {
     if (!m_initialized || m_displays.empty()) return;
     const double now = CACurrentMediaTime();
+    // Native dragging owns the frame until the client has handled mouse-up.
+    // Do not turn its first AX notification into another programmatic move.
+    if (m_nativePointerHeld || (m_nativeCommitPending && now < m_nativeCommitTime)) return;
+    if (m_nativeCommitPending) commitNativeInteraction();
     // Focus queries cross into another process; they must not run on every
     // presentation frame (especially on high-refresh-rate displays).
     if (now >= m_focusRefreshTime) {
@@ -227,6 +240,7 @@ void WindowManager::updateWindows(int64_t displayId) {
             if (!window || !window->ref()) continue;
             adoptWindow(*display, window);
             if (!window->virtualCoordinatesInitialized) continue;
+            window->preferNativePosition = core::canUseNativePosition(state.virtualToPhysical(window->virtualRect), display->usableBounds());
             const bool focused = m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get());
             const bool protectedWindow = focused || isWhitelisted(window->ref());
             const bool shouldRender = protectedWindow ||
@@ -253,6 +267,7 @@ void WindowManager::centerWindow(std::shared_ptr<ClientWindow> window) {
 
 void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
     m_focusedWindow = CFRef<AXUIElementRef>::retain(element);
+    if (m_nativePointerHeld || m_nativeCommitPending || m_isPanning || CACurrentMediaTime() < m_nativeCommitTime + 0.25) return;
     const auto window = findWindow(element);
     if (!window || !window->virtualCoordinatesInitialized) return;
     for (auto& display : m_displays) {
@@ -268,6 +283,10 @@ void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
 
 void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
     const auto window = findWindow(element);
+    if (m_nativePointerHeld || m_nativeCommitPending) {
+        if (window) addNativeCandidate(window);
+        return;
+    }
     if (!window || window->isHidden || window->needsGeometryRestore || window->positionNeedsVerification ||
         window->rejectedPosition || m_isPanning) return;
     if (CACurrentMediaTime() - window->lastProgrammaticMoveTime < 0.25) return;
@@ -279,21 +298,90 @@ void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
             return;
         }
         CGPoint position{0.0, 0.0};
-        if (readWindowPosition(element, m_yabaiBackend.usesTransforms() ? window->wid() : 0, position)) {
-            const core::Point virtualPosition = display->state().physicalToVirtual(
-                core::Point{static_cast<float>(position.x), static_cast<float>(position.y)});
-            window->virtualRect.x = virtualPosition.x;
-            window->virtualRect.y = virtualPosition.y;
-        }
+        if (!readWindowPosition(element, m_yabaiBackend.usesTransforms() ? window->wid() : 0, position)) return;
         CGSize size{0.0, 0.0};
+        core::Rect physical{static_cast<float>(position.x), static_cast<float>(position.y), window->virtualRect.w, window->virtualRect.h};
         if (readAXSize(element, size) && std::isfinite(size.width) && std::isfinite(size.height) &&
             size.width > 0 && size.height > 0) {
-            window->virtualRect.w = static_cast<float>(size.width);
-            window->virtualRect.h = static_cast<float>(size.height);
+            physical.w = static_cast<float>(size.width);
+            physical.h = static_cast<float>(size.height);
         }
-        window->virtualCoordinatesInitialized = true;
+        (void)m_renderer.acceptNativeGeometry(*window, physical, display->state());
         return;
     }
+}
+
+void WindowManager::addNativeCandidate(const std::shared_ptr<ClientWindow>& window) {
+    if (std::find(m_nativeCandidates.begin(), m_nativeCandidates.end(), window) == m_nativeCandidates.end()) {
+        m_nativeCandidates.push_back(window);
+    }
+}
+
+void WindowManager::beginNativeInteraction(core::Point pointer) {
+    if (!m_nativeCommitPending) {
+        m_nativeCameras.clear();
+        m_nativeCandidates.clear();
+        for (const auto& display : m_displays) m_nativeCameras.emplace(display->id(), display->camera().position());
+    }
+    m_nativePointerHeld = true;
+    m_nativeCommitPending = true;
+    // The visual hit-test identifies the window even when its AX move
+    // notifications are unavailable. No cross-process AX calls run in the tap.
+    auto windows = CFRef<CFArrayRef>::adopt(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
+    for (CFIndex index = 0; windows && index < CFArrayGetCount(windows.get()); ++index) {
+        auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows.get(), index));
+        if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID()) continue;
+        auto number = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowNumber));
+        auto bounds = static_cast<CFDictionaryRef>(CFDictionaryGetValue(info, kCGWindowBounds));
+        uint32_t wid = 0;
+        CGRect frame{};
+        if (!number || CFGetTypeID(number) != CFNumberGetTypeID() || !CFNumberGetValue(number, kCGWindowIDCFNumberType, &wid) ||
+            !bounds || CFGetTypeID(bounds) != CFDictionaryGetTypeID() || !CGRectMakeWithDictionaryRepresentation(bounds, &frame) ||
+            !CGRectContainsPoint(frame, CGPointMake(pointer.x, pointer.y))) continue;
+        for (const auto& display : m_displays) {
+            if (auto window = display->windowPool().findWindowByWID(wid)) {
+                addNativeCandidate(window);
+                return;
+            }
+        }
+    }
+}
+
+void WindowManager::endNativeInteraction() {
+    if (!m_nativePointerHeld) return;
+    m_nativePointerHeld = false;
+    // The event tap sees mouse-up before the application processes it.
+    m_nativeCommitTime = CACurrentMediaTime() + 0.05;
+}
+
+void WindowManager::flushNativeInteractionForPan() {
+    m_nativePointerHeld = false;
+    m_nativeCommitTime = 0;
+}
+
+void WindowManager::commitNativeInteraction() {
+    for (auto& display : m_displays) {
+        core::DisplayState observationState = display->state();
+        if (const auto camera = m_nativeCameras.find(display->id()); camera != m_nativeCameras.end()) {
+            observationState.camera().setPosition(camera->second.x, camera->second.y);
+        }
+        for (const auto& window : display->windowPool().windows()) {
+            if (std::find(m_nativeCandidates.begin(), m_nativeCandidates.end(), window) == m_nativeCandidates.end()) continue;
+            if (!window || !window->ref() || !window->virtualCoordinatesInitialized || window->isHidden || window->needsGeometryRestore) continue;
+            CGPoint position{};
+            if (!readWindowPosition(window->ref(), m_yabaiBackend.usesTransforms() ? window->wid() : 0, position)) continue;
+            core::Rect physical{static_cast<float>(position.x), static_cast<float>(position.y), window->virtualRect.w, window->virtualRect.h};
+            CGSize size{};
+            if (readAXSize(window->ref(), size) && std::isfinite(size.width) && std::isfinite(size.height) && size.width > 0 && size.height > 0) {
+                physical.w = size.width;
+                physical.h = size.height;
+            }
+            (void)m_renderer.acceptNativeGeometry(*window, physical, observationState);
+        }
+    }
+    m_nativeCommitPending = false;
+    m_nativeCameras.clear();
+    m_nativeCandidates.clear();
 }
 
 } // namespace minfwm

@@ -15,8 +15,9 @@ namespace minfwm {
 
 class Display {
 public:
-    Display(int64_t displayId, core::Rect bounds, WindowPool::WindowIdResolver windowIdResolver = nullptr)
-        : m_id(displayId), m_state(core::DisplayGeometry{displayId, bounds}) {
+    Display(int64_t displayId, core::Rect bounds, WindowPool::WindowIdResolver windowIdResolver = nullptr,
+            std::optional<core::Rect> usableBounds = {})
+        : m_id(displayId), m_state(core::DisplayGeometry{displayId, bounds}), m_usableBounds(usableBounds.value_or(bounds)) {
         m_windowPool = std::make_unique<WindowPool>(windowIdResolver);
     }
 
@@ -25,6 +26,7 @@ public:
     const core::DisplayState& state() const { return m_state; }
     core::DisplayState& state() { return m_state; }
     WindowPool& windowPool() { return *m_windowPool; }
+    core::Rect usableBounds() const { return m_usableBounds; }
 
     void saveBookmark(int index) {
         m_state.saveBookmark(index);
@@ -38,6 +40,7 @@ private:
     int64_t m_id;
     core::DisplayState m_state;
     std::unique_ptr<WindowPool> m_windowPool;
+    core::Rect m_usableBounds;
 };
 
 class WindowManager {
@@ -61,6 +64,9 @@ public:
     void centerWindow(std::shared_ptr<ClientWindow> window);
     void centerCameraOnWindow(AXUIElementRef element);
     void syncPhysicalToVirtual(AXUIElementRef element);
+    void beginNativeInteraction(core::Point pointer);
+    void endNativeInteraction();
+    void flushNativeInteractionForPan();
 
     // Helpers to find window across pools
     std::shared_ptr<ClientWindow> findWindow(AXUIElementRef element);
@@ -76,12 +82,19 @@ private:
     NSScreen* screenForDisplay(int64_t displayId) const;
     float axTopOriginForScreen(NSScreen* screen) const;
     bool isWhitelisted(AXUIElementRef element) const;
+    void commitNativeInteraction();
+    void addNativeCandidate(const std::shared_ptr<ClientWindow>& window);
 
     std::vector<std::unique_ptr<Display>> m_displays;
     bool m_isPanning = false;
     bool m_initialized = false;
     CFRef<AXUIElementRef> m_focusedWindow;
     double m_focusRefreshTime = 0;
+    bool m_nativePointerHeld = false;
+    bool m_nativeCommitPending = false;
+    double m_nativeCommitTime = 0;
+    std::map<int64_t, core::Point> m_nativeCameras;
+    std::vector<std::shared_ptr<ClientWindow>> m_nativeCandidates;
     AXBackend m_axBackend;
     YabaiSABackend m_yabaiBackend;
     WindowRenderer m_renderer{m_axBackend, m_yabaiBackend};

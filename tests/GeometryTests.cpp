@@ -24,6 +24,7 @@ void expectNear(float actual, float expected, const char* message) {
 } // namespace
 
 int main() {
+    using minfwm::core::canUseNativePosition;
     using minfwm::core::Camera;
     using minfwm::core::DisplayGeometry;
     using minfwm::core::DisplayState;
@@ -80,5 +81,13 @@ int main() {
     expectNear(display.camera().y(), 200.0f, "bookmark restores camera y");
     expect(!display.loadBookmark(99), "missing bookmark is reported");
 
+    const Rect usable{0, 31, 1920, 1049};
+    expect(canUseNativePosition({100, 100, 640, 480}, usable), "ordinary visible frame prefers native movement");
+    expect(canUseNativePosition({-600, 100, 640, 480}, usable), "partially visible window can retain native title-bar input");
+    expect(!canUseNativePosition({-601, 100, 640, 480}, usable), "insufficient visible margin keeps translation");
+    expect(!canUseNativePosition({100, -120, 640, 480}, usable), "above-menu-bar movement uses translation");
+    expect(!canUseNativePosition({100, 1050, 640, 480}, usable), "below-screen frame keeps translation");
+    expect(canUseNativePosition({-1800, -200, 640, 480}, {-1920, -269, 1920, 1049}), "native placement accepts negative display origins");
+    expect(!canUseNativePosition({NAN, 100, 640, 480}, usable), "invalid native placement is rejected");
     return failures == 0 ? 0 : 1;
 }

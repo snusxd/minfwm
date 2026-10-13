@@ -26,7 +26,34 @@ void invalidatePosition(ClientWindow& window) {
 
 } // namespace
 
+bool WindowRenderer::acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state) {
+    int x = 0, y = 0;
+    if (!pixelPosition(physical, x, y)) return false;
+    const auto virtualFrame = state.physicalToVirtual(physical);
+    if (!std::isfinite(virtualFrame.x) || !std::isfinite(virtualFrame.y)) return false;
+    window.virtualRect = virtualFrame;
+    window.virtualCoordinatesInitialized = true;
+    window.lastRenderedX = x;
+    window.lastRenderedY = y;
+    window.positionNeedsVerification = false;
+    window.positionFallbackAttempted = false;
+    window.rejectedPosition.reset();
+    window.positionRetryTime = 0;
+    window.hideRetryTime = 0;
+    window.lastProgrammaticMoveTime = 0;
+    return true;
+}
+
 BackendResult WindowRenderer::move(ClientWindow& window, int x, int y) {
+    if (window.preferNativePosition && m_optional.usesTransforms()) {
+        const bool hadTransform = m_optional.hasTransform(window.wid());
+        const auto native = m_optional.moveNative(window.ref(), window.wid(), x, y);
+        if (hadTransform && !m_optional.hasTransform(window.wid())) {
+            window.isLayerSet = false;
+            window.layerAttempted = false;
+        }
+        if (native.succeeded()) return native;
+    }
     const BackendResult result = m_optional.move(window.ref(), window.wid(), x, y);
     if (result.succeeded()) return result;
     (void)resetTransform(window);

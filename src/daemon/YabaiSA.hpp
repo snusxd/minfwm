@@ -53,6 +53,8 @@ public:
     BackendResult resetTransform(uint32_t wid) override;
 
     BackendResult move(AXUIElementRef element, uint32_t wid, int x, int y) override;
+    BackendResult moveNative(AXUIElementRef element, uint32_t wid, int x, int y) override;
+    bool hasTransform(uint32_t wid) const override { return m_transformed.contains(wid); }
     BackendResult resize(AXUIElementRef element, uint32_t wid, float width, float height) override;
     BackendResult setLayer(AXUIElementRef element, uint32_t wid, int layer) override;
     BackendResult setHidden(AXUIElementRef element, uint32_t wid, bool hidden) override;

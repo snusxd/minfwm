@@ -37,6 +37,8 @@ struct DisplayGeometry {
     Rect bounds;
 };
 
+[[nodiscard]] bool canUseNativePosition(Rect frame, Rect usableBounds) noexcept;
+
 [[nodiscard]] std::optional<std::int64_t> nearestDisplay(
     std::span<const DisplayGeometry> displays, Point point) noexcept;
 

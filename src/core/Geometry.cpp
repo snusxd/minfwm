@@ -1,8 +1,20 @@
 #include "Geometry.hpp"
 #include <cmath>
 #include <limits>
+#include <algorithm>
 
 namespace minfwm::core {
+
+bool canUseNativePosition(Rect frame, Rect usable) noexcept {
+    const auto valid = [](Rect rect) {
+        return std::isfinite(rect.x) && std::isfinite(rect.y) && std::isfinite(rect.w) && std::isfinite(rect.h) &&
+            std::isfinite(rect.right()) && std::isfinite(rect.bottom()) && rect.w > 0 && rect.h > 0;
+    };
+    if (!valid(frame) || !valid(usable) || frame.y < usable.y) return false;
+    const float visibleWidth = std::min(frame.right(), usable.right()) - std::max(frame.x, usable.x);
+    const float visibleHeight = std::min(frame.bottom(), usable.bottom()) - std::max(frame.y, usable.y);
+    return visibleWidth >= std::min(40.0f, frame.w) && visibleHeight >= std::min(40.0f, frame.h);
+}
 
 Rect Rect::expanded(float amount) const noexcept {
     return { x - amount, y - amount, w + (2.0f * amount), h + (2.0f * amount) };

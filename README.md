@@ -116,6 +116,10 @@ CLI arguments return a nonzero exit code.
 
 Cmd+Option dragging pans the display under the pointer when the gesture starts.
 Window updates follow each display's presentation cadence. Pointer movement is
+direct. Windows in the usable screen area prefer native positioning so their
+input geometry follows their visible frame; offscreen/above-menu-bar positions
+use the transform extension. Final native drops update the canvas and rendered
+cache before the next pan. Pointer movement is
 direct; spring interpolation is not implemented. Rejected moves and failed
 parking operations are suppressed/backed off instead of retried every frame.
 Releasing either modifier stops movement and consumes the rest of that captured
@@ -131,6 +135,7 @@ cmake --build build --target minfwm_manual_window_move
 ./build/minfwm_manual_window_move --unconstrained-fixture
 ./build/minfwm_manual_window_move --transform-fixture
 ./build/minfwm_manual_window_move --absolute-fixture
+./build/minfwm_manual_window_move --drag-probe
 ```
 
 This target is excluded from the default build and CTest. Give the manual tool

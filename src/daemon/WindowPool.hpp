@@ -46,6 +46,7 @@ public:
     bool layerAttempted = false;
     bool virtualCoordinatesInitialized = false;
     bool centerOnAdoption = false;
+    bool preferNativePosition = false;
 
 private:
     CFRef<AXUIElementRef> m_windowRef;

@@ -46,7 +46,7 @@ namespace {
 volatile sig_atomic_t nativeFrameChangeRequested = 0;
 void requestNativeFrameChange(int) { nativeFrameChangeRequested = 1; }
 
-int showFixture(int readyFd, bool unconstrained, bool reportFrame) {
+int showFixture(int readyFd, bool unconstrained, bool reportFrame, bool dragProbe) {
     signal(SIGUSR1, requestNativeFrameChange);
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -74,7 +74,7 @@ int showFixture(int readyFd, bool unconstrained, bool reportFrame) {
     ::close(readyFd);
     if (!sent) return 1;
     // Avoid leaving a fixture behind if the driver is interrupted or crashes.
-    [NSTimer scheduledTimerWithTimeInterval:90 repeats:NO block:^(NSTimer*) { [NSApp terminate:nil]; }];
+    [NSTimer scheduledTimerWithTimeInterval:dragProbe ? 240 : 90 repeats:NO block:^(NSTimer*) { [NSApp terminate:nil]; }];
     if (reportFrame) {
         [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:YES block:^(NSTimer*) {
             if (nativeFrameChangeRequested) {
@@ -290,7 +290,37 @@ bool checkMove(minfwm::WindowRenderer& renderer, minfwm::ClientWindow& window,
     return succeeded && matched;
 }
 
-int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute) {
+int checkNativeDragProbe(uint32_t wid) {
+    minfwm::YabaiSABackend sa;
+    if (!sa.initialize() || !sa.usesTransforms()) return 77;
+    if (!sa.move(nullptr, wid, 450, 200).succeeded()) return 1;
+    minfwm::YabaiSA direct;
+    const bool serverMoved = direct.handshake() && direct.moveWindow(wid, 450, 200);
+    const bool normalized = serverMoved && sa.resetTransform(wid).succeeded();
+    CGRect rebased{};
+    const bool ready = normalized && readBounds(wid, rebased) && minfwm::windowPositionMatches(rebased.origin, 450, 200);
+    std::cout << "REBASE BEFORE NATIVE DRAG=" << (ready ? "PASS" : "FAIL") << std::endl;
+    if (!ready) return 1;
+    void* sky = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY);
+    auto cid = sky ? reinterpret_cast<int (*)()>(dlsym(sky, "SLSMainConnectionID")) : nullptr;
+    auto bounds = sky ? reinterpret_cast<CGError (*)(int, uint32_t, CGRect*)>(dlsym(sky, "SLSGetWindowBounds")) : nullptr;
+    if (!cid || !bounds) { if (sky) dlclose(sky); return 1; }
+    std::cout << "DRAG PROBE READY: native title-bar drag for 180 seconds" << std::endl;
+    for (int tick = 0; tick < 1800; ++tick) {
+        CGRect native{}, visual{};
+        if (bounds(cid(), wid, &native) != kCGErrorSuccess || !readBounds(wid, visual)) break;
+        auto event = minfwm::CFRef<CGEventRef>::adopt(CGEventCreate(nullptr));
+        const CGPoint pointer = event ? CGEventGetLocation(event.get()) : CGPointZero;
+        std::cout << "DRAG sample=" << tick << " native=" << native.origin.x << ',' << native.origin.y
+                  << " visual=" << visual.origin.x << ',' << visual.origin.y
+                  << " pointer=" << pointer.x << ',' << pointer.y << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    dlclose(sky);
+    return sa.resetTransform(wid).succeeded() ? 0 : 1;
+}
+
+int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute, bool dragProbe) {
     int readyPipe[2];
     if (::pipe(readyPipe) != 0) return 1;
     minfwm::UniqueFd readEnd(readyPipe[0]), writeEnd(readyPipe[1]);
@@ -302,7 +332,7 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
         const char* fixtureExecutable = std::getenv("MINFWM_FIXTURE_EXECUTABLE");
         if (!fixtureExecutable || !*fixtureExecutable) fixtureExecutable = executable;
         ::execl(fixtureExecutable, fixtureExecutable, "--fixture", fd.c_str(),
-            transform || absolute ? "transform" : unconstrained ? "unconstrained" : "normal", nullptr);
+            dragProbe ? "drag" : transform || absolute ? "transform" : unconstrained ? "unconstrained" : "normal", nullptr);
         _exit(1);
     }
     FixtureProcess fixture{pid};
@@ -323,6 +353,7 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
         return 1;
     }
     if (absolute) return checkAbsolute(wid, original, pid, executable);
+    if (dragProbe) return checkNativeDragProbe(wid);
     if (transform) return checkTransform(wid, original);
     auto element = fixtureAXWindow(pid);
     minfwm::ClientWindow window(element.get(), wid);
@@ -368,10 +399,11 @@ int main(int argc, char** argv) {
         }
         if (argc == 4 && std::string(argv[1]) == "--fixture") {
             return showFixture(std::atoi(argv[2]), std::string(argv[3]) == "unconstrained",
-                std::string(argv[3]) == "transform");
+                std::string(argv[3]) == "transform" || std::string(argv[3]) == "drag", std::string(argv[3]) == "drag");
         }
         return runCheck(argv[0], argc == 2 && std::string(argv[1]) == "--unconstrained-fixture",
             argc == 2 && std::string(argv[1]) == "--transform-fixture",
-            argc == 2 && std::string(argv[1]) == "--absolute-fixture");
+            argc == 2 && std::string(argv[1]) == "--absolute-fixture",
+            argc == 2 && std::string(argv[1]) == "--drag-probe");
     }
 }

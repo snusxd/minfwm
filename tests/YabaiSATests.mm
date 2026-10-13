@@ -15,6 +15,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <vector>
+#include <mutex>
 
 namespace {
 
@@ -120,6 +121,10 @@ public:
                                              (static_cast<size_t>(lengthBytes[1]) << 8U);
                 std::vector<std::uint8_t> payload(payloadLength);
                 if (!payload.empty()) readExact(commandFd, payload.data(), payload.size());
+                if (!payload.empty()) {
+                    std::lock_guard lock(m_commandsMutex);
+                    m_opcodes.push_back(payload[0]);
+                }
                 if (delayAck) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(250));
                 } else if (!eofAck) {
@@ -143,11 +148,17 @@ public:
 
     [[nodiscard]] bool ready() const { return m_listenFd != -1; }
     [[nodiscard]] const std::string& path() const { return m_path; }
+    std::vector<uint8_t> opcodes() {
+        std::lock_guard lock(m_commandsMutex);
+        return m_opcodes;
+    }
 
 private:
     int m_listenFd = -1;
     std::string m_path;
     std::thread m_worker;
+    std::mutex m_commandsMutex;
+    std::vector<uint8_t> m_opcodes;
 };
 
 void testMovementWithoutFocusCapability() {
@@ -255,6 +266,15 @@ void testInvalidAckAndTimeout() {
 }
 
 void testAbsoluteTransforms() {
+    {
+        FakeSAServer server(false, false, 0x180, false, "2.1.29", false, 3);
+        minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; });
+        expect(sa.initialize() && sa.move(nullptr, 42, 100, -120).succeeded(), "native handoff starts with a transformed window");
+        expect(sa.moveNative(nullptr, 42, 450, 200).succeeded() && !sa.hasTransform(42),
+               "native handoff clears tracked presentation state");
+        expect(server.opcodes() == std::vector<uint8_t>{0x14, 0x06, 0x15},
+               "native frame moves before the presentation transform resets");
+    }
     {
         FakeSAServer server(false, false, 0x80, false, "2.1.29");
         minfwm::YabaiSA sa(server.path());
