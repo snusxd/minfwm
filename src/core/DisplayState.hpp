@@ -17,11 +17,13 @@ public:
     [[nodiscard]] const Camera& camera() const noexcept;
     [[nodiscard]] Rect viewport() const noexcept;
     [[nodiscard]] float scale() const noexcept { return m_scale; }
-    [[nodiscard]] bool overviewActive() const noexcept { return m_scale != 1 || m_targetScale != 1; }
+    [[nodiscard]] bool overviewActive() const noexcept { return m_return.has_value() || m_scale != 1 || m_targetScale != 1; }
     bool setScaleAt(float scale, Point physicalAnchor) noexcept;
     bool requestZoom(float scrollDelta, Point physicalAnchor) noexcept;
     void advanceZoom(double elapsedSeconds) noexcept;
     void resetZoom(Point physicalAnchor) noexcept;
+    bool beginReturn(std::optional<Point> targetCamera = {}) noexcept;
+    [[nodiscard]] bool returning() const noexcept { return m_return.has_value(); }
 
     // Both points use the same canonical physical coordinate system.
     // The physical display origin may be negative.
@@ -39,6 +41,13 @@ private:
     float m_scale = 1;
     float m_targetScale = 1;
     Point m_zoomAnchor;
+    struct ReturnTransition {
+        Point fromCenter;
+        Point targetCamera;
+        float fromScale;
+        double elapsed = 0;
+    };
+    std::optional<ReturnTransition> m_return;
     std::map<int, Point> m_bookmarks;
 };
 

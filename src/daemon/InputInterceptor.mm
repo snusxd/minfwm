@@ -216,7 +216,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
             wm.endNativeInteraction();
         }
         wm.setPanning(interceptor->m_panGesture.isPanning());
-        if (update.displayId && (update.delta.x != 0 || update.delta.y != 0)) {
+        if (!wm.overviewReturning() && update.displayId && (update.delta.x != 0 || update.delta.y != 0)) {
             if (Display* display = wm.displayById(*update.displayId)) {
                 display->camera().move(update.delta.x / display->state().scale(), update.delta.y / display->state().scale());
             }

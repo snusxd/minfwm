@@ -111,6 +111,35 @@ int main() {
     expect(!sixty.overviewActive() && sixty.scale() == 1, "escape restores exact native scale");
     expectNear(sixty.physicalToVirtual(Point{800, 400}).x, 800, "reset preserves the zoom anchor");
 
+    DisplayState returning({10, {-1920, -300, 1920, 1080}});
+    returning.setScaleAt(0.25f, {-960, 240});
+    const Point initialCamera = returning.camera().position();
+    expect(returning.beginReturn(Point{400, -200}) && returning.returning(), "selection starts a native return animation");
+    expectNear(returning.scale(), 0.25f, "return request never jumps to native scale immediately");
+    expectNear(returning.camera().x(), initialCamera.x, "return request never jumps the camera immediately");
+    returning.advanceZoom(0.18);
+    expect(returning.scale() > 0.25f && returning.scale() < 1 && returning.overviewActive(), "return interpolates scale and holds overview input ownership");
+    const auto halfway = returning;
+    expect(!returning.requestZoom(-8, {-960, 240}), "wheel cannot interrupt a selected window return");
+    returning.advanceZoom(0.18);
+    expect(!returning.returning() && !returning.overviewActive() && returning.scale() == 1, "return finishes at exact native scale");
+    expectNear(returning.camera().x(), 400, "return ends at the selected window camera x");
+    expectNear(returning.camera().y(), -200, "return ends at the selected window camera y");
+    DisplayState atSixty = halfway, atOneTwenty = halfway;
+    for (int i = 0; i < 6; ++i) atSixty.advanceZoom(1.0 / 60);
+    for (int i = 0; i < 12; ++i) atOneTwenty.advanceZoom(1.0 / 120);
+    expectNear(atSixty.scale(), atOneTwenty.scale(), "return animation is independent of frame rate");
+    expectNear(atSixty.camera().x(), atOneTwenty.camera().x(), "return camera path is independent of frame rate");
+    returning.setScaleAt(0.2f, {-960, 240});
+    const Point returnCenter = returning.physicalToVirtual(Point{-960, 240});
+    expect(!returning.beginReturn(Point{NAN, 0}) && !returning.returning(), "invalid return target is atomic");
+    expect(returning.beginReturn(), "Escape starts an anchored return");
+    returning.advanceZoom(0.1);
+    expect(std::abs(returning.physicalToVirtual(Point{-960, 240}).x - returnCenter.x) < 0.001f,
+           "Escape preserves the virtual display center while scaling within float precision");
+    returning.resetZoom({-960, 240});
+    expect(!returning.returning() && returning.scale() == 1, "failure recovery can still cancel return immediately");
+
     const Rect usable{0, 31, 1920, 1049};
     expect(canUseNativePosition({100, 100, 640, 480}, usable), "ordinary visible frame prefers native movement");
     expect(canUseNativePosition({-600, 100, 640, 480}, usable), "partially visible window can retain native title-bar input");

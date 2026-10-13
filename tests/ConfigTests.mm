@@ -32,6 +32,19 @@ int main() {
     expect(parsed.overscanBufferPx == 250.5f, "finite numeric value is parsed");
     expect(parsed.whitelist.size() == 2, "string array is parsed");
 
+    expect(!parsed.invertZoomScrollDirection, "zoom scroll inversion defaults to false");
+    expect(minfwm::ConfigManager::parseText("invert-zoom-scroll-direction = true\n", parsed, error) &&
+           parsed.invertZoomScrollDirection, "zoom scroll inversion accepts true");
+    const auto inverted = parsed;
+    for (const char* invalid : {"1", "\"true\"", "True", "false true"}) {
+        expect(!minfwm::ConfigManager::parseText(std::string("invert-zoom-scroll-direction = ") + invalid, parsed, error),
+               "zoom scroll inversion requires an actual TOML boolean");
+        expect(parsed.invertZoomScrollDirection == inverted.invertZoomScrollDirection, "invalid inversion preserves the previous snapshot");
+    }
+    expect(!minfwm::ConfigManager::parseText("invert-zoom-scroll-direction = true\ninvert-zoom-scroll-direction = false\n", parsed, error),
+           "duplicate zoom scroll inversion is rejected atomically");
+    expect(minfwm::ConfigManager::parseText("invert-zoom-scroll-direction = false\n", parsed, error) &&
+           !parsed.invertZoomScrollDirection, "zoom scroll inversion accepts false");
     const minfwm::ConfigSnapshot before = parsed;
     expect(!minfwm::ConfigManager::parseText("overscan-buffer-px = nan\n", parsed, error),
            "non-finite number is rejected");

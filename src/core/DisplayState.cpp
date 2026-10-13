@@ -3,6 +3,16 @@
 #include <cmath>
 
 namespace minfwm::core {
+bool DisplayState::beginReturn(std::optional<Point> target) noexcept {
+    const Point center = physicalToVirtual(Point{m_geometry.bounds.x + m_geometry.bounds.w / 2,
+                                                  m_geometry.bounds.y + m_geometry.bounds.h / 2});
+    const Point camera = target.value_or(Point{center.x - m_geometry.bounds.w / 2, center.y - m_geometry.bounds.h / 2});
+    if (!std::isfinite(center.x) || !std::isfinite(center.y) ||
+        !std::isfinite(camera.x) || !std::isfinite(camera.y)) return false;
+    m_return = ReturnTransition{center, camera, m_scale};
+    m_targetScale = 1;
+    return true;
+}
 
 bool DisplayState::setScaleAt(float scale, Point anchor) noexcept {
     if (!std::isfinite(scale) || scale < 0.2f || scale > 1 ||
@@ -16,21 +26,50 @@ bool DisplayState::setScaleAt(float scale, Point anchor) noexcept {
 }
 
 bool DisplayState::requestZoom(float delta, Point anchor) noexcept {
-    if (!std::isfinite(delta) || !std::isfinite(anchor.x) || !std::isfinite(anchor.y)) return false;
+    if (returning() || !std::isfinite(delta) || !std::isfinite(anchor.x) || !std::isfinite(anchor.y)) return false;
     m_targetScale = std::clamp(m_targetScale * std::exp(std::clamp(delta * 0.015f, -10.0f, 10.0f)), 0.2f, 1.0f);
     m_zoomAnchor = anchor;
     return true;
 }
 
 void DisplayState::advanceZoom(double elapsed) noexcept {
-    if (!std::isfinite(elapsed) || elapsed <= 0 || m_scale == m_targetScale) return;
+    if (!std::isfinite(elapsed) || elapsed <= 0) return;
+    if (m_return) {
+        constexpr double duration = 0.36;
+        auto& transition = *m_return;
+        transition.elapsed = std::min(duration, transition.elapsed + elapsed);
+        const double t = transition.elapsed / duration;
+        const double progress = t * t * t * (10 + t * (-15 + t * 6));
+        const double scale = std::exp(std::log(transition.fromScale) * (1 - progress));
+        const double endX = double(transition.targetCamera.x) + m_geometry.bounds.w / 2;
+        const double endY = double(transition.targetCamera.y) + m_geometry.bounds.h / 2;
+        const double centerX = transition.fromCenter.x + (endX - transition.fromCenter.x) * progress;
+        const double centerY = transition.fromCenter.y + (endY - transition.fromCenter.y) * progress;
+        if (!m_camera.setPosition(centerX - m_geometry.bounds.w / (2 * scale),
+                                  centerY - m_geometry.bounds.h / (2 * scale))) {
+            m_return.reset();
+            m_targetScale = m_scale;
+            return;
+        }
+        m_scale = static_cast<float>(scale);
+        if (transition.elapsed == duration) {
+            m_camera.setPosition(transition.targetCamera.x, transition.targetCamera.y);
+            m_scale = 1;
+            m_return.reset();
+        }
+        return;
+    }
+    if (m_scale == m_targetScale) return;
     float next = m_targetScale + (m_scale - m_targetScale) * std::exp(-18.0 * elapsed);
     if (std::abs(next - m_targetScale) < 0.0001f) next = m_targetScale;
     if (!setScaleAt(next, m_zoomAnchor)) m_targetScale = m_scale;
 }
 
 void DisplayState::resetZoom(Point anchor) noexcept {
-    if (setScaleAt(1, anchor)) m_targetScale = 1;
+    if (setScaleAt(1, anchor)) {
+        m_targetScale = 1;
+        m_return.reset();
+    }
 }
 
 DisplayState::DisplayState(DisplayGeometry geometry) noexcept

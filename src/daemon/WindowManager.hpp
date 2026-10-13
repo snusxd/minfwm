@@ -70,6 +70,7 @@ public:
     void flushNativeInteractionForPan();
     bool requestOverviewZoom(core::Point pointer, float delta);
     bool overviewActive() const;
+    bool overviewReturning() const;
     void exitOverview(core::Point pointer, bool selectWindow);
 
     // Helpers to find window across pools

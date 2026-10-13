@@ -8,6 +8,7 @@ namespace minfwm {
 
 struct ConfigSnapshot {
     bool enableWindowShadows = false;
+    bool invertZoomScrollDirection = false;
     std::string multiDisplayMode = "isolated";
     float overscanBufferPx = 500.0f;
     std::vector<std::string> whitelist = {"Terminal", "Music"};

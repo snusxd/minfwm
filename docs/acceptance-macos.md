@@ -459,3 +459,26 @@ auxiliaries are not restored with AX geometry on shutdown. Snapshot parsing
 regressions failed before implementation and pass now; full build and all
 12 CTests pass. Commit `f8ce7dd`; sustained human zoom/selection validation is
 pending on the restarted daemon.
+
+The user subsequently confirmed that zoom and selection now work, and requested
+a smoother return animation plus configurable scroll inversion. This is a human
+PASS for sustained overview and click-to-return after the auxiliary fix.
+
+### Return animation and scroll direction
+
+Selection and Escape now use a 0.36-second quintic easing curve. Scale changes
+logarithmically while the virtual viewport center interpolates to the selected
+window; Escape holds the center fixed. Input remains owned by overview until
+all windows have returned to native geometry. Wheel/pan input cannot interrupt
+the return transition. Operation failure retains immediate unit-scale recovery.
+
+`invert-zoom-scroll-direction` is a strict boolean in the existing TOML config,
+default false. It reverses only overview wheel deltas and takes effect on
+`minfwmc reload`. The user's live config has not been created or overwritten.
+
+New focused tests failed before implementation: no immediate selection jump,
+intermediate scale/input ownership, exact final camera/scale, 60/120 Hz paths,
+Escape anchor and cancellation, plus true/false/default parsing and atomic
+rejection of non-boolean/duplicate config values. Full build and all 12 CTests
+pass. Subjective return smoothness and live inversion/reload remain manual
+checks for this follow-up.

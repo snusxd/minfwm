@@ -398,8 +398,9 @@ void WindowManager::addNativeCandidate(const std::shared_ptr<ClientWindow>& wind
 }
 
 bool WindowManager::requestOverviewZoom(core::Point pointer, float delta) {
-    if (!m_initialized || !m_yabaiBackend.supportsOverview() || m_nativePointerHeld ||
+    if (!m_initialized || !m_yabaiBackend.supportsOverview() || m_nativePointerHeld || overviewReturning() ||
         !std::isfinite(delta) || !std::isfinite(pointer.x) || !std::isfinite(pointer.y)) return false;
+    if (ConfigManager::instance().snapshot().invertZoomScrollDirection) delta = -delta;
     const auto id = displayForPoint(pointer).id();
     if (m_zoomRequest && m_zoomRequest->displayId == id) delta += m_zoomRequest->delta;
     m_zoomRequest = ZoomRequest{id, pointer, std::clamp(delta, -1000.0f, 1000.0f)};
@@ -418,8 +419,13 @@ bool WindowManager::overviewActive() const {
     return false;
 }
 
+bool WindowManager::overviewReturning() const {
+    for (const auto& display : m_displays) if (display->state().returning()) return true;
+    return false;
+}
+
 void WindowManager::exitOverview(core::Point pointer, bool selectWindow) {
-    if (overviewActive()) m_overviewExit = OverviewExit{pointer, selectWindow};
+    if (overviewActive() && !overviewReturning()) m_overviewExit = OverviewExit{pointer, selectWindow};
 }
 
 std::shared_ptr<ClientWindow> WindowManager::windowAtPoint(core::Point pointer) const {
@@ -448,11 +454,13 @@ void WindowManager::applyOverviewExit() {
     m_zoomRequest.reset();
     for (auto& display : m_displays) {
         const auto bounds = display->state().geometry().bounds;
-        display->state().resetZoom({bounds.x + bounds.w / 2, bounds.y + bounds.h / 2});
+        std::optional<core::Point> target;
         if (m_overviewFocus && display->windowPool().findWindowByWID(m_overviewFocus->wid())) {
             const auto frame = m_overviewFocus->virtualRect;
-            display->camera().setPosition(frame.x + frame.w / 2 - bounds.w / 2,
-                                          frame.y + frame.h / 2 - bounds.h / 2);
+            target = core::Point{frame.x + frame.w / 2 - bounds.w / 2, frame.y + frame.h / 2 - bounds.h / 2};
+        }
+        if ((display->state().overviewActive() || target) && !display->state().beginReturn(target)) {
+            display->state().resetZoom({bounds.x + bounds.w / 2, bounds.y + bounds.h / 2});
         }
     }
 }

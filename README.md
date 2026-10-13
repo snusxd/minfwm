@@ -134,11 +134,15 @@ With the overview SA capability (`0x380`, bundle `com.minfwm.yabai-sa.overview1`
 **Cmd+Option + vertical scroll** zooms the display under the pointer between
 20% and 100%. The world point under the cursor stays fixed. Zoom eases with
 elapsed frame time, including on high-refresh-rate displays. Positive vertical
-scroll deltas zoom in; negative deltas zoom out.
+scroll deltas zoom in; negative deltas zoom out. Set
+`invert-zoom-scroll-direction = true` in the config to reverse this mapping;
+its default is `false`.
 
 While zoomed out, Cmd+Option dragging pans the canvas. Clicking a window returns
-all displays to 100%, centers that window on its display and raises it. Escape
-returns to 100% around each display's center. The selection click and matching
+all displays to 100%, centers that window on its display and raises it. Selection
+and Escape animate back over 0.36 seconds with a smooth start and stop; the
+camera and scale move together. Escape preserves each display's virtual center.
+The selection click and matching
 mouse-up are consumed; normal application input resumes after the native
 geometry returns. Overview changes presentation, never application layout.
 
@@ -184,6 +188,7 @@ is accepted and reload is atomic:
 
 ```toml
 enable-window-shadows = false
+invert-zoom-scroll-direction = false
 multi-display-mode = "isolated"
 overscan-buffer-px = 500
 whitelist = ["Terminal", "Music"]
@@ -192,6 +197,9 @@ spawn-behavior = "center"
 
 Invalid values leave the active snapshot unchanged. `reload` reports a daemon
 error when the file cannot be parsed.
+Changing scroll direction takes effect after `./build/minfwmc reload`; the SA
+does not need to be reloaded. A complete example is in
+[`config/minfwm.toml.example`](config/minfwm.toml.example).
 
 ## Architecture
 
