@@ -534,3 +534,11 @@ arbitrary value failed before the change and passes afterward; full build and
 12/12 CTests pass. Installer identity overview3 ensures the corrected payload
 replaces overview2. Live handoff and subjective flash checks require this build
 to be loaded; the daemon remains stopped until then.
+
+After the user loaded overview3, the disposable-window fixture passed all live
+checks: 120 scaled frames; atomic handoff with successful client readback at
+(400,200), 16 sampled positions and zero intermediate positions; native return;
+ownership cleanup; and recovery after owner process death. Evidence:
+`build/zoom-overview3-live-fixture.log`. This validates the installed handoff
+path; it does not establish the absence of a visually perceptible flash across
+third-party applications. The updated daemon was started for that human check.
