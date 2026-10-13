@@ -171,6 +171,59 @@ int checkTransform(uint32_t wid, CGRect original) {
     return sent && stayed && reset && returned ? 0 : 1;
 }
 
+int checkOverview(uint32_t wid, CGRect original, const char* executable) {
+    minfwm::YabaiSABackend sa;
+    if (!sa.initialize() || !sa.supportsOverview()) {
+        std::cerr << "Overview SA extension unavailable (requires capability 0x200)" << std::endl;
+        return 77;
+    }
+    minfwm::AXBackend ax;
+    minfwm::WindowRenderer renderer(ax, sa);
+    minfwm::ClientWindow window(nullptr, wid);
+    const minfwm::core::Rect frame{static_cast<float>(original.origin.x), static_cast<float>(original.origin.y),
+        static_cast<float>(original.size.width), static_cast<float>(original.size.height)};
+    window.originalPhysicalRect = frame;
+    window.virtualRect = frame;
+    window.layerAttempted = true;
+    bool good = true;
+    CGRect actual{};
+    for (int tick = 0; tick < 120; ++tick) {
+        const float scale = tick < 60 ? 1 - tick * 0.013f : 0.22f + (tick - 60) * 0.013f;
+        const float quantized = std::round(scale * 1000) / 1000;
+        minfwm::core::Rect target{200.0f + tick, -100.0f + tick, frame.w * scale, frame.h * scale};
+        const bool applied = renderer.renderOverview(window, target, scale, tick / 60.0).succeeded();
+        const bool matches = readBounds(wid, actual) &&
+            minfwm::windowPositionMatches(actual.origin, static_cast<int>(target.x), static_cast<int>(target.y)) &&
+            std::abs(actual.size.width - original.size.width * quantized) < 1 &&
+            std::abs(actual.size.height - original.size.height * quantized) < 1;
+        if (!applied || !matches) {
+            std::cerr << "OVERVIEW frame=" << tick << " scale=" << scale << " applied=" << applied
+                      << " actual=" << actual.origin.x << ',' << actual.origin.y << ' ' << actual.size.width << 'x' << actual.size.height << std::endl;
+            good = false;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+    std::cout << "OVERVIEW 120 scaled frames=" << (good ? "PASS" : "FAIL") << std::endl;
+    window.preferNativePosition = true;
+    const bool returned = renderer.render(window, frame, 3).succeeded() && readBounds(wid, actual) &&
+        CGRectEqualToRect(actual, original) && !sa.hasTransform(wid);
+    std::cout << "OVERVIEW NATIVE RETURN=" << (returned ? "PASS" : "FAIL") << std::endl;
+    if (!returned) return 1;
+    const std::string workerWid = std::to_string(wid), workerX = std::to_string(static_cast<int>(frame.x));
+    const pid_t worker = fork();
+    if (worker == 0) {
+        execl(executable, executable, "--crash-overview-owner", workerWid.c_str(), workerX.c_str(), nullptr);
+        _exit(1);
+    }
+    int status = 0;
+    const bool exited = worker > 0 && waitpid(worker, &status, 0) == worker && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    std::this_thread::sleep_for(std::chrono::milliseconds(800));
+    const bool recovered = exited && readBounds(wid, actual) && CGRectEqualToRect(actual, original);
+    std::cout << "OVERVIEW CRASH RECOVERY=" << (recovered ? "PASS" : "FAIL") << std::endl;
+    return good && returned && recovered ? 0 : 1;
+}
+
 int checkAbsolute(uint32_t wid, CGRect original, pid_t fixturePid, const char* executable) {
     minfwm::YabaiSABackend sa;
     if (!sa.initialize() || !sa.usesTransforms()) {
@@ -320,7 +373,7 @@ int checkNativeDragProbe(uint32_t wid) {
     return sa.resetTransform(wid).succeeded() ? 0 : 1;
 }
 
-int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute, bool dragProbe) {
+int runCheck(const char* executable, bool unconstrained, bool transform, bool absolute, bool dragProbe, bool overview) {
     int readyPipe[2];
     if (::pipe(readyPipe) != 0) return 1;
     minfwm::UniqueFd readEnd(readyPipe[0]), writeEnd(readyPipe[1]);
@@ -352,6 +405,7 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
         std::cerr << "WindowServer did not return fixture bounds" << std::endl;
         return 1;
     }
+    if (overview) return checkOverview(wid, original, executable);
     if (absolute) return checkAbsolute(wid, original, pid, executable);
     if (dragProbe) return checkNativeDragProbe(wid);
     if (transform) return checkTransform(wid, original);
@@ -389,11 +443,12 @@ int runCheck(const char* executable, bool unconstrained, bool transform, bool ab
 
 int main(int argc, char** argv) {
     @autoreleasepool {
-        if (argc == 4 && std::string(argv[1]) == "--crash-owner") {
+        if (argc == 4 && (std::string(argv[1]) == "--crash-owner" || std::string(argv[1]) == "--crash-overview-owner")) {
             minfwm::YabaiSA sa;
             const auto wid = static_cast<uint32_t>(std::strtoul(argv[2], nullptr, 10));
             const int x = std::atoi(argv[3]);
-            const bool applied = sa.handshake() && sa.transformWindow(wid, x, -200) &&
+            const bool scaled = std::string(argv[1]) == "--crash-overview-owner";
+            const bool applied = sa.handshake() && (scaled ? sa.overviewWindow(wid, x, -200, 350) : sa.transformWindow(wid, x, -200)) &&
                 minfwm::isWindowAtPosition(nullptr, wid, x, -200);
             _exit(applied ? 0 : 1);
         }
@@ -404,6 +459,7 @@ int main(int argc, char** argv) {
         return runCheck(argv[0], argc == 2 && std::string(argv[1]) == "--unconstrained-fixture",
             argc == 2 && std::string(argv[1]) == "--transform-fixture",
             argc == 2 && std::string(argv[1]) == "--absolute-fixture",
-            argc == 2 && std::string(argv[1]) == "--drag-probe");
+            argc == 2 && std::string(argv[1]) == "--drag-probe",
+            argc == 2 && std::string(argv[1]) == "--overview-fixture");
     }
 }

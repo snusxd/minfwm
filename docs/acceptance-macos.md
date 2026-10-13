@@ -354,3 +354,42 @@ and native origins and baseline transforms: Zen, Feishin, ChatGPT, Discord,
 TeamSpeak and two Ghostty windows. No minfwmd process remained. Evidence:
 `build/hybrid-interactive-settled.log`. Popups/sheets, multiple displays and
 subjective animation smoothness still need separate acceptance checks.
+
+
+## Scroll overview (2026-10-14)
+
+Implementation: Cmd+Option vertical scroll requests cursor-anchored zoom between
+20% and 100%; frame-time exponential easing advances on display presentation.
+Pan deltas are divided by scale to track screen-space pointer movement.
+Selection returns all displays to 100%, centers/raises the selected window and
+consumes both ends of the click. Escape returns at the display center. Native
+geometry synchronization and focus recentering are suppressed during overview.
+Scale failure exits overview through the normal native/transform/AX path.
+
+The SA keeps version 2.1.29 and adds capability 0x200 (total 0x380) and opcode
+0x16 with an integer scale. The installer identifier changes to overview1;
+exact generated v1/v2 build patches can be upgraded without overwriting unknown
+changes. Loading requires the terminal's privileged loader, with minfwmd stopped.
+The installed lifecycle v2 remains compatible and cannot receive scale packets.
+
+Automated regressions failed before implementation: scaled coordinate and size
+round trips with negative origins, cursor anchoring, expanded viewport, invalid
+scale/anchor atomicity, bounded scroll, refresh-rate-independent easing, packet
+bytes, capability gating, explicit ACK, truncated/invalid payloads, inverse
+matrix and reset at the current native frame. Renderer tests cover no AX native
+resize, duplicate suppression and native handoff at an unchanged position.
+
+Live checklist (pending new payload installation):
+
+- Run `minfwm_manual_window_move --overview-fixture` with minfwmd stopped:
+  120 scaled-frame origins/sizes, return to native geometry, owner-crash cleanup.
+- Start exactly one daemon. Zoom around several cursor positions, pan at 20%,
+  select a window, then drag its title bar and pan again; confirm no jump.
+- Escape while zooming; release modifiers before scroll momentum ends; confirm
+  no scroll/click/key event leaks into application content.
+- Quit while zoomed; check native scale, position and ordinary dragging.
+- Repeat with popups/sheets and displays with negative origins. Check scroll
+  without overview support still reaches applications normally.
+
+Live WindowServer scaling and event-tap behavior have not yet been validated
+with the new installed payload; automated checks do not establish those passes.

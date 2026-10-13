@@ -29,8 +29,9 @@ behavior.
   experimental minfwm SA extension translates the rendered window while
   retaining its AppKit frame. It demonstrated placement above the menu bar,
   but its first revision caused persistent offsets and native dragging jumps.
-  Lifecycle v2 passed coordinate/exit checks with ten applications; ordinary
-  native dragging and popup behavior still need manual checks. See the
+  Lifecycle v2 passed coordinate/exit checks with ten applications; hybrid
+  positioning also passed human pickup/drop/next-pan checks. Popup behavior
+  still needs manual checks. See the
   [live acceptance record](docs/acceptance-macos.md#lifecycle-v2-live-acceptance-and-selected-window-readback-2026-10-13).
 - Yabai SA is private, version-sensitive, and requires a root loader plus the
   SIP configuration documented by Yabai. Do not weaken SIP for the default AX
@@ -127,6 +128,26 @@ mouse gesture. Camera bookmarks also use the display under the pointer.
 Orderly shutdown restores each window's captured physical position and size,
 unhides windows hidden by the daemon, and resets successfully applied SA layers.
 
+### Scroll overview
+
+With the overview SA capability (`0x380`, bundle `com.minfwm.yabai-sa.overview1`),
+**Cmd+Option + vertical scroll** zooms the display under the pointer between
+20% and 100%. The world point under the cursor stays fixed. Zoom eases with
+elapsed frame time, including on high-refresh-rate displays. Positive vertical
+scroll deltas zoom in; negative deltas zoom out.
+
+While zoomed out, Cmd+Option dragging pans the canvas. Clicking a window returns
+all displays to 100%, centers that window on its display and raises it. Escape
+returns to 100% around each display's center. The selection click and matching
+mouse-up are consumed; normal application input resumes after the native
+geometry returns. Overview changes presentation, never application layout.
+
+Build/load the SA with the commands above, **with minfwmd stopped**, then restart
+`./build/minfwmd`. Lifecycle v2 (`0x180`) and stock SA keep their existing movement
+behavior; they do not enable overview. If a scale operation fails, the daemon
+returns to 100% and uses the ordinary movement/fallback path. Live overview
+checks are tracked separately in [the acceptance record](docs/acceptance-macos.md).
+
 An explicit live check creates and removes its own temporary window:
 
 ```bash
@@ -136,12 +157,15 @@ cmake --build build --target minfwm_manual_window_move
 ./build/minfwm_manual_window_move --transform-fixture
 ./build/minfwm_manual_window_move --absolute-fixture
 ./build/minfwm_manual_window_move --drag-probe
+./build/minfwm_manual_window_move --overview-fixture
 ```
 
 This target is excluded from the default build and CTest. Give the manual tool
 Accessibility permission separately to check AX fallback and size restoration.
 Exit `1` means a failed check; exit `77` means AX checks were skipped because
-permission was unavailable. The unconstrained fixture is a diagnostic control,
+permission or the requested SA capability was unavailable. The overview fixture
+checks 120 scaled frames, native handoff and scaled-owner crash recovery using
+only its own temporary window; stop minfwmd before running it. The unconstrained fixture is a diagnostic control,
 not evidence that arbitrary third-party windows can stay above the menu bar.
 The transform fixture checks a different approach on a normal NSWindow:
 WindowServer translation while AppKit retains the original frame. This live
