@@ -29,8 +29,9 @@ behavior.
   experimental minfwm SA extension translates the rendered window while
   retaining its AppKit frame. It demonstrated placement above the menu bar,
   but its first revision caused persistent offsets and native dragging jumps.
-  The revised cleanup is not yet validated
-  with third-party applications. See the [regression record](docs/acceptance-macos.md#persistent-transform-regression-and-recovery-2026-10-13).
+  Lifecycle v2 passed coordinate/exit checks with ten applications; ordinary
+  native dragging and popup behavior still need manual checks. See the
+  [live acceptance record](docs/acceptance-macos.md#lifecycle-v2-live-acceptance-and-selected-window-readback-2026-10-13).
 - Yabai SA is private, version-sensitive, and requires a root loader plus the
   SIP configuration documented by Yabai. Do not weaken SIP for the default AX
   backend. Native macOS Spaces are not implemented; the canvas uses virtual
@@ -63,8 +64,9 @@ after other applications changed their frames.
 
 The backend selects transforms automatically with a lifecycle v2 SA. The first
 payload revision (`0x80`) is no longer accepted. Lifecycle v2 (`0x180`) has
-automated regression coverage and builds successfully, but has not been loaded
-for another live acceptance pass. To prepare a deliberate manual experiment:
+automated regression coverage and passed live above-menu-bar/offscreen return,
+native-frame cleanup and process-exit checks on macOS 27. Further interactive
+checks remain listed in the acceptance matrix. To build and load the extension:
 
 ```bash
 python3 tools/build_yabai_sa.py

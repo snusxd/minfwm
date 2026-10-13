@@ -8,9 +8,10 @@ The resulting `build/yabai-minfwm/bin/yabai --load-sa` must be run with sudo
 from a terminal to install/load the payload. It replaces the installed Yabai
 scripting addition; it does not change SIP. Loading can restart Dock.
 Transforms are experimental and selected automatically with lifecycle v2. The first revision caused
-persistent offsets in third-party windows; lifecycle v2 is built and unit-tested,
-but has not passed the revised live acceptance matrix. Do not treat the earlier
-fixture pass as evidence of safe native dragging.
+persistent offsets in third-party windows. Lifecycle v2 passed fixture and
+ten-application coordinate/exit checks; interactive dragging, popups and
+multiple displays still need acceptance checks. Do not treat a coordinate
+readback pass as evidence of safe native dragging.
 
 The payload retains upstream's 2.1.29 bundle version so the existing 7.1.25
 `dock_did_restart` loader preserves it. A separate bundle identifier lets the

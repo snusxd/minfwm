@@ -258,3 +258,43 @@ it does not establish window-animation smoothness. Frame callbacks use their
 own autorelease pool so the long-running daemon does not accumulate temporary
 Objective-C objects until shutdown. Full build and all 11 CTests passed before
 this adapter-only cleanup.
+
+## Lifecycle v2 live acceptance and selected-window readback (2026-10-13)
+
+The user installed the compiled payload; the live handshake is SA 2.1.29 with
+capabilities 0x180. An isolated ordinary NSWindow passed 120 pan frames above
+the menu bar, 20 translation-only offscreen round trips retaining its size,
+45 seconds of settled-position checks, reset after the fixture changed its own
+native AppKit frame, and owner-crash watchdog recovery. This pass did not test
+clicking/typing; the input hold is not evidence of interactive input correctness.
+Evidence: `build/lifecycle2-manual-live.log`.
+
+The full daemon now starts successfully with Accessibility access in this
+environment. Its initial SIGTERM exit took 0.109 seconds. Inspection also found
+five windows retaining old presentation offsets from before this pass. With
+minfwmd stopped, only those known AX application windows were normalized against
+their current native frames. Visual/native origins then agreed. Evidence:
+`build/lifecycle2-legacy-repair.log`, `build/lifecycle2-native-clean.log`.
+New SA installation alone did not clear these legacy offsets.
+
+The first real-app pan check passed nine windows but failed Discord. A focused
+probe showed its transform ACK succeeded and its full-session bounds remained
+at the requested target; the selected-window CoreGraphics query returned an
+empty array. The daemon had mistaken this readback failure for a failed move
+and reset the transform before AX fallback. The adapter now falls back to the
+full session list and matches the exact WID; it also rejects dictionaries for
+other WIDs. The new fake-query tests failed before the change and pass now.
+Evidence: `build/discord-transform-probe.log`, `build/discord-all-readback.log`.
+
+After the readback fix, the production daemon/CLI passed all ten tested windows:
+Telegram, Zen, Feishin, ChatGPT, OBS, Ghostty, System Settings, Obsidian, Zed and
+Discord. Each followed camera y offsets 400 and 2200, including above-menu-bar
+and fully offscreen positions, returned to its original position, and had its
+native baseline restored on SIGTERM. Exit took 0.073 seconds, code 0, without
+restoration-failure messages. Evidence: `build/real-pan-fixed-result.log` and
+the `build/real-pan-fixed-*.log` snapshots.
+
+Full build and all **12 CTests pass**. Commit `38ded66` contains the readback
+fix; `127120f` adds the expanded manual fixture. Human assessment of panning
+smoothness, ordinary native dragging, sheets/popups and multiple displays
+remains separate from coordinate readback and timed-exit checks.
