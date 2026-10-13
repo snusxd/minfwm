@@ -335,5 +335,22 @@ Ghostty and Discord. All followed offsets 400/2200, returned and restored on
 exit; all five returned with native/visual baselines aligned. Exit took 0.074 s.
 Evidence: `build/hybrid-real-pan-result.log` and corresponding snapshots.
 The other earlier application windows had closed or changed IDs and were not
-counted as passes in this repetition. Complete pointer/event-tap validation of
-the hybrid daemon remains pending human verification.
+counted as passes in this repetition.
+
+The user subsequently tested native title-bar dragging after Cmd+Option
+panning, dropping the window, and panning again. They confirmed that both the
+pickup jump and incorrect placement on the next pan disappeared. This is a
+human PASS for those two reported failures with the hybrid implementation
+(`7ad3edc`), rather than an inference from coordinate-only tests. Opt-in input
+tracing (`2badba8`) also recorded final drops using the camera captured before
+the gesture; for example, physical (724,167) with camera (578,-99) became
+virtual (1302,68). Evidence: `build/hybrid-interactive-live.log`.
+
+The test process exited in 0.055 s but logged restoration failures while a
+second minfwmd was running from the user's terminal. Its continuing window
+moves invalidate that shutdown check in isolation. After stopping the remaining
+process (0.131 s), all seven checked application windows had matching visual
+and native origins and baseline transforms: Zen, Feishin, ChatGPT, Discord,
+TeamSpeak and two Ghostty windows. No minfwmd process remained. Evidence:
+`build/hybrid-interactive-settled.log`. Popups/sheets, multiple displays and
+subjective animation smoothness still need separate acceptance checks.
