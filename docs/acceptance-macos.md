@@ -576,3 +576,10 @@ ownership cleanup and crash recovery. Evidence:
 `build/overview-compatible-fixture-live.log`. This is a containment rollback;
 the one-frame flash and the original desktop trigger remain unresolved. The
 daemon remains stopped pending confirmation of normal native interaction.
+The compatible backend also passed three isolated production WindowManager
+cycles on ChatGPT (zoom to 20%, smooth Escape return, pan above the menu bar and
+back, shutdown). After the probe exited, both visible application windows
+(ChatGPT and Ghostty) had matching native/visible origins and native baseline
+matrices. Evidence: `build/window-manager-compatible-chatgpt.log`,
+`build/overview-compatible-final-state.log`. No further real-window probes or
+daemon runs are active.
