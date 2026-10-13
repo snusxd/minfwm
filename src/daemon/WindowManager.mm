@@ -115,8 +115,7 @@ void WindowManager::shutdown() {
     for (auto& display : m_displays) {
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref() || !window->originalPhysicalRect) continue;
-            NSRunningApplication* app = [NSRunningApplication runningApplicationWithProcessIdentifier:window->pid()];
-            if (app.hidden) {
+            if (m_hiddenApplications.contains(window->pid())) {
                 (void)m_renderer.suspend(*window, CACurrentMediaTime());
                 continue;
             }
@@ -137,6 +136,8 @@ void WindowManager::shutdown() {
     m_overviewExit.reset();
     m_overviewFocus.reset();
     m_zoomFrameTimes.clear();
+    m_applicationNames.clear();
+    m_hiddenApplications.clear();
     m_displays.clear();
     m_initialized = false;
 }
@@ -182,6 +183,8 @@ void WindowManager::removeWindow(AXUIElementRef element) {
 }
 
 void WindowManager::removeWindowsForPid(pid_t pid) {
+    m_applicationNames.erase(pid);
+    m_hiddenApplications.erase(pid);
     for (auto& display : m_displays) {
         for (const auto& window : display->windowPool().windows()) {
             if (window->pid() == pid) (void)m_yabaiBackend.resetTransform(window->wid());
@@ -204,16 +207,17 @@ void WindowManager::adoptWindow(Display& display, const std::shared_ptr<ClientWi
     }
 }
 
-bool WindowManager::isWhitelisted(AXUIElementRef element) const {
-    if (!element) return false;
-    pid_t pid = 0;
-    if (AXUIElementGetPid(element, &pid) != kAXErrorSuccess || pid <= 0) return false;
-    NSRunningApplication* app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
-    NSString* name = app.localizedName;
-    if (!name) return false;
-    const std::string appName = [name UTF8String] ? [name UTF8String] : "";
+void WindowManager::setApplicationState(pid_t pid, std::string name, bool hidden) {
+    m_applicationNames[pid] = std::move(name);
+    if (hidden) m_hiddenApplications.insert(pid);
+    else m_hiddenApplications.erase(pid);
+}
+
+bool WindowManager::isWhitelisted(const ClientWindow& window) const {
+    const auto name = m_applicationNames.find(window.pid());
+    if (name == m_applicationNames.end()) return false;
     for (const std::string& allowed : ConfigManager::instance().snapshot().whitelist) {
-        if (allowed == appName) return true;
+        if (allowed == name->second) return true;
     }
     return false;
 }
@@ -266,8 +270,7 @@ void WindowManager::updateWindows(int64_t displayId) {
         bool overviewFailed = false;
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref()) continue;
-            NSRunningApplication* app = [NSRunningApplication runningApplicationWithProcessIdentifier:window->pid()];
-            if (app.hidden) {
+            if (m_hiddenApplications.contains(window->pid())) {
                 if (!window->applicationSuspended) (void)m_renderer.suspend(*window, now);
                 continue;
             }
@@ -282,7 +285,7 @@ void WindowManager::updateWindows(int64_t displayId) {
             }
             window->preferNativePosition = core::canUseNativePosition(state.virtualToPhysical(window->virtualRect), display->usableBounds());
             const bool focused = m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get());
-            const bool protectedWindow = focused || isWhitelisted(window->ref());
+            const bool protectedWindow = focused || isWhitelisted(*window);
             const bool shouldRender = protectedWindow ||
                 visibility.shouldRender(window->virtualRect, state.viewport(), focused);
 

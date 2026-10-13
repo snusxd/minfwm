@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <map>
+#include <set>
 #include "Camera.hpp"
 #include "WindowPool.hpp"
 #include "../core/DisplayState.hpp"
@@ -75,6 +76,7 @@ public:
     std::shared_ptr<ClientWindow> findWindow(AXUIElementRef element);
     void removeWindow(AXUIElementRef element);
     void removeWindowsForPid(pid_t pid);
+    void setApplicationState(pid_t pid, std::string name, bool hidden);
 
     bool isPanning() const { return m_isPanning; }
     void setPanning(bool panning) { m_isPanning = panning; }
@@ -84,7 +86,7 @@ private:
 
     NSScreen* screenForDisplay(int64_t displayId) const;
     float axTopOriginForScreen(NSScreen* screen) const;
-    bool isWhitelisted(AXUIElementRef element) const;
+    bool isWhitelisted(const ClientWindow& window) const;
     void commitNativeInteraction();
     void addNativeCandidate(const std::shared_ptr<ClientWindow>& window);
     std::shared_ptr<ClientWindow> windowAtPoint(core::Point pointer) const;
@@ -106,6 +108,8 @@ private:
     std::optional<OverviewExit> m_overviewExit;
     std::map<int64_t, double> m_zoomFrameTimes;
     std::shared_ptr<ClientWindow> m_overviewFocus;
+    std::map<pid_t, std::string> m_applicationNames;
+    std::set<pid_t> m_hiddenApplications;
     AXBackend m_axBackend;
     YabaiSABackend m_yabaiBackend;
     WindowRenderer m_renderer{m_axBackend, m_yabaiBackend};

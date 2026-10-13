@@ -18,6 +18,18 @@ bool AXObserver::start() {
 
     NSWorkspace* workspace = [NSWorkspace sharedWorkspace];
     NSNotificationCenter* center = [workspace notificationCenter];
+    const auto applicationVisibilityChanged = ^(NSNotification* note) {
+        NSRunningApplication* app = note.userInfo[NSWorkspaceApplicationKey];
+        if (m_started && app) {
+            const char* name = app.localizedName.UTF8String;
+            WindowManager::instance().setApplicationState(app.processIdentifier, name ? name : "",
+                [note.name isEqualToString:NSWorkspaceDidHideApplicationNotification]);
+        }
+    };
+    m_hideObserver = [center addObserverForName:NSWorkspaceDidHideApplicationNotification object:nil
+        queue:NSOperationQueue.mainQueue usingBlock:applicationVisibilityChanged];
+    m_unhideObserver = [center addObserverForName:NSWorkspaceDidUnhideApplicationNotification object:nil
+        queue:NSOperationQueue.mainQueue usingBlock:applicationVisibilityChanged];
 
     m_launchObserver = [center addObserverForName:NSWorkspaceDidLaunchApplicationNotification
                                            object:nil
@@ -50,6 +62,11 @@ bool AXObserver::start() {
 void AXObserver::stop() {
     m_started = false;
     m_registrationSucceeded = false;
+    for (id observer : {m_hideObserver, m_unhideObserver}) {
+        if (observer) [NSWorkspace.sharedWorkspace.notificationCenter removeObserver:observer];
+    }
+    m_hideObserver = nil;
+    m_unhideObserver = nil;
     if (m_launchObserver) {
         [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:m_launchObserver];
         m_launchObserver = nil;
@@ -72,6 +89,8 @@ bool AXObserver::observeApplication(NSRunningApplication* app) {
     if (!app) return false;
     if (app.activationPolicy != NSApplicationActivationPolicyRegular) return true;
     pid_t pid = app.processIdentifier;
+    const char* name = app.localizedName.UTF8String;
+    wm.setApplicationState(pid, name ? name : "", app.hidden);
     if (m_appObservers.find(pid) != m_appObservers.end()) return true;
 
     CFRef<AXUIElementRef> appElem = CFRef<AXUIElementRef>::adopt(AXUIElementCreateApplication(pid));

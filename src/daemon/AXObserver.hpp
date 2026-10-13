@@ -32,6 +32,8 @@ private:
 
     id m_launchObserver;
     id m_terminateObserver;
+    id m_hideObserver = nil;
+    id m_unhideObserver = nil;
     
     bool m_started = false;
     bool m_registrationSucceeded = false;
