@@ -474,7 +474,9 @@ the return transition. Operation failure retains immediate unit-scale recovery.
 
 `invert-zoom-scroll-direction` is a strict boolean in the existing TOML config,
 default false. It reverses only overview wheel deltas and takes effect on
-`minfwmc reload`. The user's live config has not been created or overwritten.
+`minfwmc reload`. No live config existed, so the documented default example was
+created at the standard location with inversion disabled; `minfwmc reload`
+succeeded. Existing user files are preserved.
 
 New focused tests failed before implementation: no immediate selection jump,
 intermediate scale/input ownership, exact final camera/scale, 60/120 Hz paths,
