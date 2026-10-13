@@ -378,6 +378,13 @@ scale/anchor atomicity, bounded scroll, refresh-rate-independent easing, packet
 bytes, capability gating, explicit ACK, truncated/invalid payloads, inverse
 matrix and reset at the current native frame. Renderer tests cover no AX native
 resize, duplicate suppression and native handoff at an unchanged position.
+Full daemon/manual-target builds and all **12 CTests pass**. The new SA also
+built twice successfully, exercising upgrade from the exact lifecycle v2 patch
+and rebuilding an already patched checkout. The installed-payload fixture
+returned **77 (skipped)** because the existing SA lacks overview capability;
+it did not apply a scale. Evidence: `build/zoom-installed-sa-check.log`,
+`build/zoom-final-build.log`, `build/zoom-sa-build.log`,
+`build/zoom-sa-rebuild.log`. No daemon was left running.
 
 Live checklist (pending new payload installation):
 
