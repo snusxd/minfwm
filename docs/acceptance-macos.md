@@ -583,3 +583,49 @@ back, shutdown). After the probe exited, both visible application windows
 matrices. Evidence: `build/window-manager-compatible-chatgpt.log`,
 `build/overview-compatible-final-state.log`. No further real-window probes or
 daemon runs are active.
+
+### Camera, stale windows and startup recovery (2026-10-14)
+
+The user clarified that the regression concerned camera movement, not ordinary
+title-bar dragging. A camera-only isolated probe recorded 360 updates each at
+100% and 20% scale, including negative/offscreen positions: zero missed target
+positions, p95 update duration below 2.7 ms on that fixture. This is operation
+latency, not proof of desktop frame pacing. Evidence:
+`build/camera-pan-fixture-before.log`.
+
+The subsequent live check found an actionable lifecycle failure: Zen replaced
+WID 5095 with 8626, but the daemon kept moving 5095 and aborted every overview
+attempt on that stale record. The user confirmed camera dragging was now normal,
+zoom still failed, and some old windows required reopening. Evidence:
+`build/camera-pan-live.log`, `build/camera-pan-app-state.log`,
+`build/window-lifecycle-closed-window-info.log`. The sampled live profile includes
+synchronous WindowServer readback and AX calls; it does not establish an input
+delta defect. The daemon was stopped before lifecycle changes.
+
+Commit `70bfbf5` adds full-session WID reconciliation (preserving hidden/offscreen
+and WID-zero AX-only windows), startup/reappearance normalization of the observed
+identity-matrix/zero-origin presentation on visible managed windows, and
+rediscovery through application snapshots. Recovery reuses stock opcode 0x0d
+at unit scale; no new SA installation is required. Foreign nonzero translations
+and scales are not normalized. Failed session/AX snapshots cannot remove models.
+
+The first live lifecycle fixture exposed a retained NSWindow after close: its
+WID still exists in WindowServer, so the full-session check alone cannot classify
+it as closed. Commit `3c69900` adds reconciliation against each application's
+successful AX window list and an idle two-second refresh, with activation/unhide
+and changed-session refreshes. These AX enumerations defer during pan/overview.
+The manual `--lifecycle-fixture` deliberately creates the zero-origin state,
+checks native recovery, moves the camera for 240 frames (zero misses), omits the
+destroy notification, reconciles the closed/reopened window and successfully
+zooms the replacement. Evidence: `build/window-lifecycle-live-fixture.log`.
+
+Full build and all 12 CTests pass, including new packet bytes, strict recovery
+classification, session failure and pool-index/lifecycle cases. An actual daemon
+run also automatically normalized the disposable window at startup, discovered
+its replacement and removed its closed record. Evidence:
+`build/window-lifecycle-daemon-live.log`. Shutdown completed in 0.029 seconds;
+AX original-frame restoration still reported failures for Zen/Ghostty, while
+all three visible application windows had matching native/visible baseline
+transforms afterward. This does not validate exact original-frame restoration.
+Evidence: `build/window-lifecycle-after-stop.log`. Subjective third-party zoom
+and continued reopen behavior are pending the next human check.

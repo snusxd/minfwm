@@ -153,6 +153,14 @@ but atomic native handoff requires the new `0x400` bit. If a scale operation fai
 returns to 100% and uses the ordinary movement/fallback path. Live overview
 checks are tracked separately in [the acceptance record](docs/acceptance-macos.md).
 
+At startup and after application visibility changes, the daemon checks visible
+managed windows for the known zero-origin presentation state and restores their
+native presentation through the optional SA. Hidden applications and unrelated
+nonzero transforms are preserved. WindowServer snapshots remove destroyed
+windows even when AX destruction notifications are unsupported. Application AX
+window snapshots also remove closed-but-retained windows and discover reopened
+windows; these cross-process refreshes wait until camera/overview gestures end.
+
 An explicit live check creates and removes its own temporary window:
 
 ```bash
@@ -163,6 +171,8 @@ cmake --build build --target minfwm_manual_window_move
 ./build/minfwm_manual_window_move --absolute-fixture
 ./build/minfwm_manual_window_move --drag-probe
 ./build/minfwm_manual_window_move --overview-fixture
+./build/minfwm_manual_window_move --overview-compatible-fixture
+./build/minfwm_manual_window_move --lifecycle-fixture
 ```
 
 This target is excluded from the default build and CTest. Give the manual tool
@@ -172,6 +182,11 @@ permission or the requested SA capability was unavailable. The overview fixture
 checks 120 scaled frames, native handoff and scaled-owner crash recovery using
 only its own temporary window; stop minfwmd before running it. The unconstrained fixture is a diagnostic control,
 not evidence that arbitrary third-party windows can stay above the menu bar.
+The lifecycle fixture deliberately gives its own window a zero-origin
+presentation, verifies startup recovery and 240 camera updates, closes and
+reopens the window without a destruction callback, then verifies overview.
+The default daemon uses compatible handoff; `--overview-fixture` explicitly
+exercises the experimental atomic path instead.
 The transform fixture checks a different approach on a normal NSWindow:
 WindowServer translation while AppKit retains the original frame. This live
 prototype stayed at `y=-120` and returned successfully on macOS 27. It uses
