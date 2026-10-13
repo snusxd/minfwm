@@ -115,6 +115,11 @@ void WindowManager::shutdown() {
     for (auto& display : m_displays) {
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref() || !window->originalPhysicalRect) continue;
+            NSRunningApplication* app = [NSRunningApplication runningApplicationWithProcessIdentifier:window->pid()];
+            if (app.hidden) {
+                (void)m_renderer.suspend(*window, CACurrentMediaTime());
+                continue;
+            }
             if (!m_renderer.restore(*window, CACurrentMediaTime()).succeeded()) {
                 std::cerr << "WindowManager: failed to restore window during shutdown (WID "
                           << window->wid() << ")" << std::endl;
@@ -261,6 +266,11 @@ void WindowManager::updateWindows(int64_t displayId) {
         bool overviewFailed = false;
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref()) continue;
+            NSRunningApplication* app = [NSRunningApplication runningApplicationWithProcessIdentifier:window->pid()];
+            if (app.hidden) {
+                if (!window->applicationSuspended) (void)m_renderer.suspend(*window, now);
+                continue;
+            }
             adoptWindow(*display, window);
             if (!window->virtualCoordinatesInitialized) continue;
             if (state.overviewActive()) {
@@ -291,6 +301,7 @@ void WindowManager::updateWindows(int64_t displayId) {
             // ordinary renderer retains the transform/AX failure fallback.
             for (const auto& window : display->windowPool().windows()) {
                 if (!window || !window->ref() || !window->virtualCoordinatesInitialized) continue;
+                if (window->applicationSuspended) continue;
                 const auto physical = state.virtualToPhysical(window->virtualRect);
                 window->preferNativePosition = core::canUseNativePosition(physical, display->usableBounds());
                 (void)m_renderer.render(*window, physical, now);

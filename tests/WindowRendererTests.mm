@@ -409,8 +409,27 @@ void testOverviewPresentationAndReturn() {
            "failed overview leaves normal scale recovery to caller instead of AX shrinking applications");
 }
 
+void testExternalApplicationSuspension() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    sa.layerCode = BackendCode::ok;
+    ClientWindow window(nullptr, 42);
+    initializeWindow(window);
+    WindowRenderer renderer(ax, sa);
+    renderer.renderOverview(window, {200, 100, 320, 240}, 0.5f, 1);
+    expect(renderer.suspend(window, 2).succeeded() && !window.overviewPresented,
+           "hiding an application clears its owned presentation before suspension");
+    expect(ax.calls.empty(), "suspension never moves, resizes or unhides a user-hidden application");
+    const auto original = window.virtualRect;
+    window.preferNativePosition = true;
+    expect(renderer.render(window, {200, 100, 640, 480}, 3).succeeded() &&
+           window.virtualRect.x == original.x && window.virtualRect.w == original.w,
+           "unhidden application resumes from unchanged virtual geometry");
+}
+
 int main() {
     testOverviewPresentationAndReturn();
+    testExternalApplicationSuspension();
     testFallbackAndShutdown();
     testPartialHideAndRestore();
     testInvalidGeometry();

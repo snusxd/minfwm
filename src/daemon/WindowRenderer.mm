@@ -26,6 +26,18 @@ void invalidatePosition(ClientWindow& window) {
 
 } // namespace
 
+BackendResult WindowRenderer::suspend(ClientWindow& window, double now) {
+    const auto result = resetTransform(window);
+    if (!result.succeeded()) return result;
+    invalidatePosition(window);
+    window.positionNeedsVerification = false;
+    window.rejectedPosition.reset();
+    window.positionRetryTime = 0;
+    window.lastProgrammaticMoveTime = now;
+    window.applicationSuspended = true;
+    return result;
+}
+
 bool WindowRenderer::acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state) {
     int x = 0, y = 0;
     if (!pixelPosition(physical, x, y)) return false;
@@ -80,6 +92,7 @@ BackendResult WindowRenderer::setLayer(ClientWindow& window, int layer) {
 BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, double now) {
     int x = 0, y = 0;
     if (!window.originalPhysicalRect || !pixelPosition(physical, x, y)) return {BackendCode::failed};
+    window.applicationSuspended = false;
     if (window.overviewPresented || window.lastRenderedScale != 1) {
         invalidatePosition(window);
         window.positionNeedsVerification = false;
@@ -175,6 +188,7 @@ BackendResult WindowRenderer::renderOverview(ClientWindow& window, core::Rect ph
     if (!m_optional.supportsOverview()) return {BackendCode::unsupported};
     if (!window.originalPhysicalRect || !pixelPosition(physical, x, y) ||
         !std::isfinite(scale) || scale < 0.2f || scale > 1) return {BackendCode::failed};
+    window.applicationSuspended = false;
     scale = std::round(scale * 1000) / 1000;
     if (window.lastRenderedX == x && window.lastRenderedY == y && window.lastRenderedScale == scale &&
         !window.isHidden && !window.needsGeometryRestore) return {BackendCode::ok};
