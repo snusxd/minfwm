@@ -18,9 +18,12 @@ public:
 
 private:
     static CGEventRef eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
+    static CGEventRef scrollTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
     
     CFRef<CFMachPortRef> m_eventTap;
     CFRef<CFRunLoopSourceRef> m_runLoopSource;
+    CFRef<CFMachPortRef> m_scrollEventTap;
+    CFRef<CFRunLoopSourceRef> m_scrollRunLoopSource;
     core::PanGesture m_panGesture;
     uint64_t m_overviewButtons = 0;
     std::bitset<256> m_overviewKeys;

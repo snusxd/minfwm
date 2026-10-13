@@ -22,7 +22,6 @@ bool InputInterceptor::start() {
                             (1 << kCGEventFlagsChanged) | 
                             (1 << kCGEventKeyDown) |
                             (1 << kCGEventKeyUp) |
-                            (1 << kCGEventScrollWheel) |
                             (1 << kCGEventRightMouseDown) | (1 << kCGEventRightMouseUp) |
                             (1 << kCGEventRightMouseDragged) |
                             (1 << kCGEventOtherMouseDown) | (1 << kCGEventOtherMouseUp) |
@@ -45,6 +44,25 @@ bool InputInterceptor::start() {
     }
     CFRunLoopAddSource(CFRunLoopGetCurrent(), m_runLoopSource.get(), kCFRunLoopCommonModes);
     CGEventTapEnable(m_eventTap.get(), true);
+    // Mouse utilities can consume wheel events at HID and replace them with
+    // gestures before the session tap. Capture only scrolling ahead of them;
+    // ordinary scrolling still passes unchanged to the user's mouse utility.
+    m_scrollEventTap = CFRef<CFMachPortRef>::adopt(CGEventTapCreate(kCGHIDEventTap,
+        kCGHeadInsertEventTap, kCGEventTapOptionDefault, CGEventMaskBit(kCGEventScrollWheel), scrollTapCallback, this));
+    if (!m_scrollEventTap) {
+        m_scrollEventTap = CFRef<CFMachPortRef>::adopt(CGEventTapCreate(kCGAnnotatedSessionEventTap,
+            kCGHeadInsertEventTap, kCGEventTapOptionDefault, CGEventMaskBit(kCGEventScrollWheel), scrollTapCallback, this));
+    }
+    if (m_scrollEventTap) {
+        m_scrollRunLoopSource = CFRef<CFRunLoopSourceRef>::adopt(CFMachPortCreateRunLoopSource(kCFAllocatorDefault, m_scrollEventTap.get(), 0));
+        if (m_scrollRunLoopSource) {
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), m_scrollRunLoopSource.get(), kCFRunLoopCommonModes);
+            CGEventTapEnable(m_scrollEventTap.get(), true);
+        } else {
+            m_scrollEventTap.reset();
+        }
+    }
+    if (!m_scrollEventTap) std::cerr << "InputInterceptor: scroll interception unavailable" << std::endl;
     return true;
 }
 
@@ -54,6 +72,14 @@ void InputInterceptor::stop() {
     m_overviewKeys.reset();
     m_zoomScrollCaptured = false;
     WindowManager::instance().setPanning(false);
+    if (m_scrollEventTap) {
+        CGEventTapEnable(m_scrollEventTap.get(), false);
+        if (m_scrollRunLoopSource) {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), m_scrollRunLoopSource.get(), kCFRunLoopCommonModes);
+            m_scrollRunLoopSource.reset();
+        }
+        m_scrollEventTap.reset();
+    }
     if (m_eventTap) {
         CGEventTapEnable(m_eventTap.get(), false);
         if (m_runLoopSource) {
@@ -62,6 +88,18 @@ void InputInterceptor::stop() {
         }
         m_eventTap.reset();
     }
+}
+
+CGEventRef InputInterceptor::scrollTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon) {
+    auto* interceptor = static_cast<InputInterceptor*>(refcon);
+    if (!interceptor) return event;
+    if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+        interceptor->m_zoomScrollCaptured = false;
+        WindowManager::instance().exitOverview({}, false);
+        if (interceptor->m_scrollEventTap) CGEventTapEnable(interceptor->m_scrollEventTap.get(), true);
+        return event;
+    }
+    return eventTapCallback(proxy, type, event, refcon);
 }
 
 CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon) {
