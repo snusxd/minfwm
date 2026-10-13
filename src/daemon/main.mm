@@ -6,6 +6,7 @@
 #include "AXObserver.hpp"
 #include "InputInterceptor.hpp"
 #include "IPCServer.hpp"
+#include "DaemonRunLoop.hpp"
 
 namespace {
 volatile sig_atomic_t g_stopRequested = 0;
@@ -75,7 +76,7 @@ int main(int argc, const char * argv[]) {
         }];
 
         std::cout << "minfwmd: Daemon is running." << std::endl;
-        [[NSRunLoop currentRunLoop] run];
+        minfwm::runDaemonRunLoop();
     }
     return 0;
 }

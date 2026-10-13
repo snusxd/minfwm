@@ -1,5 +1,15 @@
 # macOS Acceptance Matrix
 
+## Daemon exit regression (2026-10-13)
+
+An isolated Foundation timer reproduced the exit hang without AX permission:
+`CFRunLoopStop` returned from an inner run but `NSRunLoop.run` continued waiting.
+The dedicated daemon run-loop CTest timed out before the fix. The daemon now
+uses one `CFRunLoopRun` invocation, allowing its existing shutdown timer to
+return to main after stopping producers and restoring windows. The regression
+test passes without creating windows or invoking live Accessibility APIs.
+Full desktop exit/restoration remains a separate manual check.
+
 Automated checks run on every integration pass:
 
 ```text

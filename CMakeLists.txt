@@ -59,6 +59,7 @@ target_link_libraries(minfwm_window_runtime PUBLIC minfwm_window_pool)
 
 # Daemon adapters, also linked by socket lifecycle tests without starting AX.
 add_library(minfwm_daemon_runtime STATIC
+    src/daemon/DaemonRunLoop.mm
     src/daemon/WindowManager.mm
     src/daemon/AXObserver.mm
     src/daemon/InputInterceptor.mm
@@ -84,6 +85,10 @@ add_executable(minfwm_manual_window_move EXCLUDE_FROM_ALL tools/ManualWindowMove
 target_link_libraries(minfwm_manual_window_move PRIVATE minfwm_daemon_runtime)
 
 if(BUILD_TESTING)
+    add_executable(minfwm_daemon_run_loop_tests tests/DaemonRunLoopTests.mm)
+    target_link_libraries(minfwm_daemon_run_loop_tests PRIVATE minfwm_daemon_runtime)
+    add_test(NAME minfwm_daemon_run_loop_tests COMMAND minfwm_daemon_run_loop_tests)
+    set_tests_properties(minfwm_daemon_run_loop_tests PROPERTIES TIMEOUT 2)
     add_executable(minfwm_transform_payload_tests tests/TransformPayloadTests.m)
     target_link_libraries(minfwm_transform_payload_tests PRIVATE ${COMMON_LIBS})
     add_test(NAME minfwm_transform_payload_tests COMMAND minfwm_transform_payload_tests)
