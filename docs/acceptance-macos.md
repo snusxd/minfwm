@@ -404,3 +404,33 @@ and recovered from an owner process exiting without destructors. The fixture
 exited 0. Evidence: `build/zoom-live-fixture.log`. This establishes the isolated
 WindowServer path; production event-tap interaction, application compatibility
 and subjective smoothness remain separate checks.
+
+### Desktop input follow-up
+
+The first human desktop check **failed**: overview did not start, and canvas
+movement appeared to update only every 10–20 frames. The isolated SA fixture
+PASS above did not establish event-tap integration. The daemon was stopped.
+
+Wheel tracing then recorded no scroll events at the session tap during the
+user's repeated gesture. The tap inventory confirmed Mac Mouse Fix's scroll
+filter at HID. A dedicated wheel-only HID tap is now placed ahead of mouse
+utilities, with annotated-session fallback when HID creation is unavailable;
+the original session tap still owns native dragging, keyboard and pan input.
+Actual wheel delivery with this change remains pending human verification.
+
+Visibility inspection showed Feishin, Discord and Ghostty were user-hidden.
+Their zero presentation origins/identity matrices are not evidence of leftover
+transforms. They must not be repeatedly moved, unhidden or scaled by the daemon.
+The renderer now suspends owned presentation without AX geometry writes, and
+application hide/unhide notifications resume the unchanged virtual model.
+A focused regression failed before suspension implementation and passes now.
+
+Sampling also found synchronous LaunchServices lookups for application names
+and visibility inside each frame. These are now cached from application
+observation and hide/unhide notifications. A repeat two-second sample contained
+no `NSRunningApplication.isHidden` or `localizedName` stack in frame processing.
+24 production IPC camera commands (12 forward, 12 back) passed, averaging
+5.84 ms including CLI launch, maximum 20.36 ms. This is command latency, not a
+measured presentation FPS or a subjective smoothness pass. Evidence:
+`build/zoom-input-fixed-sample.txt`, `build/zoom-metadata-sample.txt` and
+`build/zoom-metadata-live.log`. Full build and 12/12 CTests pass after these fixes.
