@@ -48,6 +48,7 @@ public:
     bool isAXHidden = false;
     bool needsGeometryRestore = false;
     bool isLayerSet = false;
+    bool pinnedLevelSet = false;
     bool layerAttempted = false;
     bool virtualCoordinatesInitialized = false;
     bool centerOnAdoption = false;

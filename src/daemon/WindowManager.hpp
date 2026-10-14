@@ -51,7 +51,7 @@ public:
         return instance;
     }
 
-    bool initialize();
+    bool initialize(bool allowAdministratorLoad = false);
     void shutdown();
     
     // Get display for a window or camera

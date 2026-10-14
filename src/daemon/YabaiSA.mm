@@ -1,14 +1,20 @@
 #import "YabaiSA.hpp"
 #import <Foundation/Foundation.h>
 #include "UniqueFd.hpp"
+#include <mach-o/dyld.h>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <charconv>
 #include <cerrno>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <iostream>
 #include <limits>
 #include <poll.h>
+#include <thread>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -21,6 +27,7 @@ namespace {
 constexpr uint8_t kHandshakeOpcode = 0x01;
 constexpr uint8_t kWindowMoveOpcode = 0x06;
 constexpr uint8_t kWindowLayerOpcode = 0x09;
+constexpr uint8_t kPinnedLevelOpcode = 0x18;
 constexpr size_t kMaxPacketLength = 0x1000;
 constexpr int kTimeoutMilliseconds = 100;
 
@@ -149,6 +156,58 @@ bool parseVersion(const std::string& version) {
     return false;
 }
 
+std::filesystem::path pinnedLevelYabaiBinary() {
+    const char* configuredPath = std::getenv("MINFWM_YABAI_SA_BINARY");
+    if (configuredPath && *configuredPath) return configuredPath;
+
+    std::array<char, PATH_MAX> executableBuffer{};
+    uint32_t size = static_cast<uint32_t>(executableBuffer.size());
+    if (_NSGetExecutablePath(executableBuffer.data(), &size) != 0) return {};
+    std::array<char, PATH_MAX> resolvedPath{};
+    if (!realpath(executableBuffer.data(), resolvedPath.data())) return {};
+    return std::filesystem::path(resolvedPath.data()).parent_path() / "yabai-minfwm/bin/yabai";
+}
+
+bool requestYabaiSALoad() {
+    const std::filesystem::path binary = pinnedLevelYabaiBinary();
+    if (binary.empty() || access(binary.c_str(), X_OK) != 0) {
+        std::cerr << "YabaiSA: pinned-level support is missing and the patched yabai binary was not found. "
+                     "Build it with tools/build_yabai_sa.py or set MINFWM_YABAI_SA_BINARY."
+                  << std::endl;
+        return false;
+    }
+
+    std::cout << "YabaiSA: pinned-level support is missing; requesting authorization to load the patched SA"
+              << std::endl;
+    NSTask* task = [[NSTask alloc] init];
+    task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/osascript"];
+    task.arguments = @[
+        @"-e",
+        @"on run argv\nset commandLine to quoted form of (item 1 of argv) & \" --load-sa\"\ndo shell script commandLine with administrator privileges\nend run",
+        [NSString stringWithUTF8String:binary.c_str()]
+    ];
+    NSPipe* outputPipe = [NSPipe pipe];
+    task.standardOutput = outputPipe;
+    task.standardError = outputPipe;
+    NSError* launchError = nil;
+    if (![task launchAndReturnError:&launchError]) {
+        const char* message = launchError.localizedDescription.UTF8String;
+        std::cerr << "YabaiSA: could not show administrator authorization prompt: "
+                  << (message ? message : "unknown launch error") << std::endl;
+        return false;
+    }
+    NSData* outputData = [[outputPipe fileHandleForReading] readDataToEndOfFile];
+    [task waitUntilExit];
+    NSString* output = [[NSString alloc] initWithData:outputData encoding:NSUTF8StringEncoding];
+    const char* outputText = output.UTF8String;
+    if (task.terminationStatus != 0) {
+        std::cerr << "YabaiSA: administrator-authorized --load-sa failed"
+                  << (outputText && *outputText ? std::string(": ") + outputText : std::string{}) << std::endl;
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 YabaiSA::YabaiSA(std::string socketPath) : m_socketPath(std::move(socketPath)) {
@@ -189,11 +248,20 @@ std::vector<uint8_t> YabaiSA::encodeLayerPacket(uint32_t wid, int layer) {
     return finishPacket(std::move(body));
 }
 
+std::vector<uint8_t> YabaiSA::encodePinnedPacket(uint32_t wid, uint32_t ownerPid, bool pinned) {
+    std::vector<uint8_t> body{kPinnedLevelOpcode};
+    appendU32(body, wid);
+    appendU32(body, ownerPid);
+    body.push_back(pinned ? 1 : 0);
+    return finishPacket(std::move(body));
+}
+
 bool YabaiSA::handshake() {
     m_compatible = false;
     m_transformSupport = false;
     m_overviewSupport = false;
     m_nativeHandoffSupport = false;
+    m_pinnedLevelSupport = false;
     if (!isOwnedSocket()) return false;
     UniqueFd fd(connectTo(m_socketPath));
     if (!fd) return false;
@@ -230,6 +298,7 @@ bool YabaiSA::handshake() {
             (attributes[1] & 0x01) != 0; // Lifecycle v2 restores the current native baseline.
         m_overviewSupport = m_transformSupport && (attributes[1] & 0x02) != 0;
         m_nativeHandoffSupport = m_overviewSupport && (attributes[1] & 0x04) != 0;
+        m_pinnedLevelSupport = m_transformSupport && (attributes[1] & 0x08) != 0;
     }
     return result && m_compatible;
 }
@@ -255,6 +324,11 @@ bool YabaiSA::moveWindow(uint32_t wid, int x, int y) const {
 
 bool YabaiSA::setWindowLayer(uint32_t wid, int layer) const {
     return wid != 0 && m_compatible && sendPacket(encodeLayerPacket(wid, layer));
+}
+
+bool YabaiSA::setWindowPinned(uint32_t wid, bool pinned) const {
+    return wid != 0 && m_pinnedLevelSupport &&
+        sendPacket(encodePinnedPacket(wid, static_cast<uint32_t>(getpid()), pinned), true);
 }
 
 YabaiSABackend::YabaiSABackend(std::string socketPath, WindowPositionCheck check, bool experimentalNativeHandoff)
@@ -369,8 +443,21 @@ BackendResult YabaiSABackend::resetTransform(uint32_t wid) {
     return {BackendCode::ok};
 }
 
-bool YabaiSABackend::initialize() {
-    return m_sa.handshake();
+bool YabaiSABackend::initialize(bool allowAdministratorLoad) {
+    const bool initiallyAvailable = m_sa.handshake();
+    if (m_sa.supportsPinnedLevels()) return true;
+
+    if (!allowAdministratorLoad) return initiallyAvailable;
+    if (!requestYabaiSALoad()) return initiallyAvailable;
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        if (m_sa.handshake() && m_sa.supportsPinnedLevels()) {
+            std::cout << "YabaiSA: pinned-level support is ready" << std::endl;
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+    std::cerr << "YabaiSA: --load-sa finished, but pinned-level support is still unavailable" << std::endl;
+    return initiallyAvailable || m_sa.handshake();
 }
 
 BackendResult YabaiSABackend::move(AXUIElementRef element, uint32_t wid, int x, int y) {
@@ -411,6 +498,11 @@ BackendResult YabaiSABackend::moveNative(AXUIElementRef element, uint32_t wid, i
 BackendResult YabaiSABackend::setLayer(AXUIElementRef, uint32_t wid, int layer) {
     if (!available()) return {BackendCode::unavailable};
     return {m_sa.setWindowLayer(wid, layer) ? BackendCode::ok : BackendCode::failed};
+}
+
+BackendResult YabaiSABackend::setPinnedLayer(AXUIElementRef, uint32_t wid, bool alwaysOnTop) {
+    if (!available()) return {BackendCode::unavailable};
+    return {m_sa.setWindowPinned(wid, alwaysOnTop) ? BackendCode::ok : BackendCode::failed};
 }
 
 BackendResult YabaiSABackend::setHidden(AXUIElementRef, uint32_t, bool) {

@@ -60,7 +60,7 @@ BackendResult WindowRenderer::releaseToNative(ClientWindow& window, core::Rect p
     if (!moved.succeeded()) return moved;
 
     if (window.isLayerSet) {
-        if (!setLayer(window, kCGNormalWindowLevelKey).succeeded()) return {BackendCode::failed};
+        if (!restoreLayer(window).succeeded()) return {BackendCode::failed};
         window.isLayerSet = false;
     }
     window.layerAttempted = false;
@@ -75,10 +75,11 @@ BackendResult WindowRenderer::releaseToNative(ClientWindow& window, core::Rect p
 }
 
 BackendResult WindowRenderer::setPinnedLayer(ClientWindow& window, bool alwaysOnTop) {
-    const int layer = alwaysOnTop ? kCGPopUpMenuWindowLevelKey : kCGNormalWindowLevelKey;
-    const BackendResult result = setLayer(window, layer);
+    BackendResult result = m_optional.setPinnedLayer(window.ref(), window.wid(), alwaysOnTop);
+    if (!result.succeeded()) result = m_ax.setPinnedLayer(window.ref(), window.wid(), alwaysOnTop);
     if (result.succeeded()) {
         window.isLayerSet = alwaysOnTop;
+        window.pinnedLevelSet = alwaysOnTop;
         window.layerAttempted = true;
         window.pinnedAlwaysOnTop = alwaysOnTop;
         window.pinLayerRetryTime = 0;
@@ -125,7 +126,7 @@ BackendResult WindowRenderer::resetTransform(ClientWindow& window) {
     const BackendResult result = m_optional.resetTransform(window.wid());
     if (result.succeeded() && m_optional.usesTransforms()) {
         // The payload restores the captured level along with the transform.
-        window.isLayerSet = false;
+        window.isLayerSet = window.pinnedLevelSet;
         window.layerAttempted = false;
         window.lastRenderedScale = 1;
         window.overviewPresented = false;
@@ -136,6 +137,17 @@ BackendResult WindowRenderer::resetTransform(ClientWindow& window) {
 BackendResult WindowRenderer::setLayer(ClientWindow& window, int layer) {
     const BackendResult result = m_optional.setLayer(window.ref(), window.wid(), layer);
     return result.succeeded() ? result : m_ax.setLayer(window.ref(), window.wid(), layer);
+}
+
+BackendResult WindowRenderer::restoreLayer(ClientWindow& window) {
+    const BackendResult result = window.pinnedLevelSet
+        ? m_optional.setPinnedLayer(window.ref(), window.wid(), false)
+        : setLayer(window, kCGNormalWindowLevelKey);
+    if (result.succeeded()) {
+        window.pinnedLevelSet = false;
+        window.isLayerSet = false;
+    }
+    return result;
 }
 
 BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, double now) {
@@ -369,7 +381,7 @@ BackendResult WindowRenderer::restore(ClientWindow& window, double now) {
     }
     bool layerRestored = true;
     if (window.isLayerSet) {
-        layerRestored = setLayer(window, kCGNormalWindowLevelKey).succeeded();
+        layerRestored = restoreLayer(window).succeeded();
         if (layerRestored) window.isLayerSet = false;
     }
     return {transformReset && shown && geometry.succeeded() && layerRestored ? BackendCode::ok : BackendCode::failed};

@@ -27,6 +27,7 @@ public:
 private:
     BackendResult move(ClientWindow& window, int x, int y);
     BackendResult setLayer(ClientWindow& window, int layer);
+    BackendResult restoreLayer(ClientWindow& window);
     BackendResult resetTransform(ClientWindow& window);
 
     WindowBackend& m_ax;

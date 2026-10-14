@@ -28,6 +28,9 @@ public:
     virtual bool nativeMovePreservesLayer() const { return false; }
     virtual BackendResult resize(AXUIElementRef element, uint32_t wid, float width, float height) = 0;
     virtual BackendResult setLayer(AXUIElementRef element, uint32_t wid, int layer) = 0;
+    virtual BackendResult setPinnedLayer(AXUIElementRef element, uint32_t wid, bool alwaysOnTop) {
+        return setLayer(element, wid, alwaysOnTop ? kCGPopUpMenuWindowLevelKey : kCGNormalWindowLevelKey);
+    }
     virtual BackendResult setHidden(AXUIElementRef element, uint32_t wid, bool hidden) = 0;
     virtual BackendResult resetTransform(uint32_t) { return {BackendCode::ok}; }
     virtual bool usesTransforms() const { return false; }

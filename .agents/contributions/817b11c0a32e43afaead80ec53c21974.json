@@ -1,0 +1,25 @@
+{
+  "assistance": "ai",
+  "base": "1f4e637a8ed2eed2424c8d8a88076038e9eba5d9",
+  "id": "817b11c0a32e43afaead80ec53c21974",
+  "paths": [
+    "integrations/yabai/absolute-transform.patch",
+    "integrations/yabai/minfwm_transform.m",
+    "src/daemon/WindowBackend.hpp",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/WindowPool.hpp",
+    "src/daemon/WindowRenderer.hpp",
+    "src/daemon/WindowRenderer.mm",
+    "src/daemon/YabaiSA.hpp",
+    "src/daemon/YabaiSA.mm",
+    "src/daemon/main.mm",
+    "tests/TransformPayloadTests.m",
+    "tools/build_yabai_sa.py"
+  ],
+  "schema_version": 1,
+  "task": "TASK-PINNED-WINDOW-ALWAYS-ON-TOP",
+  "tools": [
+    "codex"
+  ]
+}

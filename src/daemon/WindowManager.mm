@@ -37,13 +37,13 @@ bool readAXSize(AXUIElementRef element, CGSize& size) {
 
 } // namespace
 
-bool WindowManager::initialize() {
+bool WindowManager::initialize(bool allowAdministratorLoad) {
     if (m_initialized) return true;
 
     std::cout << "WindowManager: Initializing public AX backend" << std::endl;
     ConfigManager::instance().load();
     m_displays.clear();
-    const bool yabaiAvailable = m_yabaiBackend.initialize();
+    const bool yabaiAvailable = m_yabaiBackend.initialize(allowAdministratorLoad);
 
     for (NSScreen* screen in [NSScreen screens]) {
         NSDictionary* description = [screen deviceDescription];
@@ -78,6 +78,8 @@ bool WindowManager::initialize() {
         std::cout << "WindowManager: Yabai SA backend enabled" << std::endl;
         std::cout << "WindowManager: absolute transforms "
                   << (m_yabaiBackend.usesTransforms() ? "enabled" : "unavailable") << std::endl;
+        std::cout << "WindowManager: pinned always-on-top "
+                  << (m_yabaiBackend.supportsPinnedLevels() ? "enabled" : "unavailable") << std::endl;
     } else {
         std::cout << "WindowManager: Yabai SA unavailable; using AX fallback" << std::endl;
     }
@@ -313,8 +315,12 @@ void WindowManager::updateWindows(int64_t displayId) {
     if (m_overviewExit) applyOverviewExit();
     // Focus queries cross into another process; they must not run on every
     // presentation frame (especially on high-refresh-rate displays).
+    bool focusChanged = false;
     if (now >= m_focusRefreshTime) {
         m_focusRefreshTime = now + 0.25;
+        CFRef<AXUIElementRef> previousFocus = m_focusedWindow
+            ? CFRef<AXUIElementRef>::retain(m_focusedWindow.get())
+            : CFRef<AXUIElementRef>{};
         CFRef<AXUIElementRef> systemWide = CFRef<AXUIElementRef>::adopt(AXUIElementCreateSystemWide());
         CFRef<CFTypeRef> focusedApplication;
         CFRef<CFTypeRef> focusedValue;
@@ -332,6 +338,11 @@ void WindowManager::updateWindows(int64_t displayId) {
                 }
             }
         }
+        if (previousFocus && m_focusedWindow) {
+            focusChanged = !CFEqual(previousFocus.get(), m_focusedWindow.get());
+        } else {
+            focusChanged = static_cast<bool>(previousFocus) != static_cast<bool>(m_focusedWindow);
+        }
     }
 
     const ConfigSnapshot config = ConfigManager::instance().snapshot();
@@ -347,7 +358,8 @@ void WindowManager::updateWindows(int64_t displayId) {
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref()) continue;
             if (window->pinned) {
-                if ((!window->pinnedAlwaysOnTop || *window->pinnedAlwaysOnTop != config.pinsAlwaysOnTop) &&
+                if ((focusChanged || !window->pinnedAlwaysOnTop ||
+                     *window->pinnedAlwaysOnTop != config.pinsAlwaysOnTop) &&
                     now >= window->pinLayerRetryTime) {
                     if (!m_renderer.setPinnedLayer(*window, config.pinsAlwaysOnTop).succeeded()) {
                         window->pinLayerRetryTime = now + 1.0;

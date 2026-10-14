@@ -28,6 +28,13 @@ static CGError SLSSetWindowSubLevel(int cid, uint32_t wid, int level) {
     if (fail_level) return kCGErrorFailure;
     current_level = level; return kCGErrorSuccess;
 }
+static CGError SLSSetWindowLevel(int cid, uint32_t wid, int level) {
+    if (fail_level) return kCGErrorFailure;
+    current_level = level; return kCGErrorSuccess;
+}
+static CGError SLSGetWindowLevel(int cid, uint32_t wid, int *level) {
+    *level = current_level; return kCGErrorSuccess;
+}
 static bool updates_disabled = false, fail_disable = false, fail_move = false;
 static int disable_calls = 0, enable_calls = 0;
 static bool fail_first_enable = false;
@@ -176,7 +183,7 @@ int main(void) {
         expect(scaledRequest(0x16, owner, 400, -100, 21, 250) == 0, "scaled crash fixture applies");
         minfwm_transforms[0].start_sec++;
         // Reap interval is monotonic; force the earlier test's owner check through the entry helper.
-        expect(minfwm_restore_entry(&minfwm_transforms[0]) && current.a == 1 && !minfwm_transforms[0].wid,
+        expect(minfwm_restore_entry(&minfwm_transforms[0], false) && current.a == 1 && !minfwm_transforms[0].wid,
                "scaled owner recovery uses the same idempotent cleanup");
 
     }

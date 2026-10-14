@@ -6,13 +6,18 @@
 #include <math.h>
 extern CGError SLSDisableUpdate(int cid);
 extern CGError SLSReenableUpdate(int cid);
+extern CGError SLSSetWindowLevel(int cid, uint32_t wid, int level);
+extern CGError SLSGetWindowLevel(int cid, uint32_t wid, int *level);
 
 struct minfwm_transform_entry {
     uint32_t wid;
     pid_t owner;
     uint64_t start_sec, start_usec;
     bool transform_restored;
+    bool has_transform;
+    bool pinned;
     int original_level;
+    int original_window_level;
 };
 static struct minfwm_transform_entry minfwm_transforms[4096];
 
@@ -38,14 +43,19 @@ static int minfwm_window_level(uint32_t wid)
     return level;
 }
 
-static bool minfwm_restore_entry(struct minfwm_transform_entry *entry)
+static bool minfwm_get_window_level(uint32_t wid, int *level)
+{
+    return SLSGetWindowLevel(SLSMainConnectionID(), wid, level) == kCGErrorSuccess;
+}
+
+static bool minfwm_restore_entry(struct minfwm_transform_entry *entry, bool process_exit)
 {
     int cid = SLSMainConnectionID(), window_owner = 0;
     if (SLSGetWindowOwner(cid, entry->wid, &window_owner) != kCGErrorSuccess) {
         entry->wid = 0; // Destroyed windows need no restoration.
         return true;
     }
-    if (!entry->transform_restored) {
+    if (entry->has_transform && !entry->transform_restored) {
         // A native drag/resize can change the frame while its presentation is
         // transformed. Replaying the first translation leaves a persistent
         // offset that survives daemon/Dock exit and breaks native dragging.
@@ -58,8 +68,15 @@ static bool minfwm_restore_entry(struct minfwm_transform_entry *entry)
     }
     // Layer cleanup must not reapply a transform on every watchdog retry.
     bool restored = true;
-    restored = (SLSSetWindowSubLevel(cid, entry->wid, entry->original_level) == kCGErrorSuccess) && restored;
-    if (restored) entry->wid = 0;
+    if (entry->has_transform) {
+        restored = (SLSSetWindowSubLevel(cid, entry->wid, entry->original_level) == kCGErrorSuccess) && restored;
+        if (restored) entry->has_transform = false;
+    }
+    if (process_exit && entry->pinned) {
+        restored = (SLSSetWindowLevel(cid, entry->wid, entry->original_window_level) == kCGErrorSuccess) && restored;
+        if (restored) entry->pinned = false;
+    }
+    if (restored && !entry->has_transform && !entry->pinned) entry->wid = 0;
     return restored;
 }
 
@@ -77,7 +94,7 @@ static void minfwm_reap_transforms(void)
         uint64_t sec = 0, usec = 0;
         if (!minfwm_process_identity(entry->owner, &sec, &usec) ||
             sec != entry->start_sec || usec != entry->start_usec) {
-            (void)minfwm_restore_entry(entry); // Retry on the next watchdog pass if it fails.
+            (void)minfwm_restore_entry(entry, true); // Retry on the next watchdog pass if it fails.
         }
     }
 }
@@ -85,12 +102,14 @@ static void minfwm_reap_transforms(void)
 static bool minfwm_handle_transform(int sockfd, const char *message, int length)
 {
     if (length < 1 || ((uint8_t)message[0] != 0x14 && (uint8_t)message[0] != 0x15 &&
-        (uint8_t)message[0] != 0x16 && (uint8_t)message[0] != 0x17)) return false;
+        (uint8_t)message[0] != 0x16 && (uint8_t)message[0] != 0x17 &&
+        (uint8_t)message[0] != 0x18)) return false;
     uint8_t ack = 1;
+    bool pin_command = (uint8_t)message[0] == 0x18;
     bool overview = (uint8_t)message[0] == 0x16;
     bool native = (uint8_t)message[0] == 0x17;
     bool apply = (uint8_t)message[0] != 0x15;
-    if (length != (overview ? 21 : apply ? 17 : 9)) goto respond;
+    if (length != (pin_command ? 10 : overview ? 21 : apply ? 17 : 9)) goto respond;
     uint32_t wid, owner;
     memcpy(&wid, message + 1, 4);
     memcpy(&owner, message + 5, 4);
@@ -104,8 +123,47 @@ static bool minfwm_handle_transform(int sockfd, const char *message, int length)
         if (!minfwm_transforms[i].wid && !free_entry) free_entry = &minfwm_transforms[i];
     }
     if (entry && entry->owner != peer) goto respond;
+    if (pin_command) {
+        if (message[9] > 1) goto respond;
+        bool pin = message[9] == 1;
+        bool created_entry = false;
+        int original_window_level = 0;
+        if (pin && (!entry || !entry->pinned) && !minfwm_get_window_level(wid, &original_window_level)) goto respond;
+        if (pin && !entry) {
+            if (!free_entry) goto respond;
+            uint64_t sec = 0, usec = 0;
+            if (!minfwm_process_identity(peer, &sec, &usec)) goto respond;
+            entry = free_entry;
+            *entry = (struct minfwm_transform_entry){0};
+            entry->wid = wid;
+            entry->owner = peer;
+            entry->start_sec = sec;
+            entry->start_usec = usec;
+            entry->transform_restored = true;
+            entry->original_window_level = original_window_level;
+            created_entry = true;
+        }
+        if (!entry) { ack = 0; goto respond; }
+        int cid = SLSMainConnectionID();
+        if (pin) {
+            ack = SLSSetWindowLevel(cid, wid, CGWindowLevelForKey(kCGPopUpMenuWindowLevelKey)) == kCGErrorSuccess ? 0 : 1;
+            if (!ack) {
+                if (!entry->pinned) entry->original_window_level = original_window_level;
+                entry->pinned = true;
+            } else if (created_entry) {
+                entry->wid = 0;
+            }
+        } else {
+            ack = !entry->pinned || SLSSetWindowLevel(cid, wid, entry->original_window_level) == kCGErrorSuccess ? 0 : 1;
+            if (!ack) {
+                entry->pinned = false;
+                if (!entry->has_transform) entry->wid = 0;
+            }
+        }
+        goto respond;
+    }
     if (!apply) {
-        ack = !entry || minfwm_restore_entry(entry) ? 0 : 1;
+        ack = !entry || minfwm_restore_entry(entry, false) ? 0 : 1;
         goto respond;
     }
     int32_t x, y;
@@ -159,8 +217,10 @@ static bool minfwm_handle_transform(int sockfd, const char *message, int length)
             !CGAffineTransformEqualToTransform(original,
                 CGAffineTransformMakeTranslation(-native_frame.origin.x, -native_frame.origin.y))) goto respond;
         entry = free_entry;
-        *entry = (struct minfwm_transform_entry){wid, peer, sec, usec, false, minfwm_window_level(wid)};
+        *entry = (struct minfwm_transform_entry){wid, peer, sec, usec, false, true, false,
+            minfwm_window_level(wid), minfwm_window_level(wid)};
     }
+    entry->has_transform = true;
     entry->transform_restored = false;
     // WindowServer expects the inverse presentation transform: native local
     // coordinates = (screen coordinates - presentation origin) / scale.

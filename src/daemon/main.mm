@@ -46,7 +46,7 @@ int main(int argc, const char * argv[]) {
         }
 
         auto& wm = minfwm::WindowManager::instance();
-        if (!wm.initialize()) {
+        if (!wm.initialize(true)) {
             std::cerr << "minfwmd: failed to initialize display state" << std::endl;
             server.stop();
             return 1;
