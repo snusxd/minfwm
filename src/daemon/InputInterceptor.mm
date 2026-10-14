@@ -2,6 +2,8 @@
 #import "WindowManager.hpp"
 #import "ConfigManager.hpp"
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
+#import <dispatch/dispatch.h>
 #import <iostream>
 #include <cmath>
 #include <algorithm>
@@ -143,10 +145,32 @@ bool InputInterceptor::start() {
         }
     }
     if (!m_scrollEventTap) std::cerr << "InputInterceptor: scroll interception unavailable" << std::endl;
+
+    m_trackpadCallbackEnabled = std::make_shared<std::atomic_bool>(true);
+    const auto callbackEnabled = m_trackpadCallbackEnabled;
+    m_trackpadInput.start([this, callbackEnabled](bool active, core::Point delta) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!callbackEnabled->load(std::memory_order_acquire)) return;
+            handleTrackpadPan(active, delta);
+        });
+    });
     return true;
 }
 
 void InputInterceptor::stop() {
+    if (m_trackpadCallbackEnabled) {
+        m_trackpadCallbackEnabled->store(false, std::memory_order_release);
+        m_trackpadCallbackEnabled.reset();
+    }
+    m_trackpadInput.stop();
+    m_trackpadPanDisplayId.reset();
+    m_trackpadGestureActive = false;
+    m_trackpadPanVelocity = {};
+    if (m_trackpadMomentumTimer) {
+        [m_trackpadMomentumTimer invalidate];
+        [m_trackpadMomentumTimer release];
+        m_trackpadMomentumTimer = nil;
+    }
     m_panGesture.reset();
     updateCursor(false, false, CGPointZero);
     if (m_cursorOverlay) {
@@ -175,6 +199,106 @@ void InputInterceptor::stop() {
         }
         m_eventTap.reset();
     }
+}
+
+void InputInterceptor::handleTrackpadPan(bool active, core::Point delta) {
+    auto& wm = WindowManager::instance();
+    if (!active) {
+        if (!m_trackpadGestureActive) return;
+        m_trackpadGestureActive = false;
+        const double now = CACurrentMediaTime();
+        const double idle = std::max(0.0, now - m_trackpadLastMovementTime);
+        constexpr double kDeceleration = 5.0;
+        const float idleDecay = static_cast<float>(std::exp(-kDeceleration * idle));
+        m_trackpadPanVelocity.x *= idleDecay;
+        m_trackpadPanVelocity.y *= idleDecay;
+        if (std::hypot(m_trackpadPanVelocity.x, m_trackpadPanVelocity.y) < 12.0f) {
+            finishTrackpadPan();
+            return;
+        }
+        m_trackpadMomentumLastTick = now;
+        m_trackpadMomentumTimer = [[NSTimer timerWithTimeInterval:1.0 / 60.0 repeats:YES block:^(NSTimer*) {
+            advanceTrackpadMomentum();
+        }] retain];
+        [[NSRunLoop mainRunLoop] addTimer:m_trackpadMomentumTimer forMode:NSRunLoopCommonModes];
+        return;
+    }
+
+    if (!m_trackpadGestureActive) {
+        if (m_trackpadMomentumTimer) {
+            [m_trackpadMomentumTimer invalidate];
+            [m_trackpadMomentumTimer release];
+            m_trackpadMomentumTimer = nil;
+        }
+        m_trackpadPanDisplayId.reset();
+        m_trackpadPanVelocity = {};
+        m_trackpadGestureActive = true;
+        m_trackpadLastEventTime = CACurrentMediaTime();
+        m_trackpadLastMovementTime = m_trackpadLastEventTime;
+    }
+
+    if (!m_trackpadPanDisplayId) {
+        CGEventRef pointerEvent = CGEventCreate(nullptr);
+        const CGPoint pointer = pointerEvent ? CGEventGetLocation(pointerEvent) : CGPointZero;
+        if (pointerEvent) CFRelease(pointerEvent);
+        m_trackpadPanDisplayId = wm.displayForPoint(
+            {static_cast<float>(pointer.x), static_cast<float>(pointer.y)}).id();
+        wm.setPanning(true);
+    }
+
+    const double now = CACurrentMediaTime();
+    const double elapsed = now - m_trackpadLastEventTime;
+    m_trackpadLastEventTime = now;
+    if (delta.x == 0.0f && delta.y == 0.0f) return;
+    if (elapsed > 0.001 && elapsed < 0.1) {
+        const float instantX = static_cast<float>(delta.x / elapsed);
+        const float instantY = static_cast<float>(delta.y / elapsed);
+        m_trackpadPanVelocity.x = instantX * 0.35f + m_trackpadPanVelocity.x * 0.65f;
+        m_trackpadPanVelocity.y = instantY * 0.35f + m_trackpadPanVelocity.y * 0.65f;
+    }
+    m_trackpadLastMovementTime = now;
+    applyTrackpadPanDelta(delta);
+}
+
+void InputInterceptor::applyTrackpadPanDelta(core::Point delta) {
+    if (!m_trackpadPanDisplayId || (delta.x == 0.0f && delta.y == 0.0f)) return;
+    auto& wm = WindowManager::instance();
+    if (wm.overviewReturning()) return;
+    if (Display* display = wm.displayById(*m_trackpadPanDisplayId)) {
+        display->state().cancelCameraAnimation();
+        const ConfigSnapshot config = ConfigManager::instance().snapshot();
+        const float deltaX = config.trackpadInvertX ? -delta.x : delta.x;
+        const float deltaY = config.trackpadInvertY ? -delta.y : delta.y;
+        display->camera().move(deltaX * config.trackpadMovementMultiplier / display->state().scale(),
+                               deltaY * config.trackpadMovementMultiplier / display->state().scale());
+    }
+}
+
+void InputInterceptor::advanceTrackpadMomentum() {
+    const double now = CACurrentMediaTime();
+    const double elapsed = std::clamp(now - m_trackpadMomentumLastTick, 0.0, 0.05);
+    m_trackpadMomentumLastTick = now;
+    if (elapsed <= 0.0) return;
+
+    applyTrackpadPanDelta({static_cast<float>(m_trackpadPanVelocity.x * elapsed),
+                           static_cast<float>(m_trackpadPanVelocity.y * elapsed)});
+    constexpr double kDeceleration = 5.0;
+    const float decay = static_cast<float>(std::exp(-kDeceleration * elapsed));
+    m_trackpadPanVelocity.x *= decay;
+    m_trackpadPanVelocity.y *= decay;
+    if (std::hypot(m_trackpadPanVelocity.x, m_trackpadPanVelocity.y) < 12.0f) finishTrackpadPan();
+}
+
+void InputInterceptor::finishTrackpadPan() {
+    if (m_trackpadMomentumTimer) {
+        [m_trackpadMomentumTimer invalidate];
+        [m_trackpadMomentumTimer release];
+        m_trackpadMomentumTimer = nil;
+    }
+    m_trackpadGestureActive = false;
+    m_trackpadPanDisplayId.reset();
+    m_trackpadPanVelocity = {};
+    WindowManager::instance().setPanning(false);
 }
 
 void InputInterceptor::updateCursor(bool superHeld, bool dragging, CGPoint pointer) {

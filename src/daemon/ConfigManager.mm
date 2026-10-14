@@ -141,6 +141,30 @@ bool readMouseMovementMultiplier(const TomlTable& root, const TomlTable* table,
     return true;
 }
 
+bool readTrackpadMovementMultiplier(const TomlTable& root, const TomlTable* table,
+                                    float& out, std::string& error) {
+    const TomlNode* node = get(root, table, "trackpad-movement-multiplier", error);
+    if (!error.empty()) return false;
+    if (!node) return true;
+
+    double value = 0.0;
+    if (const auto floating = node->value<double>()) {
+        value = *floating;
+    } else if (const auto integer = node->value<std::int64_t>()) {
+        value = static_cast<double>(*integer);
+    } else {
+        error = "trackpad-movement-multiplier must be a finite non-negative number";
+        return false;
+    }
+
+    if (!std::isfinite(value) || value < 0.0 || value > std::numeric_limits<float>::max()) {
+        error = "trackpad-movement-multiplier must be a finite non-negative number representable as float";
+        return false;
+    }
+    out = static_cast<float>(value);
+    return true;
+}
+
 bool readWhitelist(const TomlTable& root, const TomlTable* table,
                    std::vector<std::string>& out, std::string& error) {
     const TomlNode* node = get(root, table, "whitelist", error);
@@ -275,7 +299,8 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
 
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
     if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center", "rewind-on-focus"}, error)) return false;
-    if (camera && !rejectUnknownKeys(*camera, "camera", {"mouse-movement-multiplier"}, error)) return false;
+    if (camera && !rejectUnknownKeys(*camera, "camera", {"mouse-movement-multiplier", "trackpad-movement-multiplier",
+                                                           "trackpad-invert-x", "trackpad-invert-y"}, error)) return false;
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
                                        {"super", "center-camera-to-focus", "center-focus-to-camera",
@@ -287,6 +312,9 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readBool(root, zoom, "rewind-on-focus", candidate.rewindOnFocus, error) ||
         !readString(root, zoom, "zoomed-esc-center", candidate.zoomedEscCenter, error) ||
         !readMouseMovementMultiplier(root, camera, candidate.mouseMovementMultiplier, error) ||
+        !readTrackpadMovementMultiplier(root, camera, candidate.trackpadMovementMultiplier, error) ||
+        !readBool(root, camera, "trackpad-invert-x", candidate.trackpadInvertX, error) ||
+        !readBool(root, camera, "trackpad-invert-y", candidate.trackpadInvertY, error) ||
         !readString(root, display, "multi-display-mode", candidate.multiDisplayMode, error) ||
         !readOverscan(root, window, candidate.overscanBufferPx, error) ||
         !readWhitelist(root, window, candidate.whitelist, error) ||

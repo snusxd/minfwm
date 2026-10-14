@@ -18,6 +18,9 @@ zoomed-esc-center = "screen"
 
 [camera]
 mouse-movement-multiplier = 1.0
+trackpad-movement-multiplier = 1.0
+trackpad-invert-x = false
+trackpad-invert-y = false
 
 [display]
 multi-display-mode = "isolated"
@@ -41,6 +44,9 @@ bookmarks-goto = ["Super", "Shift"]
 | `rewind-on-focus` | `true` | Automatically center the camera on a window when its application gains focus. When `false`, windows remain interactive while zoomed and app focus does not recenter the camera. |
 | `zoomed-esc-center` | `"screen"` | Escape anchor: `screen`, `mouse`, or `focus`. |
 | `camera.mouse-movement-multiplier` | `1.0` | Scale camera movement while dragging: `2.0` moves twice as far as the cursor; `0.5` moves half as far. Must be finite and non-negative. |
+| `camera.trackpad-movement-multiplier` | `1.0` | Scale camera movement while panning with three fingers on the trackpad. Must be finite and non-negative. |
+| `camera.trackpad-invert-x` | `false` | Reverse horizontal camera movement for three-finger trackpad panning. |
+| `camera.trackpad-invert-y` | `false` | Reverse vertical camera movement for three-finger trackpad panning. |
 | `multi-display-mode` | `"isolated"` | Camera coordination policy for displays. |
 | `keybinds.super` | `["Cmd", "Alt"]` | `Super` modifier chord for pan, zoom, and pin. Supported values: `Cmd`, `Alt`, `Shift`, `Ctrl`. |
 | `keybinds.center-camera-to-focus` | `["Super", "F"]` | Move the camera to center the focused window. |

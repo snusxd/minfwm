@@ -76,6 +76,7 @@ add_library(minfwm_daemon_runtime STATIC
     src/daemon/WindowManager.mm
     src/daemon/AXObserver.mm
     src/daemon/InputInterceptor.mm
+    src/daemon/TrackpadInput.mm
     src/daemon/IPCServer.mm
     src/daemon/YabaiSA.mm
     src/daemon/ConfigManager.mm

@@ -4,10 +4,14 @@
 #import <CoreGraphics/CoreGraphics.h>
 #include "CFRAII.hpp"
 #include "../core/PanGesture.hpp"
+#include "TrackpadInput.hpp"
 #include <bitset>
+#include <atomic>
+#include <memory>
 
 @class NSPanel;
 @class NSImageView;
+@class NSTimer;
 
 namespace minfwm {
 
@@ -23,12 +27,25 @@ private:
     static CGEventRef eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
     static CGEventRef scrollTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
     void updateCursor(bool superHeld, bool dragging, CGPoint pointer);
+    void handleTrackpadPan(bool active, core::Point delta);
+    void applyTrackpadPanDelta(core::Point delta);
+    void advanceTrackpadMomentum();
+    void finishTrackpadPan();
     
     CFRef<CFMachPortRef> m_eventTap;
     CFRef<CFRunLoopSourceRef> m_runLoopSource;
     CFRef<CFMachPortRef> m_scrollEventTap;
     CFRef<CFRunLoopSourceRef> m_scrollRunLoopSource;
     core::PanGesture m_panGesture;
+    TrackpadInput m_trackpadInput;
+    std::shared_ptr<std::atomic_bool> m_trackpadCallbackEnabled;
+    std::optional<std::int64_t> m_trackpadPanDisplayId;
+    core::Point m_trackpadPanVelocity{};
+    double m_trackpadLastEventTime = 0.0;
+    double m_trackpadLastMovementTime = 0.0;
+    double m_trackpadMomentumLastTick = 0.0;
+    NSTimer* m_trackpadMomentumTimer = nil;
+    bool m_trackpadGestureActive = false;
     uint64_t m_overviewButtons = 0;
     std::bitset<256> m_overviewKeys;
     bool m_zoomScrollCaptured = false;

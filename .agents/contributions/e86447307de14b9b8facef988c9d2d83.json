@@ -1,0 +1,22 @@
+{
+  "assistance": "ai",
+  "base": "f09337f3cd65e05d3de43397cd8c1c17a71517ff",
+  "id": "e86447307de14b9b8facef988c9d2d83",
+  "paths": [
+    "CMakeLists.txt",
+    "config/minfwm.toml.example",
+    "docs/wiki/Configuration.md",
+    "docs/wiki/Getting-Started.md",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.hpp",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/TrackpadInput.hpp",
+    "src/daemon/TrackpadInput.mm"
+  ],
+  "schema_version": 1,
+  "task": "trackpad-pan",
+  "tools": [
+    "codex"
+  ]
+}

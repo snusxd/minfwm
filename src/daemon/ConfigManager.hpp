@@ -13,6 +13,9 @@ struct ConfigSnapshot {
     std::string zoomedEscCenter = "screen";
     std::string multiDisplayMode = "isolated";
     float mouseMovementMultiplier = 1.0f;
+    float trackpadMovementMultiplier = 1.0f;
+    bool trackpadInvertX = false;
+    bool trackpadInvertY = false;
     float overscanBufferPx = 500.0f;
     std::vector<std::string> whitelist = {"Terminal", "Music"};
     std::string spawnBehavior = "center";
