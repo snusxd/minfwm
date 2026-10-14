@@ -1,0 +1,14 @@
+{
+  "assistance": "ai",
+  "base": "ae6cd77b723ce362359d5751f78ddb144ae5eeeb",
+  "id": "65a5bc13c16f4853b3187b60eafb2ffd",
+  "paths": [
+    "src/daemon/InputInterceptor.hpp",
+    "src/daemon/InputInterceptor.mm"
+  ],
+  "schema_version": 1,
+  "task": "trackpad-three-finger-scroll",
+  "tools": [
+    "codex"
+  ]
+}

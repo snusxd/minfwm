@@ -149,6 +149,7 @@ bool InputInterceptor::start() {
     m_trackpadCallbackEnabled = std::make_shared<std::atomic_bool>(true);
     const auto callbackEnabled = m_trackpadCallbackEnabled;
     m_trackpadInput.start([this, callbackEnabled](bool active, core::Point delta) {
+        m_trackpadTouchActive.store(active, std::memory_order_release);
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!callbackEnabled->load(std::memory_order_acquire)) return;
             handleTrackpadPan(active, delta);
@@ -163,6 +164,8 @@ void InputInterceptor::stop() {
         m_trackpadCallbackEnabled.reset();
     }
     m_trackpadInput.stop();
+    m_trackpadTouchActive.store(false, std::memory_order_release);
+    m_trackpadScrollCaptured = false;
     m_trackpadPanDisplayId.reset();
     m_trackpadGestureActive = false;
     m_trackpadPanVelocity = {};
@@ -398,6 +401,7 @@ CGEventRef InputInterceptor::scrollTapCallback(CGEventTapProxy proxy, CGEventTyp
     if (!interceptor) return event;
     if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
         interceptor->m_zoomScrollCaptured = false;
+        interceptor->m_trackpadScrollCaptured = false;
         WindowManager::instance().exitOverview({}, false);
         if (interceptor->m_scrollEventTap) CGEventTapEnable(interceptor->m_scrollEventTap.get(), true);
         return event;
@@ -441,6 +445,21 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (type == kCGEventScrollWheel) {
         const auto phase = CGEventGetIntegerValueField(event, kCGScrollWheelEventScrollPhase);
         const auto momentum = CGEventGetIntegerValueField(event, kCGScrollWheelEventMomentumPhase);
+        if (interceptor->m_trackpadTouchActive.load(std::memory_order_acquire)) {
+            interceptor->m_trackpadScrollCaptured = true;
+            return nullptr;
+        }
+        if (interceptor->m_trackpadScrollCaptured) {
+            if (momentum != 0) {
+                if (momentum == kCGMomentumScrollPhaseEnd) interceptor->m_trackpadScrollCaptured = false;
+                return nullptr;
+            }
+            if (phase == kCGScrollPhaseBegan || phase == 0) {
+                interceptor->m_trackpadScrollCaptured = false;
+            } else {
+                return nullptr;
+            }
+        }
         const bool continuous = CGEventGetIntegerValueField(event, kCGScrollWheelEventIsContinuous) != 0;
         const float delta = continuous ? CGEventGetDoubleValueField(event, kCGScrollWheelEventPointDeltaAxis1) :
             CGEventGetDoubleValueField(event, kCGScrollWheelEventDeltaAxis1) * 8;

@@ -39,6 +39,8 @@ private:
     core::PanGesture m_panGesture;
     TrackpadInput m_trackpadInput;
     std::shared_ptr<std::atomic_bool> m_trackpadCallbackEnabled;
+    std::atomic_bool m_trackpadTouchActive{false};
+    bool m_trackpadScrollCaptured = false;
     std::optional<std::int64_t> m_trackpadPanDisplayId;
     core::Point m_trackpadPanVelocity{};
     double m_trackpadLastEventTime = 0.0;
