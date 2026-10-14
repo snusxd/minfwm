@@ -41,5 +41,6 @@ always-on-top = true
 super = ["Cmd", "Alt"]
 center-camera-to-focus = ["Super", "F"]
 center-focus-to-camera = ["Super", "S"]
+drag-everywhere = ["Super", "Ctrl"]
 bookmarks-add = ["Super"]
 bookmarks-goto = ["Super", "Shift"]

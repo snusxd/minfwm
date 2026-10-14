@@ -252,7 +252,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
                                        {"super", "center-camera-to-focus", "center-focus-to-camera",
-                                        "bookmarks-add", "bookmarks-goto"}, error)) return false;
+                                        "drag-everywhere", "bookmarks-add", "bookmarks-goto"}, error)) return false;
     if (pins && !rejectUnknownKeys(*pins, "pins", {"always-on-top"}, error)) return false;
 
     if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
@@ -267,6 +267,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readSuperKey(keybinds, candidate.superModifiers, error) ||
         !readShortcut(keybinds, "center-camera-to-focus", candidate.centerCameraToFocus, error) ||
         !readShortcut(keybinds, "center-focus-to-camera", candidate.centerFocusToCamera, error) ||
+        !readBookmarkModifiers(keybinds, "drag-everywhere", candidate.dragEverywhereModifiers, error) ||
         !readBookmarkModifiers(keybinds, "bookmarks-add", candidate.bookmarksAddModifiers, error) ||
         !readBookmarkModifiers(keybinds, "bookmarks-goto", candidate.bookmarksGotoModifiers, error)) {
         return false;

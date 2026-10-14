@@ -666,6 +666,32 @@ void WindowManager::flushNativeInteractionForPan() {
     m_nativeCommitTime = 0;
 }
 
+bool WindowManager::beginDragEverywhere(core::Point pointer) {
+    if (!m_initialized || overviewReturning()) return false;
+    auto window = windowAtPoint(pointer);
+    if (!window || !window->virtualCoordinatesInitialized || window->pinned || window->isHidden ||
+        window->applicationSuspended || window->needsGeometryRestore) return false;
+    m_draggedWindow = std::move(window);
+    m_draggedWindowDisplayId = displayForWindow(m_draggedWindow->ref()).id();
+    m_draggedWindow->positionAnimation.reset();
+    return true;
+}
+
+void WindowManager::dragWindowBy(core::Point delta) {
+    if (!m_draggedWindow || !std::isfinite(delta.x) || !std::isfinite(delta.y)) return;
+    Display* display = displayById(m_draggedWindowDisplayId);
+    if (!display) return;
+    const float scale = display->state().scale();
+    if (!std::isfinite(scale) || scale <= 0) return;
+    m_draggedWindow->virtualRect.x += delta.x / scale;
+    m_draggedWindow->virtualRect.y += delta.y / scale;
+}
+
+void WindowManager::endDragEverywhere() {
+    m_draggedWindow.reset();
+    m_draggedWindowDisplayId = 0;
+}
+
 void WindowManager::commitNativeInteraction() {
     for (auto& display : m_displays) {
         core::DisplayState observationState = display->state();

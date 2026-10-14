@@ -32,6 +32,7 @@ private:
     uint64_t m_overviewButtons = 0;
     std::bitset<256> m_overviewKeys;
     bool m_zoomScrollCaptured = false;
+    bool m_dragEverywhereActive = false;
     NSPanel* m_cursorOverlay = nil;
     NSImageView* m_cursorImageView = nil;
     bool m_backgroundCursorHidingEnabled = false;

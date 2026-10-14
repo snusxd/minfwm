@@ -72,6 +72,9 @@ public:
     void beginNativeInteraction(core::Point pointer);
     void endNativeInteraction();
     void flushNativeInteractionForPan();
+    bool beginDragEverywhere(core::Point pointer);
+    void dragWindowBy(core::Point delta);
+    void endDragEverywhere();
     bool requestOverviewZoom(core::Point pointer, float delta);
     bool overviewActive() const;
     bool overviewReturning() const;
@@ -110,6 +113,8 @@ private:
     double m_nativeCommitTime = 0;
     std::map<int64_t, core::Point> m_nativeCameras;
     std::vector<std::shared_ptr<ClientWindow>> m_nativeCandidates;
+    std::shared_ptr<ClientWindow> m_draggedWindow;
+    int64_t m_draggedWindowDisplayId = 0;
     struct ZoomRequest { int64_t displayId; core::Point anchor; float delta; };
     std::optional<ZoomRequest> m_zoomRequest;
     struct OverviewExit { core::Point pointer; bool selectWindow; };

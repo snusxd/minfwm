@@ -1,0 +1,20 @@
+{
+  "assistance": "ai",
+  "base": "a16c7619b6212a5072f7d77c51cda6b014d28b29",
+  "id": "a5f911bed64d43f19f66b3e8fbc6edcb",
+  "paths": [
+    "config/minfwm.toml.example",
+    "docs/wiki/Configuration.md",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.hpp",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-DRAG-EVERYWHERE",
+  "tools": [
+    "codex"
+  ]
+}

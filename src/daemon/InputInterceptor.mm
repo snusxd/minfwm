@@ -289,6 +289,8 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         interceptor->updateCursor(false, false, CGPointZero);
         WindowManager::instance().setPanning(false);
         WindowManager::instance().endNativeInteraction();
+        WindowManager::instance().endDragEverywhere();
+        interceptor->m_dragEverywhereActive = false;
         const CGPoint pointer = event ? CGEventGetLocation(event) : CGPointZero;
         WindowManager::instance().exitOverview({static_cast<float>(pointer.x), static_cast<float>(pointer.y)}, false);
         if (interceptor->m_eventTap) {
@@ -306,6 +308,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         type == kCGEventKeyDown;
     const std::vector<std::string> superModifiers = usesSuperKey ?
         ConfigManager::instance().snapshot().superModifiers : std::vector<std::string>{};
+    const auto dragEverywhereModifiers = ConfigManager::instance().snapshot().dragEverywhereModifiers;
     const CGEventFlags currentFlags = CGEventGetFlags(event);
     const bool zoomModifiers = usesSuperKey && superHeld(currentFlags, superModifiers);
     const CGPoint location = CGEventGetLocation(event);
@@ -354,6 +357,31 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     const bool mouseDown = type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown || type == kCGEventOtherMouseDown;
     const bool mouseUp = type == kCGEventLeftMouseUp || type == kCGEventRightMouseUp || type == kCGEventOtherMouseUp;
     const bool mouseDrag = type == kCGEventLeftMouseDragged || type == kCGEventRightMouseDragged || type == kCGEventOtherMouseDragged;
+
+    if (type == kCGEventLeftMouseDown && matchesModifierChord(currentFlags, dragEverywhereModifiers,
+                                                               superModifiers) &&
+        wm.beginDragEverywhere(pointer)) {
+        interceptor->m_dragEverywhereActive = true;
+        interceptor->updateCursor(zoomModifiers, true, location);
+        return nullptr;
+    }
+    if (interceptor->m_dragEverywhereActive) {
+        if (type == kCGEventLeftMouseDragged) {
+            if (matchesModifierChord(currentFlags, dragEverywhereModifiers, superModifiers)) {
+                wm.dragWindowBy({static_cast<float>(CGEventGetIntegerValueField(event, kCGMouseEventDeltaX)),
+                                 static_cast<float>(CGEventGetIntegerValueField(event, kCGMouseEventDeltaY))});
+            }
+            interceptor->updateCursor(zoomModifiers, zoomModifiers &&
+                matchesModifierChord(currentFlags, dragEverywhereModifiers, superModifiers), location);
+            return nullptr;
+        }
+        if (type == kCGEventLeftMouseUp) {
+            wm.endDragEverywhere();
+            interceptor->m_dragEverywhereActive = false;
+            interceptor->updateCursor(zoomModifiers, false, location);
+            return nullptr;
+        }
+    }
     if (mouseDown || mouseUp || mouseDrag) {
         const auto button = CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber);
         const uint64_t mask = button >= 0 && button < 64 ? uint64_t{1} << button : 0;

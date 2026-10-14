@@ -23,6 +23,7 @@ multi-display-mode = "isolated"
 super = ["Cmd", "Alt"]
 center-camera-to-focus = ["Super", "F"]
 center-focus-to-camera = ["Super", "S"]
+drag-everywhere = ["Super", "Ctrl"]
 bookmarks-add = ["Super"]
 bookmarks-goto = ["Super", "Shift"]
 ```
@@ -40,6 +41,7 @@ bookmarks-goto = ["Super", "Shift"]
 | `keybinds.super` | `["Cmd", "Alt"]` | `Super` modifier chord for pan, zoom, and pin. Supported values: `Cmd`, `Alt`, `Shift`, `Ctrl`. |
 | `keybinds.center-camera-to-focus` | `["Super", "F"]` | Move the camera to center the focused window. |
 | `keybinds.center-focus-to-camera` | `["Super", "S"]` | Move the focused window to the center of the camera. |
+| `keybinds.drag-everywhere` | `["Super", "Ctrl"]` | Hold these modifiers and left-drag any point in a window to move it. |
 | `keybinds.bookmarks-add` | `["Super"]` | Save the current camera position in the bookmark selected by the pressed digit. |
 | `keybinds.bookmarks-goto` | `["Super", "Shift"]` | Return to the bookmark selected by the pressed digit. |
 
