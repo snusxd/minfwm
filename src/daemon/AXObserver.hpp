@@ -30,6 +30,7 @@ private:
     bool observeApplication(NSRunningApplication* app);
     bool observeWindow(AppObserver& app, AXUIElementRef element, bool center);
     bool refreshWindows(AppObserver& app, bool centerNewWindows);
+    bool focusActivatedApplication(pid_t pid);
     void unobserveApplication(pid_t pid);
     
     static void axCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void* refcon);
@@ -47,6 +48,7 @@ private:
     double m_nextReconcileTime = 0;
     double m_nextAXRefreshTime = 0;
     bool m_refreshPending = false;
+    std::optional<pid_t> m_pendingActivationPid;
 };
 
 } // namespace minfwm

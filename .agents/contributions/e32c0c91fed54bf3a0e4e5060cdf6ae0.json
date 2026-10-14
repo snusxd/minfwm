@@ -1,0 +1,14 @@
+{
+  "assistance": "ai",
+  "base": "92caff242acb254a03055233208ee472401ec6f9",
+  "id": "e32c0c91fed54bf3a0e4e5060cdf6ae0",
+  "paths": [
+    "src/daemon/AXObserver.hpp",
+    "src/daemon/AXObserver.mm"
+  ],
+  "schema_version": 1,
+  "task": "focus-activated-application-window",
+  "tools": [
+    "codex"
+  ]
+}

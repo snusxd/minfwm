@@ -36,10 +36,19 @@ bool AXObserver::start() {
     m_unhideObserver = [center addObserverForName:NSWorkspaceDidUnhideApplicationNotification object:nil
         queue:NSOperationQueue.mainQueue usingBlock:applicationVisibilityChanged];
     m_activateObserver = [center addObserverForName:NSWorkspaceDidActivateApplicationNotification object:nil
-        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*) {
+        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* note) {
             if (!m_started) return;
             m_refreshPending = true;
             m_nextReconcileTime = 0;
+            NSRunningApplication* app = note.userInfo[NSWorkspaceApplicationKey];
+            if (!app || app.activationPolicy != NSApplicationActivationPolicyRegular) return;
+            const pid_t pid = app.processIdentifier;
+            (void)this->observeApplication(app);
+            if (!this->focusActivatedApplication(pid)) {
+                m_pendingActivationPid = pid;
+            } else {
+                m_pendingActivationPid.reset();
+            }
         }];
 
     m_launchObserver = [center addObserverForName:NSWorkspaceDidLaunchApplicationNotification
@@ -84,6 +93,7 @@ void AXObserver::stop() {
     m_nextReconcileTime = 0;
     m_nextAXRefreshTime = 0;
     m_refreshPending = false;
+    m_pendingActivationPid.reset();
     if (m_launchObserver) {
         [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:m_launchObserver];
         m_launchObserver = nil;
@@ -185,7 +195,30 @@ void AXObserver::reconcileWindows() {
     m_refreshPending = false;
     m_nextAXRefreshTime = now + 2;
     for (auto& [pid, app] : m_appObservers) (void)refreshWindows(app, false);
+    if (m_pendingActivationPid && focusActivatedApplication(*m_pendingActivationPid)) {
+        m_pendingActivationPid.reset();
+    }
     wm.updateWindows();
+}
+
+bool AXObserver::focusActivatedApplication(pid_t pid) {
+    const auto application = m_appObservers.find(pid);
+    if (application == m_appObservers.end()) return false;
+
+    CFRef<CFTypeRef> focusedValue;
+    if (AXUIElementCopyAttributeValue(application->second.element.get(), kAXFocusedWindowAttribute,
+                                      focusedValue.put()) != kAXErrorSuccess ||
+        !focusedValue || CFGetTypeID(focusedValue.get()) != AXUIElementGetTypeID()) {
+        return false;
+    }
+
+    const auto focused = static_cast<AXUIElementRef>(focusedValue.get());
+    (void)observeWindow(application->second, focused, false);
+    auto& wm = WindowManager::instance();
+    const auto window = wm.findWindow(focused);
+    if (!window || !window->virtualCoordinatesInitialized) return false;
+    wm.centerCameraOnWindow(focused);
+    return true;
 }
 
 bool AXObserver::observeWindow(AppObserver& app, AXUIElementRef element, bool center) {
@@ -218,6 +251,7 @@ bool AXObserver::observeWindow(AppObserver& app, AXUIElementRef element, bool ce
 }
 
 void AXObserver::unobserveApplication(pid_t pid) {
+    if (m_pendingActivationPid == pid) m_pendingActivationPid.reset();
     auto it = m_appObservers.find(pid);
     if (it != m_appObservers.end()) {
         if (it->second.observer) {
