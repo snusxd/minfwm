@@ -43,3 +43,15 @@ ctest --test-dir build --output-on-failure
 - Preserve atomic config reload: invalid TOML keeps the last valid snapshot.
 - Treat Yabai SA as an optional, handshake-checked optimization; failed move/layer/ACK operations must reach AX fallback.
 - Do not commit credentials, machine-specific paths, SIP changes, or live socket files.
+
+## Active AI Workflow
+- Start each new chat with `docs/ai/state.md` and `docs/ai/context-map.md`; read research reports only for the assigned question.
+- Bootstrap a fresh checkout with `python3 tools/ai_bootstrap.py --tool codex` (use `claude`, `antigravity`, or `gemini` for the actual tool). This installs repo-local hooks and registers the worktree session; never silently overwrite an existing hook manager.
+- Check the profile with `python3 tools/ai_profile.py validate` and tasks with `python3 tools/ai_workflow.py validate`. `docs/ai/runbook.md` contains operational commands. `CLAUDE.md` is the existing symlink to this file; preserve it.
+- The coordinator must delegate every independent implementation/research task to a fresh subagent; this repository explicitly authorizes delegation. Give it one packet, owned paths, acceptance and selected skills, without the controller's full history where supported. Report unavailable host subagent tools rather than claiming delegation happened.
+- Use `python3 tools/ai_workflow.py packet TASK-ID --role worker` for bounded context. Only the coordinator changes canonical task state; workers return proposals/evidence. Require independent spec/quality review before integration.
+- Concurrent code writers use separate worktrees. Shared contracts, CMake, instructions and integration state have one writer. Read-only research can share a checkout with disjoint output paths. Do not stage another task's changes.
+- AgentFlow owns backlog/research/build/review/test/integrate/done. Readiness, claims, retries and cancellation are execution metadata. Focused checks precede AI review; required live macOS evidence blocks completion.
+- `.agents/workflow-stack.json` selects the five supplied skills plus narrow adapters. Load only the role/domain skills. Do not activate competing raw batch-refactor, acceptance-orchestrator or Superpowers lifecycles.
+- Register actual AI participants and use `tools/ai-commit --tools codex --task TASK-ID -- -m 'type: English summary'` for managed commits. Direct Git is only a declaration fallback; replacement amend must use the wrapper to preserve participants. Keep human coauthors and never invent official bot identities.
+- Run `python3 -m unittest discover -s tests -p 'test_ai_*.py'` for workflow tooling, plus relevant product checks. Bind evidence/review to the actual candidate; never mark unavailable manual checks or usage passed/measured.

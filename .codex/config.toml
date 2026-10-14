@@ -1,0 +1,6 @@
+# Project-local settings; the user's model and permission settings are inherited.
+[features]
+multi_agent = true
+
+[agents]
+max_threads = 3

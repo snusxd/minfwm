@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "contributors": {
+    "codex": {
+      "name": "Codex",
+      "email": "codex@ai.invalid",
+      "identity_source": "project-assigned; not an official provider identity"
+    },
+    "claude": {
+      "name": "Claude",
+      "email": "noreply@anthropic.com",
+      "identity_source": "provider-published identity"
+    },
+    "antigravity": {
+      "name": "Antigravity",
+      "email": "antigravity@ai.invalid",
+      "identity_source": "project-assigned; not an official provider identity"
+    },
+    "gemini": {
+      "name": "Gemini",
+      "email": "gemini@ai.invalid",
+      "identity_source": "project-assigned; not an official provider identity"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+name: AI attribution policy
+
+# This policy runs from the trusted base, never runs PR scripts, and has no write token.
+# It becomes enforceable after this workflow is present on the base branch.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  attribution:
+    name: Trusted AI attribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: trusted
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: candidate
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Check every proposed commit using trusted policy
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          range_base=$(git -C candidate merge-base "$BASE_SHA" "$HEAD_SHA")
+          python3 "$GITHUB_WORKSPACE/trusted/tools/ai_attribution.py" \
+            --repo "$GITHUB_WORKSPACE/candidate" \
+            --policy-root "$GITHUB_WORKSPACE/trusted" \
+            check-history --baseline "$range_base" --head "$HEAD_SHA"

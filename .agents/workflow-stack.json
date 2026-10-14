@@ -1,0 +1,420 @@
+{
+  "schema_version": 1,
+  "name": "minfwm-selected-workflow",
+  "canonical_stages": [
+    "backlog",
+    "research",
+    "build",
+    "review",
+    "test",
+    "integrate",
+    "done"
+  ],
+  "process_skills": [
+    "agentflow",
+    "agents-md",
+    "research-prompt",
+    "deep-research",
+    "plan-writing"
+  ],
+  "skills": [
+    {
+      "id": "agentflow",
+      "path": ".agents/skills/agentflow/SKILL.md",
+      "sha256": "c28cac9851b63f135d202d4a8a851994188e4bf8aa4a27df192560743d0bec2c",
+      "roles": [
+        "coordinator"
+      ],
+      "source": {
+        "kind": "user-provided-local",
+        "reference": "https://github.com/UrRhb/agentflow",
+        "upstream_identity": "unverified-local-version"
+      },
+      "source_sha256": "c28cac9851b63f135d202d4a8a851994188e4bf8aa4a27df192560743d0bec2c",
+      "license": {
+        "status": "not-supplied-unverified",
+        "declared": null
+      },
+      "adaptation": {
+        "path": ".agents/skills/agentflow/ADAPTATION.md",
+        "sha256": "b856b6e986c32e4259d64bc676095422ee367d214248facb51fc6793f3623688"
+      },
+      "helpers": []
+    },
+    {
+      "id": "agents-md",
+      "path": ".agents/skills/agents-md/SKILL.md",
+      "sha256": "bec0ca6a8a3d29b9922dab7cffd94f52925bbdb4495485afe242fee6b2d9540f",
+      "roles": [
+        "instructions"
+      ],
+      "source": {
+        "kind": "user-provided-local",
+        "reference": "https://agents.md/",
+        "upstream_identity": "unverified-local-version"
+      },
+      "source_sha256": "bec0ca6a8a3d29b9922dab7cffd94f52925bbdb4495485afe242fee6b2d9540f",
+      "license": {
+        "status": "not-supplied-unverified",
+        "declared": null
+      },
+      "adaptation": {
+        "path": ".agents/skills/agents-md/ADAPTATION.md",
+        "sha256": "7b8692fc296e07e456baacb2fa8c71b5fee828d8570c2e34524022e2e9acac68"
+      },
+      "helpers": []
+    },
+    {
+      "id": "research-prompt",
+      "path": ".agents/skills/research-prompt/SKILL.md",
+      "sha256": "f0f3fc1486422e3db20c0cd2bfd92e910c22ccde90f7cd01fc58f9895b10bb60",
+      "roles": [
+        "research_planner"
+      ],
+      "source": {
+        "kind": "user-provided-local",
+        "reference": "https://github.com/davidondrej/skills",
+        "upstream_identity": "unverified-local-version"
+      },
+      "source_sha256": "f0f3fc1486422e3db20c0cd2bfd92e910c22ccde90f7cd01fc58f9895b10bb60",
+      "license": {
+        "status": "declared-unverified",
+        "declared": "MIT"
+      },
+      "adaptation": {
+        "path": ".agents/skills/research-prompt/ADAPTATION.md",
+        "sha256": "5a3b1701427b2da9b5b094210a8f4bfc0fa33d786427fcaa1a977390b69f4d37"
+      },
+      "helpers": []
+    },
+    {
+      "id": "deep-research",
+      "path": ".agents/skills/deep-research/SKILL.md",
+      "sha256": "7ca511af215323d3acaee6113799d4dcbfba8a224b423bea5216f099246f5e56",
+      "roles": [
+        "researcher"
+      ],
+      "source": {
+        "kind": "user-provided-local",
+        "reference": "https://github.com/sanjay3290/ai-skills/tree/main/skills/deep-research",
+        "upstream_identity": "unverified-local-version"
+      },
+      "source_sha256": "7ca511af215323d3acaee6113799d4dcbfba8a224b423bea5216f099246f5e56",
+      "license": {
+        "status": "not-supplied-unverified",
+        "declared": null
+      },
+      "adaptation": {
+        "path": ".agents/skills/deep-research/ADAPTATION.md",
+        "sha256": "772bae6965977572ec6dc72631b5e39617e194e60ad0dcc7adb2710802d7c7e1"
+      },
+      "helpers": [
+        {
+          "path": ".agents/skills/deep-research/scripts/research.py",
+          "required": false,
+          "status": "not-supplied-runtime-unavailable"
+        },
+        {
+          "path": ".agents/skills/deep-research/requirements.txt",
+          "required": false,
+          "status": "not-supplied-runtime-unavailable"
+        }
+      ]
+    },
+    {
+      "id": "plan-writing",
+      "path": ".agents/skills/plan-writing/SKILL.md",
+      "sha256": "78794f8bb9b641fac1fe1f770804cc7b6fdc2f474f0f2e942c0a177cb8dbbae5",
+      "roles": [
+        "planner"
+      ],
+      "source": {
+        "kind": "user-provided-local",
+        "reference": "https://github.com/obra/superpowers",
+        "upstream_identity": "unverified-local-version"
+      },
+      "source_sha256": "78794f8bb9b641fac1fe1f770804cc7b6fdc2f474f0f2e942c0a177cb8dbbae5",
+      "license": {
+        "status": "not-supplied-unverified",
+        "declared": null
+      },
+      "adaptation": {
+        "path": ".agents/skills/plan-writing/ADAPTATION.md",
+        "sha256": "ae4240415a253c12ce188258dc3f110ad571f93f68cbd353bf02630f16e561c1"
+      },
+      "helpers": []
+    },
+    {
+      "id": "minfwm-task-execution",
+      "path": ".agents/skills/minfwm-task-execution/SKILL.md",
+      "sha256": "a54b6a43dcf95e081a6a190d8510795fd10f790de3be2fdab6ae70fb21924487",
+      "roles": [
+        "builder"
+      ],
+      "source": {
+        "kind": "locally-authored",
+        "reference": "docs/ai/research/ai-transition-skills-context.md",
+        "upstream_identity": "original-minfwm-adapter"
+      },
+      "source_sha256": "a54b6a43dcf95e081a6a190d8510795fd10f790de3be2fdab6ae70fb21924487",
+      "license": {
+        "status": "repository-authored",
+        "declared": null
+      },
+      "adaptation": {
+        "path": ".agents/skills/minfwm-task-execution/ADAPTATION.md",
+        "sha256": "001d710e612cd8e8bfc34a199575e5d090307b9b6324742d67aec0fe5d886f3f"
+      },
+      "helpers": []
+    },
+    {
+      "id": "minfwm-review",
+      "path": ".agents/skills/minfwm-review/SKILL.md",
+      "sha256": "e0b2ef33a73a8b183325da67df5297143ced4d86f84007232e131ff0ecfd5206",
+      "roles": [
+        "reviewer"
+      ],
+      "source": {
+        "kind": "locally-authored",
+        "reference": "docs/ai/research/ai-transition-skills-context.md",
+        "upstream_identity": "original-minfwm-adapter"
+      },
+      "source_sha256": "e0b2ef33a73a8b183325da67df5297143ced4d86f84007232e131ff0ecfd5206",
+      "license": {
+        "status": "repository-authored",
+        "declared": null
+      },
+      "adaptation": {
+        "path": ".agents/skills/minfwm-review/ADAPTATION.md",
+        "sha256": "4e38fd7a0fcd5ec07461c7e56f7c7748cc81ef2e6eb5d55040ca575802e4837d"
+      },
+      "helpers": []
+    },
+    {
+      "id": "minfwm-verification",
+      "path": ".agents/skills/minfwm-verification/SKILL.md",
+      "sha256": "4b6c0fc4133ec81518c6f0ad34fc61fd4009a3b5ad56f4452ac0b178c2d509f8",
+      "roles": [
+        "verifier",
+        "integrator"
+      ],
+      "source": {
+        "kind": "locally-authored",
+        "reference": "docs/ai/research/ai-transition-skills-context.md",
+        "upstream_identity": "original-minfwm-adapter"
+      },
+      "source_sha256": "4b6c0fc4133ec81518c6f0ad34fc61fd4009a3b5ad56f4452ac0b178c2d509f8",
+      "license": {
+        "status": "repository-authored",
+        "declared": null
+      },
+      "adaptation": {
+        "path": ".agents/skills/minfwm-verification/ADAPTATION.md",
+        "sha256": "c588f5c5fa8ec7aa7a02d4b46081db16fedabbacf8ead4828fc1ab052bc615dd"
+      },
+      "helpers": []
+    }
+  ],
+  "role_skills": {
+    "coordinator": [
+      "agentflow"
+    ],
+    "instructions": [
+      "agents-md"
+    ],
+    "research_planner": [
+      "research-prompt"
+    ],
+    "researcher": [
+      "deep-research"
+    ],
+    "planner": [
+      "plan-writing"
+    ],
+    "builder": [
+      "minfwm-task-execution"
+    ],
+    "reviewer": [
+      "minfwm-review"
+    ],
+    "verifier": [
+      "minfwm-verification"
+    ],
+    "integrator": [
+      "minfwm-verification"
+    ]
+  },
+  "existing_skills": [
+    {
+      "id": "architecture",
+      "path": ".agents/skills/architecture/SKILL.md",
+      "sha256": "cc1ab59295d54bd8b0261676296cff767cf3334139992935352821471f12f900",
+      "disposition": "conditional",
+      "trigger": "Architecture boundary/ADR",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "cpp-pro",
+      "path": ".agents/skills/cpp-pro/SKILL.md",
+      "sha256": "8b136cd7cbf5ba73db0041cad94691c8191cb406e0347a8f16b22e30a41b88fb",
+      "disposition": "active-domain",
+      "trigger": "C++20/core implementation",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "memory-safety-patterns",
+      "path": ".agents/skills/memory-safety-patterns/SKILL.md",
+      "sha256": "d266d1b743fa5aafeb26c84787d2029dbe668d359361c41c0d8ac831a17a5832",
+      "disposition": "active-domain",
+      "trigger": "RAII/CF/socket/resource ownership",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "code-refactoring-refactor-clean",
+      "path": ".agents/skills/code-refactoring-refactor-clean/SKILL.md",
+      "sha256": "29e3bc039187743953a10a50461caaf30d202e90297c4c48af40e2182e1b070d",
+      "disposition": "conditional",
+      "trigger": "Explicitly authorized refactor",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "code-review-and-quality",
+      "path": ".agents/skills/code-review-and-quality/SKILL.md",
+      "sha256": "8e7bce542662056895bbf9a31e1334c2d2ebabebb6ab9f6ffb3834752ebbe333",
+      "disposition": "conditional",
+      "trigger": "Specific quality rubric",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "systematic-debugging",
+      "path": ".agents/skills/systematic-debugging/SKILL.md",
+      "sha256": "d5c48f81b1e8ec1b8895027ef44d4ab0beeba041bfee760c3b2ad08e38825bfa",
+      "disposition": "conditional",
+      "trigger": "Reproducible defect/failing check",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "test-driven-development",
+      "path": ".agents/skills/test-driven-development/SKILL.md",
+      "sha256": "35b299a00cff664a3327308e9d696bd1707a9ede3e90f046569e7c50717e1674",
+      "disposition": "conditional",
+      "trigger": "Pure-core/wire behavior contract",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "cross-platform-contract-propagation-audit",
+      "path": ".agents/skills/cross-platform-contract-propagation-audit/SKILL.md",
+      "sha256": "f1d88ed129d60fdf0781f1e6585afaaf219d685957988a6be59779b7b5097cdf",
+      "disposition": "conditional",
+      "trigger": "Protocol consumer propagation",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "api-and-interface-design",
+      "path": ".agents/skills/api-and-interface-design/SKILL.md",
+      "sha256": "9e0ed660e3b9249e77cd55bb43cfc7279e3ec0567db6c66b89c581763264963e",
+      "disposition": "conditional",
+      "trigger": "New IPC/module interface",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "ai-native-cli",
+      "path": ".agents/skills/ai-native-cli/SKILL.md",
+      "sha256": "2cb7fe77de1ad21c906afe1a942eff97048c9ade84e7532c472428da742f2491",
+      "disposition": "excluded",
+      "trigger": "Broad CLI redesign requires a separate specification",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "threat-modeling-expert",
+      "path": ".agents/skills/threat-modeling-expert/SKILL.md",
+      "sha256": "253376aa9395fc90ac8de33db69b9f766572f103efcb2b766803fc9a6a9d345d",
+      "disposition": "conditional",
+      "trigger": "IPC permission/trust/SA security boundary",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "api-security-best-practices",
+      "path": ".agents/skills/api-security-best-practices/SKILL.md",
+      "sha256": "1eadc9741aac9481fa56d7961b6d65987fc77f69903c97c67a7ecff46b69998c",
+      "disposition": "excluded",
+      "trigger": "Web playbook is not Unix socket guidance",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "orchestrate-batch-refactor",
+      "path": ".agents/skills/orchestrate-batch-refactor/SKILL.md",
+      "sha256": "20ae7d71da8b4f4815a00511eecd6d4fcebd45757251e1592d72ebf14ac917fc",
+      "disposition": "excluded",
+      "trigger": "Competing lifecycle owner",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    },
+    {
+      "id": "review-multi-agent-orchestration",
+      "path": ".agents/skills/review-multi-agent-orchestration/SKILL.md",
+      "sha256": "a3f31b208d4a089acadd07522a8608b7dee32c6efaf7d648c9a1f71bb46bddb9",
+      "disposition": "conditional",
+      "trigger": "Scheduler/state/recovery audit",
+      "roles": [
+        "coordinator"
+      ]
+    },
+    {
+      "id": "acceptance-orchestrator",
+      "path": ".agents/skills/acceptance-orchestrator/SKILL.md",
+      "sha256": "d1824a4f2f64476b65e5bf4adf5eb734009f812b825fa431a5cd56bcfbde5aee",
+      "disposition": "excluded",
+      "trigger": "Competing lifecycle owner",
+      "roles": [
+        "builder",
+        "reviewer"
+      ]
+    }
+  ],
+  "deep_research": {
+    "runner": ".agents/skills/deep-research/scripts/research.py",
+    "key_environment": "GEMINI_API_KEY",
+    "backend_reviewed": false,
+    "fallback": "web-subagent"
+  },
+  "historical_inventory": "docs/ai/aas-stack.json"
+}

@@ -45,3 +45,12 @@ Reload parses a candidate snapshot first and keeps the last valid snapshot on
 failure. Run the CMake build and CTest suite before integration. Use the manual
 matrix in `docs/acceptance-macos.md` for Accessibility, panning, focus,
 secondary displays, orderly shutdown, and optional SA behavior.
+
+## AI workflow entry
+
+Read `AGENTS.md`, then `docs/ai/state.md` and `docs/ai/runbook.md`.
+Antigravity registers `python3 tools/ai_bootstrap.py --tool antigravity`;
+Gemini CLI registers `--tool gemini`. Do not label the harness as another AI.
+Delegate independent tasks to fresh workers and request independent review.
+If this host lacks subagents, report that capability gap. Use only the role's
+selected skill packet; do not load the full research history or skill catalog.

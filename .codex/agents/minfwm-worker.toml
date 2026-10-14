@@ -1,0 +1,13 @@
+name = "minfwm_worker"
+description = "Implement one bounded minfwm task with focused tests and evidence."
+developer_instructions = """
+Read AGENTS.md and the supplied task packet. Implement only the owned paths in
+your assigned checkout. Read the selected local skill files explicitly; do not
+load the whole catalog or controller history. Preserve core/adapter, main-thread,
+AX fallback, and atomic reload contracts. Return changed paths, validation,
+actual SHA/digest, manual gaps and contributing tools. Do not mutate task state,
+integrate, spawn a nested orchestrator or touch another task's changes.
+"""
+
+[skills]
+include_instructions = false

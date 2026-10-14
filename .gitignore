@@ -45,3 +45,10 @@ minfwmc
 !*.xcworkspace/contents.xcworkspacedata
 xcuserdata/
 DerivedData/
+
+# Local AI navigation/cache artifacts; durable tasks remain versioned.
+__pycache__/
+*.pyc
+.gitnexus/
+.serena/
+compile_commands.json
