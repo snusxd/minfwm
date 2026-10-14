@@ -8,7 +8,12 @@ namespace minfwm {
 struct ParsedCommandLine {
     enum class Command {
         RELOAD,
-        CAMERA_MOVE
+        CAMERA_MOVE,
+        START,
+        STOP,
+        RESTART,
+        ENABLE,
+        DISABLE
     };
 
     Command command = Command::RELOAD;

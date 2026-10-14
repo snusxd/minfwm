@@ -1,0 +1,18 @@
+{
+  "assistance": "ai",
+  "base": "b72ea9a7f19f82b69fec2122576b59150ff74873",
+  "id": "525228c2b3554c6b86b5c4004cc1ec1e",
+  "paths": [
+    "CMakeLists.txt",
+    "src/cli/CommandLine.cpp",
+    "src/cli/CommandLine.hpp",
+    "src/cli/DaemonControl.hpp",
+    "src/cli/DaemonControl.mm",
+    "src/cli/main.mm"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}

@@ -69,6 +69,20 @@ CommandLineParseResult parseCommandLine(int argc, const char* const* argv) {
             ParsedCommandLine{ParsedCommandLine::Command::RELOAD, 0.0F, 0.0F}, {}};
     }
 
+    if (command == "start" || command == "stop" || command == "restart" ||
+        command == "enable" || command == "disable") {
+        if (argc != 2) {
+            return invalidArguments(std::string(command) + " does not accept arguments");
+        }
+        ParsedCommandLine parsed;
+        if (command == "start") parsed.command = ParsedCommandLine::Command::START;
+        else if (command == "stop") parsed.command = ParsedCommandLine::Command::STOP;
+        else if (command == "restart") parsed.command = ParsedCommandLine::Command::RESTART;
+        else if (command == "enable") parsed.command = ParsedCommandLine::Command::ENABLE;
+        else parsed.command = ParsedCommandLine::Command::DISABLE;
+        return CommandLineParseResult{parsed, {}};
+    }
+
     if (command != "camera") {
         return invalidArguments("unknown command: " + std::string(command));
     }

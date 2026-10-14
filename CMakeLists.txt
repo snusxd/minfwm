@@ -79,8 +79,17 @@ add_executable(minfwmc
     src/cli/main.mm
     src/cli/IPCClient.mm
     src/cli/CommandLine.cpp
+    src/cli/DaemonControl.mm
 )
 target_link_libraries(minfwmc PRIVATE minfwm_common ${COMMON_LIBS})
+
+add_executable(minfwm
+    src/cli/main.mm
+    src/cli/IPCClient.mm
+    src/cli/CommandLine.cpp
+    src/cli/DaemonControl.mm
+)
+target_link_libraries(minfwm PRIVATE minfwm_common ${COMMON_LIBS})
 
 # Run explicitly on a desktop session; never run as part of automated CTest.
 add_executable(minfwm_manual_window_move EXCLUDE_FROM_ALL tools/ManualWindowMove.mm)
