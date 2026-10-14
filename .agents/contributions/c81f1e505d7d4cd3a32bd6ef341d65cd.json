@@ -1,0 +1,13 @@
+{
+  "assistance": "ai",
+  "base": "0d8165860365d53fa3cd902929a86f8f93aa27b0",
+  "id": "c81f1e505d7d4cd3a32bd6ef341d65cd",
+  "paths": [
+    "FEATURES.md"
+  ],
+  "schema_version": 1,
+  "task": "TASK-FEATURES-LIST",
+  "tools": [
+    "codex"
+  ]
+}
