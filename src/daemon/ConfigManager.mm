@@ -285,8 +285,8 @@ unsigned bookmarkModifierMask(const std::vector<std::string>& modifiers,
 
 bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
     if (!rejectUnknownKeys(root, {"window", "zoom", "camera", "display", "keybinds", "pins"},
-                           {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center", "mouse-movement-multiplier",
-                            "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior",
+                           {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
+                            "center-on-cmd-tab", "mouse-movement-multiplier", "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior",
                             "always-on-top"}, error)) return false;
 
     const TomlTable* window = tableAt(root, "window", error);
@@ -299,8 +299,9 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
 
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
     if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center", "rewind-on-focus"}, error)) return false;
-    if (camera && !rejectUnknownKeys(*camera, "camera", {"mouse-movement-multiplier", "trackpad-movement-multiplier",
-                                                           "trackpad-invert-x", "trackpad-invert-y"}, error)) return false;
+    if (camera && !rejectUnknownKeys(*camera, "camera", {"center-on-cmd-tab", "mouse-movement-multiplier",
+                                                           "trackpad-movement-multiplier", "trackpad-invert-x",
+                                                           "trackpad-invert-y"}, error)) return false;
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
                                        {"super", "center-camera-to-focus", "center-focus-to-camera",
@@ -310,6 +311,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
         !readBool(root, zoom, "invert-zoom-scroll-direction", candidate.invertZoomScrollDirection, error) ||
         !readBool(root, zoom, "rewind-on-focus", candidate.rewindOnFocus, error) ||
+        !readBool(root, camera, "center-on-cmd-tab", candidate.centerOnCmdTab, error) ||
         !readString(root, zoom, "zoomed-esc-center", candidate.zoomedEscCenter, error) ||
         !readMouseMovementMultiplier(root, camera, candidate.mouseMovementMultiplier, error) ||
         !readTrackpadMovementMultiplier(root, camera, candidate.trackpadMovementMultiplier, error) ||

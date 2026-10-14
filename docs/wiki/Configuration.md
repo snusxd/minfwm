@@ -17,6 +17,7 @@ rewind-on-focus = true
 zoomed-esc-center = "screen"
 
 [camera]
+center-on-cmd-tab = true
 mouse-movement-multiplier = 1.0
 trackpad-movement-multiplier = 1.0
 trackpad-invert-x = false
@@ -41,7 +42,8 @@ bookmarks-goto = ["Super", "Shift"]
 | `whitelist` | `["Terminal", "Music"]` | Applications whose windows remain available. |
 | `spawn-behavior` | `"center"` | Placement policy for newly observed windows. |
 | `invert-zoom-scroll-direction` | `false` | Reverse vertical-scroll zoom direction. |
-| `rewind-on-focus` | `true` | Automatically center the camera on a window when its application gains focus. When `false`, windows remain interactive while zoomed and app focus does not recenter the camera. |
+| `rewind-on-focus` | `true` | When zoomed, clicking a window exits overview and returns the camera. When `false`, clicks and other input pass through to windows while the camera stays zoomed. |
+| `camera.center-on-cmd-tab` | `true` | Center the camera on the active application's focused window after switching apps with `Cmd+Tab`. |
 | `zoomed-esc-center` | `"screen"` | Escape anchor: `screen`, `mouse`, or `focus`. |
 | `camera.mouse-movement-multiplier` | `1.0` | Scale camera movement while dragging: `2.0` moves twice as far as the cursor; `0.5` moves half as far. Must be finite and non-negative. |
 | `camera.trackpad-movement-multiplier` | `1.0` | Scale camera movement while panning with three fingers on the trackpad. Must be finite and non-negative. |
@@ -64,7 +66,8 @@ and `Super+Shift+1..9` returns to them. Bookmark modifier arrays accept unique
 
 With `rewind-on-focus = true`, clicking a window while zoomed exits overview and
 centers the selected window. With it disabled, clicks and other input pass
-through to windows while the camera stays zoomed. `zoomed-esc-center` controls
-the Escape anchor when rewind-on-focus is enabled. Changing settings takes
-effect after `./build/minfwm reload`.
+through to windows while the camera stays zoomed. The independent
+`camera.center-on-cmd-tab` option controls camera centering when switching apps.
+`zoomed-esc-center` controls the Escape anchor when rewind-on-focus is enabled.
+Changing settings takes effect after `./build/minfwm reload`.
 The full example is in `config/minfwm.toml.example` in the source repository.

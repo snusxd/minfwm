@@ -7,6 +7,7 @@
 # spawn-behavior = "center"
 # invert-zoom-scroll-direction = false
 # rewind-on-focus = true
+# center-on-cmd-tab = true
 # zoomed-esc-center = "screen"
 # camera.mouse-movement-multiplier = 1.0
 # camera.trackpad-movement-multiplier = 1.0
@@ -30,6 +31,8 @@ zoomed-esc-center = "screen"
 [camera]
 # Scale camera panning relative to cursor movement. 2.0 is twice as fast; 0.5 is half speed.
 mouse-movement-multiplier = 1.0
+# Center the camera on the active app's focused window after Cmd+Tab.
+center-on-cmd-tab = true
 # Scale camera panning while moving three fingers on the trackpad.
 trackpad-movement-multiplier = 1.0
 # Reverse the corresponding trackpad pan axes when needed.

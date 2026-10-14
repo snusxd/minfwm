@@ -226,7 +226,8 @@ bool AXObserver::focusActivatedApplication(pid_t pid) {
     auto& wm = WindowManager::instance();
     const auto window = wm.findWindow(focused);
     if (!window || !window->virtualCoordinatesInitialized) return false;
-    if (ConfigManager::instance().snapshot().rewindOnFocus) wm.centerCameraOnWindow(focused);
+    const auto config = ConfigManager::instance().snapshot();
+    if (config.centerOnCmdTab) wm.centerCameraOnWindow(focused);
     return true;
 }
 

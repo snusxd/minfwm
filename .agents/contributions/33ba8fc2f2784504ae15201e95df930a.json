@@ -1,0 +1,17 @@
+{
+  "assistance": "ai",
+  "base": "388fbe9bdf896c2960682d7e8a29ea9cdf31d296",
+  "id": "33ba8fc2f2784504ae15201e95df930a",
+  "paths": [
+    "config/minfwm.toml.example",
+    "docs/wiki/Configuration.md",
+    "src/daemon/AXObserver.mm",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-CMD-TAB-CENTERING",
+  "tools": [
+    "codex"
+  ]
+}
