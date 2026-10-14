@@ -3,7 +3,7 @@
 The selected skills are vendored from `sickn33/agentic-awesome-skills` release
 `v16.1.0`, verified at commit
 `58d857988fcfac6986206bca2b2fe223aa437e4b`. The npm package integrity is pinned
-in [`aas-stack.json`](aas-stack.json). The catalog repository is MIT licensed;
+in [`docs/ai/aas-stack.json`](docs/ai/aas-stack.json). The catalog repository is MIT licensed;
 the catalog's source attribution table is authoritative for imported content.
 
 | Vendored skill | Pinned source | License / attribution |
