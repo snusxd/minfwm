@@ -1,0 +1,14 @@
+{
+  "assistance": "ai",
+  "base": "776f7faa83bb56a34c1d35acc3719596ad91588f",
+  "id": "a9cfe75e0f8d4bba803034f5d657c024",
+  "paths": [
+    "README.md",
+    "docs/images/preview.png"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}

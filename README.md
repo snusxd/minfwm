@@ -1,5 +1,7 @@
 # minfwm
 
+![minfwm preview](docs/images/preview.png)
+
 `minfwm` is an infinite 2D window canvas for macOS 14 and newer. It places
 windows on a virtual desktop that spans connected displays. The default backend
 uses macOS Accessibility APIs and does not require SIP changes; a compatible
