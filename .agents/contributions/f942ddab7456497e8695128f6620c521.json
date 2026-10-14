@@ -1,0 +1,14 @@
+{
+  "assistance": "ai",
+  "base": "8acffe5a8df89eff174d53aef758a3baa737f1e1",
+  "id": "f942ddab7456497e8695128f6620c521",
+  "paths": [
+    "docs/ai/handoffs/AI-WORKFLOW-ACTIVATION.md",
+    "docs/ai/state.md"
+  ],
+  "schema_version": 1,
+  "task": "TASK-AI-IMPLEMENTATION",
+  "tools": [
+    "codex"
+  ]
+}
