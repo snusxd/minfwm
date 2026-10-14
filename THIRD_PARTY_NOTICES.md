@@ -1,5 +1,9 @@
 # Third-Party Notices
 
+The TOML parser is vendored from `toml++` v3.4.0 by Mark Gillard, licensed
+under MIT. Its single-header distribution and license are in
+[`third_party/tomlplusplus`](third_party/tomlplusplus).
+
 The selected skills are vendored from `sickn33/agentic-awesome-skills` release
 `v16.1.0`, verified at commit
 `58d857988fcfac6986206bca2b2fe223aa437e4b`. The npm package integrity is pinned

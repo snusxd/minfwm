@@ -203,14 +203,22 @@ The optional file is `~/.config/minfwm/minfwm.toml`. Only the documented subset
 is accepted and reload is atomic:
 
 ```toml
+[window]
 enable-window-shadows = false
-invert-zoom-scroll-direction = false
-zoomed-esc-center = "screen"
-multi-display-mode = "isolated"
 overscan-buffer-px = 500
 whitelist = ["Terminal", "Music"]
 spawn-behavior = "center"
+
+[zoom]
+invert-zoom-scroll-direction = false
+zoomed-esc-center = "screen"
+
+[display]
+multi-display-mode = "isolated"
 ```
+
+Previous configs with root-level keys remain accepted and can be migrated to
+these sections when convenient.
 
 `zoomed-esc-center` chooses the Escape return anchor; click selection always
 centers the selected window:

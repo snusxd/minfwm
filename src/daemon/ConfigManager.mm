@@ -1,108 +1,179 @@
 #include "ConfigManager.hpp"
+
 #import <Foundation/Foundation.h>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <cerrno>
+
+#include <toml.hpp>
+
+#include <algorithm>
 #include <cmath>
-#include <cstdlib>
-#include <set>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <utility>
 
 namespace {
 
-std::string trim(std::string value) {
-    const auto first = value.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos) return {};
-    const auto last = value.find_last_not_of(" \t\r\n");
-    return value.substr(first, last - first + 1);
+using TomlTable = toml::table;
+using TomlNode = toml::node;
+
+const TomlTable* tableAt(const TomlTable& root, std::string_view name, std::string& error) {
+    const TomlNode* node = root.get(name);
+    if (!node) return nullptr;
+    const TomlTable* table = node->as_table();
+    if (!table) error = "[" + std::string(name) + "] must be a table";
+    return table;
 }
 
-std::string stripComment(std::string value) {
-    bool quoted = false;
-    bool escaped = false;
-    for (size_t i = 0; i < value.size(); ++i) {
-        const char ch = value[i];
-        if (escaped) {
-            escaped = false;
-        } else if (ch == '\\' && quoted) {
-            escaped = true;
-        } else if (ch == '"') {
-            quoted = !quoted;
-        } else if (ch == '#' && !quoted) {
-            value.resize(i);
-            break;
+bool rejectUnknownKeys(const TomlTable& root, const std::vector<std::string_view>& allowedTables,
+                       const std::vector<std::string_view>& legacyKeys, std::string& error) {
+    for (const auto& [key, node] : root) {
+        const bool isTable = std::find(allowedTables.begin(), allowedTables.end(), key) != allowedTables.end();
+        const bool isLegacyKey = std::find(legacyKeys.begin(), legacyKeys.end(), key) != legacyKeys.end();
+        if ((isTable && !node.is_table()) || (!isTable && !isLegacyKey)) {
+            error = "unsupported key or table \"" + std::string(key) + "\"";
+            return false;
         }
     }
-    return trim(value);
-}
-
-bool parseString(const std::string& input, std::string& output) {
-    if (input.size() < 2 || input.front() != '"' || input.back() != '"') return false;
-    output.clear();
-    bool escaped = false;
-    for (size_t i = 1; i + 1 < input.size(); ++i) {
-        const char ch = input[i];
-        if (escaped) {
-            if (ch != '"' && ch != '\\') return false;
-            output.push_back(ch);
-            escaped = false;
-        } else if (ch == '\\') {
-            escaped = true;
-        } else {
-            output.push_back(ch);
-        }
-    }
-    return !escaped;
-}
-
-bool parseBool(const std::string& input, bool& output) {
-    if (input == "true") {
-        output = true;
-        return true;
-    }
-    if (input == "false") {
-        output = false;
-        return true;
-    }
-    return false;
-}
-
-bool parseFloat(const std::string& input, float& output) {
-    errno = 0;
-    char* end = nullptr;
-    const float parsed = std::strtof(input.c_str(), &end);
-    if (errno == ERANGE || end == input.c_str() || *end != '\0' || !std::isfinite(parsed)) return false;
-    if (parsed < 0.0f || parsed > 100000.0f) return false;
-    output = parsed;
     return true;
 }
 
-bool parseStringArray(const std::string& input, std::vector<std::string>& output) {
-    if (input.size() < 2 || input.front() != '[' || input.back() != ']') return false;
-    const std::string body = trim(input.substr(1, input.size() - 2));
-    output.clear();
-    if (body.empty()) return true;
-
-    size_t start = 0;
-    bool quoted = false;
-    bool escaped = false;
-    for (size_t i = 0; i <= body.size(); ++i) {
-        const char ch = i < body.size() ? body[i] : ',';
-        if (escaped) {
-            escaped = false;
-        } else if (ch == '\\' && quoted) {
-            escaped = true;
-        } else if (ch == '"') {
-            quoted = !quoted;
-        } else if (ch == ',' && !quoted) {
-            std::string item;
-            if (!parseString(trim(body.substr(start, i - start)), item)) return false;
-            if (item.empty()) return false;
-            output.push_back(std::move(item));
-            start = i + 1;
+bool rejectUnknownKeys(const TomlTable& table, std::string_view section,
+                       const std::vector<std::string_view>& allowedKeys, std::string& error) {
+    for (const auto& [key, node] : table) {
+        (void)node;
+        if (std::find(allowedKeys.begin(), allowedKeys.end(), key) == allowedKeys.end()) {
+            error = "unsupported key \"" + std::string(section) + "." + std::string(key) + "\"";
+            return false;
         }
     }
-    return !quoted && !escaped;
+    return true;
+}
+
+const TomlNode* get(const TomlTable& root, const TomlTable* table, std::string_view key,
+                    std::string& error) {
+    const TomlNode* nested = table ? table->get(key) : nullptr;
+    const TomlNode* legacy = root.get(key);
+    if (nested && legacy) {
+        error = "option \"" + std::string(key) + "\" is defined both at the root and in its table";
+        return nullptr;
+    }
+    return nested ? nested : legacy;
+}
+
+bool readBool(const TomlTable& root, const TomlTable* table, std::string_view key,
+              bool& out, std::string& error) {
+    const TomlNode* node = get(root, table, key, error);
+    if (!error.empty()) return false;
+    if (!node) return true;
+    const auto value = node->value<bool>();
+    if (!value) {
+        error = std::string(key) + " must be a boolean";
+        return false;
+    }
+    out = *value;
+    return true;
+}
+
+bool readString(const TomlTable& root, const TomlTable* table, std::string_view key,
+                std::string& out, std::string& error) {
+    const TomlNode* node = get(root, table, key, error);
+    if (!error.empty()) return false;
+    if (!node) return true;
+    const auto value = node->value<std::string>();
+    if (!value) {
+        error = std::string(key) + " must be a string";
+        return false;
+    }
+    out = *value;
+    return true;
+}
+
+bool readOverscan(const TomlTable& root, const TomlTable* table, float& out, std::string& error) {
+    const TomlNode* node = get(root, table, "overscan-buffer-px", error);
+    if (!error.empty()) return false;
+    if (!node) return true;
+
+    double value = 0.0;
+    if (const auto floating = node->value<double>()) {
+        value = *floating;
+    } else if (const auto integer = node->value<std::int64_t>()) {
+        value = static_cast<double>(*integer);
+    } else {
+        error = "overscan-buffer-px must be a number from 0 to 100000";
+        return false;
+    }
+
+    if (!std::isfinite(value) || value < 0.0 || value > 100000.0) {
+        error = "overscan-buffer-px must be a finite number from 0 to 100000";
+        return false;
+    }
+    out = static_cast<float>(value);
+    return true;
+}
+
+bool readWhitelist(const TomlTable& root, const TomlTable* table,
+                   std::vector<std::string>& out, std::string& error) {
+    const TomlNode* node = get(root, table, "whitelist", error);
+    if (!error.empty()) return false;
+    if (!node) return true;
+    const toml::array* values = node->as_array();
+    if (!values) {
+        error = "whitelist must be an array of non-empty strings";
+        return false;
+    }
+
+    std::vector<std::string> parsed;
+    parsed.reserve(values->size());
+    for (const TomlNode& item : *values) {
+        const auto value = item.value<std::string>();
+        if (!value || value->empty()) {
+            error = "whitelist must be an array of non-empty strings";
+            return false;
+        }
+        parsed.push_back(*value);
+    }
+    out = std::move(parsed);
+    return true;
+}
+
+bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
+    if (!rejectUnknownKeys(root, {"window", "zoom", "display"},
+                           {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
+                            "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
+
+    const TomlTable* window = tableAt(root, "window", error);
+    const TomlTable* zoom = tableAt(root, "zoom", error);
+    const TomlTable* display = tableAt(root, "display", error);
+    if (!error.empty()) return false;
+
+    if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
+    if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center"}, error)) return false;
+    if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
+
+    if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
+        !readBool(root, zoom, "invert-zoom-scroll-direction", candidate.invertZoomScrollDirection, error) ||
+        !readString(root, zoom, "zoomed-esc-center", candidate.zoomedEscCenter, error) ||
+        !readString(root, display, "multi-display-mode", candidate.multiDisplayMode, error) ||
+        !readOverscan(root, window, candidate.overscanBufferPx, error) ||
+        !readWhitelist(root, window, candidate.whitelist, error) ||
+        !readString(root, window, "spawn-behavior", candidate.spawnBehavior, error)) {
+        return false;
+    }
+
+    if (candidate.zoomedEscCenter != "screen" && candidate.zoomedEscCenter != "mouse" && candidate.zoomedEscCenter != "focus") {
+        error = "zoomed-esc-center must be \"screen\", \"mouse\" or \"focus\"";
+        return false;
+    }
+    if (candidate.multiDisplayMode != "isolated") {
+        error = "multi-display-mode must be \"isolated\"";
+        return false;
+    }
+    if (candidate.spawnBehavior != "center") {
+        error = "spawn-behavior must be \"center\"";
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -110,77 +181,18 @@ bool parseStringArray(const std::string& input, std::vector<std::string>& output
 namespace minfwm {
 
 bool ConfigManager::parseText(std::string_view text, ConfigSnapshot& out, std::string& error) {
-    ConfigSnapshot candidate;
-    std::set<std::string> seen;
-    size_t lineNumber = 0;
-    size_t lineStart = 0;
-
-    while (lineStart <= text.size()) {
-        ++lineNumber;
-        const size_t lineEnd = text.find('\n', lineStart);
-        const size_t length = lineEnd == std::string_view::npos ? text.size() - lineStart : lineEnd - lineStart;
-        const std::string line = stripComment(std::string(text.substr(lineStart, length)));
-        if (!line.empty()) {
-            const size_t delimiter = line.find('=');
-            if (delimiter == std::string::npos) {
-                error = "line " + std::to_string(lineNumber) + ": expected key = value";
-                return false;
-            }
-            const std::string key = trim(line.substr(0, delimiter));
-            const std::string value = trim(line.substr(delimiter + 1));
-            if (key.empty() || value.empty() || !seen.insert(key).second) {
-                error = "line " + std::to_string(lineNumber) + ": invalid or duplicate key";
-                return false;
-            }
-
-            if (key == "enable-window-shadows") {
-                if (!parseBool(value, candidate.enableWindowShadows)) {
-                    error = "line " + std::to_string(lineNumber) + ": expected true or false";
-                    return false;
-                }
-            } else if (key == "invert-zoom-scroll-direction") {
-                if (!parseBool(value, candidate.invertZoomScrollDirection)) {
-                    error = "line " + std::to_string(lineNumber) + ": expected true or false";
-                    return false;
-                }
-            } else if (key == "zoomed-esc-center") {
-                if (!parseString(value, candidate.zoomedEscCenter) ||
-                    (candidate.zoomedEscCenter != "screen" && candidate.zoomedEscCenter != "mouse" && candidate.zoomedEscCenter != "focus")) {
-                    error = "line " + std::to_string(lineNumber) + ": zoomed-esc-center must be \"screen\", \"mouse\" or \"focus\"";
-                    return false;
-                }
-            } else if (key == "multi-display-mode") {
-                if (!parseString(value, candidate.multiDisplayMode) || candidate.multiDisplayMode != "isolated") {
-                    error = "line " + std::to_string(lineNumber) + ": multi-display-mode must be \"isolated\"";
-                    return false;
-                }
-            } else if (key == "overscan-buffer-px") {
-                if (!parseFloat(value, candidate.overscanBufferPx)) {
-                    error = "line " + std::to_string(lineNumber) + ": overscan-buffer-px must be a finite number from 0 to 100000";
-                    return false;
-                }
-            } else if (key == "whitelist") {
-                if (!parseStringArray(value, candidate.whitelist)) {
-                    error = "line " + std::to_string(lineNumber) + ": whitelist must be an array of non-empty strings";
-                    return false;
-                }
-            } else if (key == "spawn-behavior") {
-                if (!parseString(value, candidate.spawnBehavior) || candidate.spawnBehavior != "center") {
-                    error = "line " + std::to_string(lineNumber) + ": spawn-behavior must be \"center\"";
-                    return false;
-                }
-            } else {
-                error = "line " + std::to_string(lineNumber) + ": unsupported key \"" + key + "\"";
-                return false;
-            }
-        }
-
-        if (lineEnd == std::string_view::npos) break;
-        lineStart = lineEnd + 1;
+    error.clear();
+    try {
+        const TomlTable root = toml::parse(text);
+        ConfigSnapshot candidate;
+        if (!readConfig(root, candidate, error)) return false;
+        out = std::move(candidate);
+        error.clear();
+        return true;
+    } catch (const toml::parse_error& parseError) {
+        error = parseError.what();
+        return false;
     }
-
-    out = std::move(candidate);
-    return true;
 }
 
 ConfigSnapshot ConfigManager::snapshot() const {

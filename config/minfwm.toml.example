@@ -1,10 +1,16 @@
 # Copy to ~/.config/minfwm/minfwm.toml and run minfwmc reload.
+
+[window]
 enable-window-shadows = false
+overscan-buffer-px = 500
+whitelist = ["Terminal", "Music"]
+spawn-behavior = "center"
+
+[zoom]
 # Reverse Cmd+Option wheel zoom without changing ordinary application scrolling.
 invert-zoom-scroll-direction = false
 # Escape anchor while zoomed: "screen", "mouse", or "focus".
 zoomed-esc-center = "screen"
+
+[display]
 multi-display-mode = "isolated"
-overscan-buffer-px = 500
-whitelist = ["Terminal", "Music"]
-spawn-behavior = "center"

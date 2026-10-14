@@ -68,6 +68,7 @@ add_library(minfwm_daemon_runtime STATIC
     src/daemon/YabaiSA.mm
     src/daemon/ConfigManager.mm
 )
+target_include_directories(minfwm_daemon_runtime SYSTEM PRIVATE third_party/tomlplusplus)
 target_link_libraries(minfwm_daemon_runtime PUBLIC minfwm_ipc_transport minfwm_window_runtime ${COMMON_LIBS})
 
 add_executable(minfwmd src/daemon/main.mm)
@@ -137,6 +138,7 @@ if(BUILD_TESTING)
         src/daemon/ConfigManager.mm
     )
     target_include_directories(minfwm_config_tests PRIVATE src/daemon)
+    target_include_directories(minfwm_config_tests SYSTEM PRIVATE third_party/tomlplusplus)
     target_link_libraries(minfwm_config_tests PRIVATE ${COMMON_LIBS})
     add_test(NAME minfwm_config_tests COMMAND minfwm_config_tests)
 
