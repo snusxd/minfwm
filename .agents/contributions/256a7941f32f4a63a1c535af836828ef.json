@@ -1,0 +1,15 @@
+{
+  "assistance": "ai",
+  "base": "df81d71c72b589d9ec4a1a609373c190e30e8f58",
+  "id": "256a7941f32f4a63a1c535af836828ef",
+  "paths": [
+    "AGENTS.md",
+    "docs/ai/runbook.md",
+    "docs/ai/state.md"
+  ],
+  "schema_version": 1,
+  "task": "TASK-AI-IMPLEMENTATION",
+  "tools": [
+    "codex"
+  ]
+}

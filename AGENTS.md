@@ -45,9 +45,9 @@ ctest --test-dir build --output-on-failure
 - Do not commit credentials, machine-specific paths, SIP changes, or live socket files.
 
 ## Active AI Workflow
-- Start each new chat with `docs/ai/state.md` and `docs/ai/context-map.md`; read research reports only for the assigned question.
-- Bootstrap a fresh checkout with `python3 tools/ai_bootstrap.py --tool codex` (use `claude`, `antigravity`, or `gemini` for the actual tool). This installs repo-local hooks and registers the worktree session; never silently overwrite an existing hook manager.
-- Check the profile with `python3 tools/ai_profile.py validate` and tasks with `python3 tools/ai_workflow.py validate`. `docs/ai/runbook.md` contains operational commands. `CLAUDE.md` is the existing symlink to this file; preserve it.
+- Start a new chat with `docs/ai/state.md`; open `docs/ai/context-map.md` only when the task touches an unfamiliar subsystem. Read research reports only when relevant.
+- Bootstrap once per new checkout/tool with `python3 tools/ai_bootstrap.py --tool codex` (use the actual tool ID). Do not repeat bootstrap or profile/task validation every chat unless setup changed or a tool error needs diagnosis. Never silently overwrite an existing hook manager.
+- `docs/ai/runbook.md` contains operational commands. `CLAUDE.md` is the existing symlink to this file; preserve it.
 - Keep routine changes fast: one fresh worker when isolation helps, a short prompt with goal/acceptance/owned paths/relevant skill, coordinator integration, and the smallest affected check. Do not add planner, researcher, reviewer or tester agents by default.
 - Use task cards and the seven-stage runtime only for multi-step, risky or parallel work. Independent review is risk-triggered or periodic, not a per-change gate. Run full CTest at integration checkpoints and before releases, not after every small edit. Required live macOS evidence still blocks claims that depend on it.
 - Concurrent code writers use separate worktrees. Shared contracts, CMake, instructions and integration state have one writer. Do not stage another task's changes.
