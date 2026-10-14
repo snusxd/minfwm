@@ -18,6 +18,8 @@ public:
     BackendResult render(ClientWindow& window, core::Rect physical, double now);
     BackendResult renderOverview(ClientWindow& window, core::Rect physical, float scale, double now);
     BackendResult suspend(ClientWindow& window, double now);
+    BackendResult releaseToNative(ClientWindow& window, core::Rect physical, double now);
+    BackendResult setPinnedLayer(ClientWindow& window, bool alwaysOnTop);
     BackendResult hide(ClientWindow& window, core::Rect physical, core::Rect displayBounds, double now);
     BackendResult restore(ClientWindow& window, double now);
     bool acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state);

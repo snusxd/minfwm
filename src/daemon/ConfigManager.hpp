@@ -14,6 +14,7 @@ struct ConfigSnapshot {
     float overscanBufferPx = 500.0f;
     std::vector<std::string> whitelist = {"Terminal", "Music"};
     std::string spawnBehavior = "center";
+    bool pinsAlwaysOnTop = true;
 };
 
 class ConfigManager {

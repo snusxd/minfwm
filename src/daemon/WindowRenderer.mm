@@ -39,6 +39,53 @@ BackendResult WindowRenderer::suspend(ClientWindow& window, double now) {
     return result;
 }
 
+BackendResult WindowRenderer::releaseToNative(ClientWindow& window, core::Rect physical, double now) {
+    int x = 0, y = 0;
+    if (!pixelPosition(physical, x, y)) return {BackendCode::failed};
+
+    window.lastProgrammaticMoveTime = now;
+    window.positionNeedsVerification = false;
+    window.rejectedPosition.reset();
+    window.positionRetryTime = 0;
+    window.hideRetryTime = 0;
+
+    // Transfer the currently presented position to the native frame before
+    // dropping any Yabai transform, so pinning does not jump to the old frame.
+    BackendResult moved{BackendCode::failed};
+    if (m_optional.usesTransforms()) moved = m_optional.moveNative(window.ref(), window.wid(), x, y);
+    if (!moved.succeeded()) {
+        (void)resetTransform(window);
+        moved = m_ax.move(window.ref(), window.wid(), x, y);
+    }
+    if (!moved.succeeded()) return moved;
+
+    if (window.isLayerSet) {
+        if (!setLayer(window, kCGNormalWindowLevelKey).succeeded()) return {BackendCode::failed};
+        window.isLayerSet = false;
+    }
+    window.layerAttempted = false;
+    window.lastRenderedX = x;
+    window.lastRenderedY = y;
+    window.lastRenderedScale = 1;
+    window.overviewPresented = false;
+    window.isHidden = false;
+    window.isAXHidden = false;
+    window.needsGeometryRestore = false;
+    return {BackendCode::ok};
+}
+
+BackendResult WindowRenderer::setPinnedLayer(ClientWindow& window, bool alwaysOnTop) {
+    const int layer = alwaysOnTop ? kCGPopUpMenuWindowLevelKey : kCGNormalWindowLevelKey;
+    const BackendResult result = setLayer(window, layer);
+    if (result.succeeded()) {
+        window.isLayerSet = alwaysOnTop;
+        window.layerAttempted = true;
+        window.pinnedAlwaysOnTop = alwaysOnTop;
+        window.pinLayerRetryTime = 0;
+    }
+    return result;
+}
+
 bool WindowRenderer::acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state) {
     int x = 0, y = 0;
     if (!pixelPosition(physical, x, y)) return false;

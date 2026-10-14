@@ -8,6 +8,7 @@
 # invert-zoom-scroll-direction = false
 # zoomed-esc-center = "screen"
 # multi-display-mode = "isolated"
+# pins.always-on-top = true
 
 [window]
 enable-window-shadows = false
@@ -24,7 +25,11 @@ zoomed-esc-center = "screen"
 [display]
 multi-display-mode = "isolated"
 
+[pins]
+always-on-top = true
+
 [keybinds]
 # Cmd+Option + left-drag pans; Cmd+Option + vertical-scroll zooms.
 # Cmd+1..9 loads a bookmark; Cmd+Shift+1..9 saves it.
-# Escape exits overview. These bindings are documented here, not configurable yet.
+# Cmd+Option+P pins/unpins the focused window; Escape exits overview.
+# These bindings are documented here, not configurable yet.

@@ -53,6 +53,9 @@ public:
     bool centerOnAdoption = false;
     bool preferNativePosition = false;
     bool nativePresentationChecked = false;
+    bool pinned = false;
+    std::optional<bool> pinnedAlwaysOnTop;
+    double pinLayerRetryTime = 0;
 
 private:
     CFRef<AXUIElementRef> m_windowRef;

@@ -1,0 +1,20 @@
+{
+  "assistance": "ai",
+  "base": "3b7ff961fd95f586cb58a7b947e5c63d74a8fbbc",
+  "id": "7cbd359d31454fb0b436adf252205745",
+  "paths": [
+    "config/minfwm.toml.example",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/WindowPool.hpp",
+    "src/daemon/WindowRenderer.hpp",
+    "src/daemon/WindowRenderer.mm"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}

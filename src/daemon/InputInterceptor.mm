@@ -227,8 +227,15 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (type == kCGEventKeyDown) {
         CGEventFlags flags = CGEventGetFlags(event);
         bool cmd = flags & kCGEventFlagMaskCommand;
+        bool option = flags & kCGEventFlagMaskAlternate;
         bool shift = flags & kCGEventFlagMaskShift;
         int64_t keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+
+        if (keycode == 35 && cmd && option && !(flags & (kCGEventFlagMaskShift | kCGEventFlagMaskControl))) {
+            const bool repeating = CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat) != 0;
+            if (!repeating) (void)wm.toggleFocusedWindowPin();
+            return nullptr;
+        }
 
         int index = -1;
         if (keycode >= 18 && keycode <= 21) index = keycode - 17; // 1-4

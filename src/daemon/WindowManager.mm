@@ -180,6 +180,45 @@ std::shared_ptr<ClientWindow> WindowManager::findWindow(AXUIElementRef element) 
     return nullptr;
 }
 
+bool WindowManager::toggleFocusedWindowPin() {
+    auto window = m_focusedWindow ? findWindow(m_focusedWindow.get()) : nullptr;
+    if (!window) window = m_lastFocusedWindow.lock();
+    if (!window || !window->virtualCoordinatesInitialized || !findWindow(window->ref())) return false;
+
+    if (window->pinned) {
+        window->pinned = false;
+        window->pinnedAlwaysOnTop.reset();
+        window->layerAttempted = false;
+        window->lastRenderedX = std::numeric_limits<float>::quiet_NaN();
+        window->lastRenderedY = std::numeric_limits<float>::quiet_NaN();
+        if (AXUIElementPerformAction(window->ref(), kAXRaiseAction) != kAXErrorSuccess) {
+            std::cerr << "WindowManager: could not raise unpinned window WID=" << window->wid() << std::endl;
+        }
+        std::cout << "WindowManager: unpinned window WID=" << window->wid() << std::endl;
+        return true;
+    }
+
+    Display& display = displayForWindow(window->ref());
+    const core::Rect physical = display.state().virtualToPhysical(window->virtualRect);
+    window->preferNativePosition = core::canUseNativePosition(physical, display.usableBounds());
+    if (!m_renderer.releaseToNative(*window, physical, CACurrentMediaTime()).succeeded()) {
+        std::cerr << "WindowManager: could not pin window WID=" << window->wid() << std::endl;
+        return false;
+    }
+    window->pinned = true;
+    window->pinnedAlwaysOnTop.reset();
+    const auto config = ConfigManager::instance().snapshot();
+    if (!m_renderer.setPinnedLayer(*window, config.pinsAlwaysOnTop).succeeded()) {
+        window->pinLayerRetryTime = CACurrentMediaTime() + 1.0;
+        std::cerr << "WindowManager: could not apply pinned window layer WID=" << window->wid() << std::endl;
+    }
+    if (AXUIElementPerformAction(window->ref(), kAXRaiseAction) != kAXErrorSuccess) {
+        std::cerr << "WindowManager: could not raise pinned window WID=" << window->wid() << std::endl;
+    }
+    std::cout << "WindowManager: pinned window WID=" << window->wid() << std::endl;
+    return true;
+}
+
 void WindowManager::removeWindow(AXUIElementRef element) {
     if (auto window = findWindow(element)) (void)m_yabaiBackend.resetTransform(window->wid());
     for (auto& display : m_displays) display->windowPool().removeWindow(element);
@@ -307,6 +346,15 @@ void WindowManager::updateWindows(int64_t displayId) {
         bool overviewFailed = false;
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref()) continue;
+            if (window->pinned) {
+                if ((!window->pinnedAlwaysOnTop || *window->pinnedAlwaysOnTop != config.pinsAlwaysOnTop) &&
+                    now >= window->pinLayerRetryTime) {
+                    if (!m_renderer.setPinnedLayer(*window, config.pinsAlwaysOnTop).succeeded()) {
+                        window->pinLayerRetryTime = now + 1.0;
+                    }
+                }
+                continue;
+            }
             if (m_hiddenApplications.contains(window->pid())) {
                 if (!window->applicationSuspended) (void)m_renderer.suspend(*window, now);
                 continue;
@@ -363,6 +411,7 @@ void WindowManager::updateWindows(int64_t displayId) {
             // ordinary renderer retains the transform/AX failure fallback.
             for (const auto& window : display->windowPool().windows()) {
                 if (!window || !window->ref() || !window->virtualCoordinatesInitialized) continue;
+                if (window->pinned) continue;
                 if (window->applicationSuspended) continue;
                 const auto physical = state.virtualToPhysical(window->virtualRect);
                 window->preferNativePosition = core::canUseNativePosition(physical, display->usableBounds());
