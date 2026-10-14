@@ -1,0 +1,17 @@
+{
+  "assistance": "ai",
+  "base": "f7c6beb4068a3cb0cecd308f5db3ceac4735fb35",
+  "id": "523daf2bc17943f1a95e9f6340c96e3f",
+  "paths": [
+    ".agents/rules/minfwm-workflow.md",
+    "AGENTS.md",
+    "docs/ai/ai-workflow.md",
+    "docs/ai/runbook.md",
+    "docs/ai/state.md"
+  ],
+  "schema_version": 1,
+  "task": "TASK-AI-IMPLEMENTATION",
+  "tools": [
+    "codex"
+  ]
+}
