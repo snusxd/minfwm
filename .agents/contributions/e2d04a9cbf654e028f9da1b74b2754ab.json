@@ -1,0 +1,13 @@
+{
+  "assistance": "ai",
+  "base": "7c273070615cd56d55299a07cf328adc63f6fc42",
+  "id": "e2d04a9cbf654e028f9da1b74b2754ab",
+  "paths": [
+    "src/daemon/WindowManager.mm"
+  ],
+  "schema_version": 1,
+  "task": "minfwm-commit-dirty-tree",
+  "tools": [
+    "codex"
+  ]
+}

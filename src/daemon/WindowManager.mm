@@ -246,7 +246,7 @@ void WindowManager::adoptWindow(Display& display, const std::shared_ptr<ClientWi
     window->virtualRect.y = origin.y;
     window->virtualCoordinatesInitialized = true;
     if (window->centerOnAdoption) {
-        centerWindow(window);
+        if (!window->isAuxiliaryWindow) centerWindow(window);
         window->centerOnAdoption = false;
     }
 }
