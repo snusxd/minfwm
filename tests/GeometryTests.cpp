@@ -77,8 +77,14 @@ int main() {
     display.saveBookmark(3);
     display.camera().setPosition(0.0f, 0.0f);
     expect(display.loadBookmark(3), "existing bookmark loads");
-    expectNear(display.camera().x(), -500.0f, "bookmark restores camera x");
-    expectNear(display.camera().y(), 200.0f, "bookmark restores camera y");
+    expect(display.returning(), "bookmark starts a camera return animation");
+    expectNear(display.camera().x(), 0.0f, "bookmark request leaves camera at its starting position");
+    display.advanceZoom(0.18);
+    expect(display.camera().x() != 0.0f && display.camera().x() != -500.0f,
+           "bookmark camera moves during the return animation");
+    display.advanceZoom(0.18);
+    expectNear(display.camera().x(), -500.0f, "bookmark animation ends at saved camera x");
+    expectNear(display.camera().y(), 200.0f, "bookmark animation ends at saved camera y");
     expect(!display.loadBookmark(99), "missing bookmark is reported");
 
     DisplayState zoomed({8, {-1920, -300, 1920, 1080}});

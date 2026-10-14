@@ -134,8 +134,7 @@ bool DisplayState::loadBookmark(int index) noexcept {
     const auto bookmark = m_bookmarks.find(index);
     if (bookmark == m_bookmarks.end()) return false;
 
-    m_camera.setPosition(bookmark->second.x, bookmark->second.y);
-    return true;
+    return beginReturn(bookmark->second);
 }
 
 } // namespace minfwm::core

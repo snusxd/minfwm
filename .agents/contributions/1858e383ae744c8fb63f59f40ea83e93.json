@@ -1,0 +1,14 @@
+{
+  "assistance": "ai",
+  "base": "d9735353f5160dff3c7548462bec82abcdf61bb2",
+  "id": "1858e383ae744c8fb63f59f40ea83e93",
+  "paths": [
+    "src/core/DisplayState.cpp",
+    "tests/GeometryTests.cpp"
+  ],
+  "schema_version": 1,
+  "task": "TASK-BOOKMARK-ANIMATION",
+  "tools": [
+    "codex"
+  ]
+}
