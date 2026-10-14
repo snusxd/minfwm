@@ -24,6 +24,7 @@ private:
     struct AppObserver {
         CFRef<AXObserverRef> observer;
         CFRef<AXUIElementRef> element;
+        CFRef<AXUIElementRef> lastFocusedWindow;
         std::vector<CFRef<AXUIElementRef>> windows;
     };
 

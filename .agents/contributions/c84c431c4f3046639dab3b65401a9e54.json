@@ -1,0 +1,14 @@
+{
+  "assistance": "ai",
+  "base": "f7203d6f7d7034b99e2017905fe761733436c50f",
+  "id": "c84c431c4f3046639dab3b65401a9e54",
+  "paths": [
+    "src/daemon/AXObserver.hpp",
+    "src/daemon/AXObserver.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-DOCK-FOCUS-CENTERING",
+  "tools": [
+    "codex"
+  ]
+}
