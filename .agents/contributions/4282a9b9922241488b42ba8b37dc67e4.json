@@ -1,0 +1,13 @@
+{
+  "assistance": "ai",
+  "base": "db091be239aa85f9b58b384baa5a8cb5ad0e8fdb",
+  "id": "4282a9b9922241488b42ba8b37dc67e4",
+  "paths": [
+    "docs/ai/handoffs/TASK-AI-ONBOARD.md"
+  ],
+  "schema_version": 1,
+  "task": "TASK-AI-ONBOARD",
+  "tools": [
+    "codex"
+  ]
+}
