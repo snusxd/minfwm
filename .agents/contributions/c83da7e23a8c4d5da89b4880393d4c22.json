@@ -1,0 +1,17 @@
+{
+  "assistance": "ai",
+  "base": "e9f3fc9cacd966a5386b78954519db1144d4706e",
+  "id": "c83da7e23a8c4d5da89b4880393d4c22",
+  "paths": [
+    "ai-workflow-implementation.md",
+    "docs/ai/handoffs/AI-WORKFLOW-ACTIVATION.md",
+    "docs/ai/state.md",
+    "docs/ai/tasks/TASK-AI-CORE-CHECK.json",
+    "docs/ai/tasks/TASK-AI-ONBOARD.json"
+  ],
+  "schema_version": 1,
+  "task": "TASK-AI-IMPLEMENTATION",
+  "tools": [
+    "codex"
+  ]
+}

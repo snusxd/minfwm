@@ -1,0 +1,237 @@
+{
+  "accepted_digest": "804141767bdc80212fc836da74a96aec6dcc4114a61e107f26f54a64c358972f",
+  "accepted_sha": "0f605350df042a2c01d6c6a67ff6ff34b7e841af",
+  "base_sha": "7baff5c65ebfd220bb28079403e7c414e4758977",
+  "dependencies": [
+    "TASK-AI-ONBOARD"
+  ],
+  "dispatches": [
+    {
+      "agent": "/root/core_acceptance_pilot",
+      "at": "2026-10-14T00:38:15.421804+00:00",
+      "attempt": 1,
+      "base_sha": "7baff5c65ebfd220bb28079403e7c414e4758977",
+      "expires": 1791941895.421797,
+      "initial_binding": {
+        "digest": "54144634dbae5a678e85f3ba82f6859653810295d9cf4d4712c647adbc2e25c0",
+        "sha": "7baff5c65ebfd220bb28079403e7c414e4758977"
+      },
+      "outside_owned_digest": "b2e6a0e5c444d1331b76d11af4179c88669aefa63268297dca65b533546b5352",
+      "role": "worker",
+      "spec_digest": "49d2120fe72a88f8d901401187bd04692e3202d1d90a374a175ebaacb6b5ff0c",
+      "task": "TASK-AI-CORE-CHECK",
+      "token": "b938b45479dd4ae5a5a913f80396ab9f"
+    },
+    {
+      "agent": "/root/review_core_pilot",
+      "at": "2026-10-14T00:41:09.131620+00:00",
+      "attempt": 1,
+      "base_sha": "7baff5c65ebfd220bb28079403e7c414e4758977",
+      "expires": 1791942069.131614,
+      "initial_binding": {
+        "digest": "804141767bdc80212fc836da74a96aec6dcc4114a61e107f26f54a64c358972f",
+        "sha": "0f605350df042a2c01d6c6a67ff6ff34b7e841af"
+      },
+      "outside_owned_digest": "b2e6a0e5c444d1331b76d11af4179c88669aefa63268297dca65b533546b5352",
+      "role": "reviewer",
+      "spec_digest": "49d2120fe72a88f8d901401187bd04692e3202d1d90a374a175ebaacb6b5ff0c",
+      "task": "TASK-AI-CORE-CHECK",
+      "token": "ba18ee0df3fc41b9a19cbbafcd97c7be"
+    },
+    {
+      "agent": "/root",
+      "at": "2026-10-14T00:42:30.359207+00:00",
+      "attempt": 1,
+      "base_sha": "7baff5c65ebfd220bb28079403e7c414e4758977",
+      "expires": 1791942150.359201,
+      "initial_binding": {
+        "digest": "804141767bdc80212fc836da74a96aec6dcc4114a61e107f26f54a64c358972f",
+        "sha": "0f605350df042a2c01d6c6a67ff6ff34b7e841af"
+      },
+      "outside_owned_digest": "b2e6a0e5c444d1331b76d11af4179c88669aefa63268297dca65b533546b5352",
+      "role": "tester",
+      "spec_digest": "49d2120fe72a88f8d901401187bd04692e3202d1d90a374a175ebaacb6b5ff0c",
+      "task": "TASK-AI-CORE-CHECK",
+      "token": "7d1954b9e1d444249f188858353d59fb"
+    }
+  ],
+  "evidence": [
+    {
+      "agent": "/root/core_acceptance_pilot",
+      "at": "2026-10-14T00:39:49.113151+00:00",
+      "attempt": 1,
+      "binding": {
+        "digest": "804141767bdc80212fc836da74a96aec6dcc4114a61e107f26f54a64c358972f",
+        "sha": "0f605350df042a2c01d6c6a67ff6ff34b7e841af"
+      },
+      "command": [
+        "python3",
+        "-c",
+        "import pathlib, re, shlex, subprocess, sys\ncommands = [\n    [\"cmake\", \"-S\", \".\", \"-B\", \"build\", \"-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0\"],\n    [\"cmake\", \"--build\", \"build\", \"--target\", \"minfwm_geometry_tests\", \"--parallel\"],\n    [\"ctest\", \"--test-dir\", \"build\", \"-R\", \"geometry\", \"--output-on-failure\"],\n]\nlog = pathlib.Path(subprocess.check_output([\"git\", \"rev-parse\", \"--git-path\", \"minfwm/core-check.log\"], text=True).strip())\nlog.parent.mkdir(parents=True, exist_ok=True)\nwith log.open(\"w\", encoding=\"utf-8\") as stream:\n    for command in commands:\n        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)\n        stream.write(\"$ \" + shlex.join(command) + \"\\n\" + result.stdout + \"\\nexit \" + str(result.returncode) + \"\\n\")\n        stream.flush()\n        print(shlex.join(command) + \": exit \" + str(result.returncode), flush=True)\n        if command[0] == \"ctest\":\n            for line in result.stdout.splitlines():\n                if re.match(r\"^\\s*\\d+/\\d+ Test #\", line) or re.match(r\"^\\d+% tests passed\", line) or line.startswith(\"Total Test time\"):\n                    print(line, flush=True)\n        if result.returncode:\n            sys.exit(result.returncode)\n"
+      ],
+      "duration_seconds": 1.593,
+      "exit_code": 0,
+      "kind": "focused",
+      "output_sha256": "1a23d9791963f5ff7678305daa812c88621f7b7dc193e4d4fc7a5a8e2f5d6587",
+      "output_tail": "cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0: exit 0\ncmake --build build --target minfwm_geometry_tests --parallel: exit 0\nctest --test-dir build -R geometry --output-on-failure: exit 0\n1/1 Test #7: minfwm_geometry_tests ............   Passed    0.00 sec\n100% tests passed out of 1\nTotal Test time (real) =   0.00 sec\n",
+      "spec_digest": "49d2120fe72a88f8d901401187bd04692e3202d1d90a374a175ebaacb6b5ff0c",
+      "token": "b938b45479dd4ae5a5a913f80396ab9f"
+    },
+    {
+      "agent": "/root",
+      "at": "2026-10-14T00:42:32.083541+00:00",
+      "attempt": 1,
+      "binding": {
+        "digest": "804141767bdc80212fc836da74a96aec6dcc4114a61e107f26f54a64c358972f",
+        "sha": "0f605350df042a2c01d6c6a67ff6ff34b7e841af"
+      },
+      "command": [
+        "python3",
+        "-c",
+        "import pathlib,subprocess,sys,re\nlog=pathlib.Path(subprocess.check_output(['git','rev-parse','--git-path','minfwm/product-check.log'],text=True).strip())\nlog.parent.mkdir(parents=True,exist_ok=True)\ncommands=[['cmake','-S','.','-B','build','-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0'],['cmake','--build','build','--parallel'],['ctest','--test-dir','build','--output-on-failure']]\nwith log.open('wb') as out:\n for command in commands:\n  run=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)\n  out.write(run.stdout)\n  print(' '.join(command)+': exit '+str(run.returncode),flush=True)\n  if command[0]=='ctest':\n   for line in run.stdout.decode(errors='replace').splitlines():\n    if 'tests passed' in line or 'tests failed out of' in line: print(line,flush=True)\n  if run.returncode:\n   print('Failure details saved in the local Git-admin product-check.log',flush=True)\n   sys.exit(run.returncode)\n"
+      ],
+      "duration_seconds": 8.149,
+      "exit_code": 0,
+      "kind": "full",
+      "output_sha256": "c129e9945e907218ecf65843da10aca0d988567d14ee8fd5ce397eccedd075cd",
+      "output_tail": "cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0: exit 0\ncmake --build build --parallel: exit 0\nctest --test-dir build --output-on-failure: exit 0\n100% tests passed out of 12\n",
+      "spec_digest": "49d2120fe72a88f8d901401187bd04692e3202d1d90a374a175ebaacb6b5ff0c",
+      "token": "7d1954b9e1d444249f188858353d59fb"
+    }
+  ],
+  "execution": {
+    "attempt": 1,
+    "status": "complete"
+  },
+  "history": [
+    {
+      "action": "transition backlog -> research",
+      "at": "2026-10-14T00:38:07.067874+00:00",
+      "attempt": 0
+    },
+    {
+      "action": "transition research -> build: Research not needed: existing core contracts and CMake targets.",
+      "at": "2026-10-14T00:38:10.361184+00:00",
+      "attempt": 0
+    },
+    {
+      "action": "claim worker",
+      "at": "2026-10-14T00:38:15.421918+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "evidence focused",
+      "at": "2026-10-14T00:39:50.706784+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "release",
+      "at": "2026-10-14T00:40:36.235035+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "transition build -> review",
+      "at": "2026-10-14T00:40:38.010592+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "claim reviewer",
+      "at": "2026-10-14T00:41:09.131754+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "review",
+      "at": "2026-10-14T00:41:55.135899+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "release",
+      "at": "2026-10-14T00:42:23.652550+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "transition review -> test",
+      "at": "2026-10-14T00:42:25.420278+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "claim tester",
+      "at": "2026-10-14T00:42:30.359305+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "evidence full",
+      "at": "2026-10-14T00:42:40.233249+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "release",
+      "at": "2026-10-14T00:42:41.997034+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "transition test -> integrate",
+      "at": "2026-10-14T00:42:45.380305+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "finish",
+      "at": "2026-10-14T00:42:50.316678+00:00",
+      "attempt": 1
+    }
+  ],
+  "id": "TASK-AI-CORE-CHECK",
+  "manual": {
+    "reason": "Automated checks and documentation only, no live window claims.",
+    "status": "not-required"
+  },
+  "owned_paths": [
+    {
+      "operation": "create",
+      "path": "docs/ai/handoffs/TASK-AI-CORE-CHECK.md"
+    },
+    {
+      "operation": "edit",
+      "path": ".agents/contributions"
+    }
+  ],
+  "plan": "ai-workflow-implementation.md",
+  "read_set": [
+    "AGENTS.md",
+    "CMakeLists.txt",
+    "tests/GeometryTests.cpp",
+    "src/core/DisplayState.cpp"
+  ],
+  "result": "Independent review passed; full configure/build and all 12 CTest passed on clean committed candidate, with no application source edits.",
+  "reviews": [
+    {
+      "agent": "/root/review_core_pilot",
+      "at": "2026-10-14T00:41:55.135784+00:00",
+      "attempt": 1,
+      "binding": {
+        "digest": "804141767bdc80212fc836da74a96aec6dcc4114a61e107f26f54a64c358972f",
+        "sha": "0f605350df042a2c01d6c6a67ff6ff34b7e841af"
+      },
+      "quality": "pass",
+      "spec": "pass",
+      "spec_digest": "49d2120fe72a88f8d901401187bd04692e3202d1d90a374a175ebaacb6b5ff0c",
+      "summary": "Independent read-only review of 0f605350df042a2c01d6c6a67ff6ff34b7e841af: clean committed candidate; diff contains only owned factual handoff and matching Codex contribution record/coauthor. Geometry observations match existing source and CMake. Exact-candidate focused evidence records successful configure, geometry target build and geometry CTest 1/1; no full-suite or live-runtime pass is asserted. Spec is ready for Test; full configure, all-target build and full CTest remain required at Test before acceptance completion. No actionable quality findings.",
+      "token": "ba18ee0df3fc41b9a19cbbafcd97c7be"
+    }
+  ],
+  "revision": 16,
+  "schema_version": 1,
+  "skills": [
+    "minfwm-verification"
+  ],
+  "spec": {
+    "acceptance": [
+      "Core target builds/passes and full configure/build/CTest results are recorded on committed candidate; application source remains unchanged."
+    ],
+    "summary": "Verify pure core and full product checks from the clean committed candidate without changing application source; write a factual handoff."
+  },
+  "stage": "done",
+  "title": "Verify clean committed product baseline",
+  "usage": "unavailable",
+  "worker": "/root/core_acceptance_pilot"
+}

@@ -1,0 +1,243 @@
+{
+  "accepted_digest": "54144634dbae5a678e85f3ba82f6859653810295d9cf4d4712c647adbc2e25c0",
+  "accepted_sha": "7baff5c65ebfd220bb28079403e7c414e4758977",
+  "base_sha": "db091be239aa85f9b58b384baa5a8cb5ad0e8fdb",
+  "dependencies": [],
+  "dispatches": [
+    {
+      "agent": "/root/onboarding_pilot",
+      "at": "2026-10-14T00:33:53.354341+00:00",
+      "attempt": 1,
+      "base_sha": "db091be239aa85f9b58b384baa5a8cb5ad0e8fdb",
+      "expires": 1791941633.354333,
+      "initial_binding": {
+        "digest": "f27fa695539855b847106e5016f14a8ebe19b65773078fde49f7d4d8827519bd",
+        "sha": "db091be239aa85f9b58b384baa5a8cb5ad0e8fdb"
+      },
+      "outside_owned_digest": "61fd869ecee19a21d05483fc3403c6007ccd0fce8429d751a2785b320da0cfa3",
+      "role": "worker",
+      "spec_digest": "6c3b42b66949c12cdd2d32f2492066327ef13a7fee12d517dff828ebc8506a1b",
+      "task": "TASK-AI-ONBOARD",
+      "token": "84f2b0a54d8e4960baebfc42eb47d7fd"
+    },
+    {
+      "agent": "/root/review_onboarding_pilot",
+      "at": "2026-10-14T00:36:36.363696+00:00",
+      "attempt": 1,
+      "base_sha": "db091be239aa85f9b58b384baa5a8cb5ad0e8fdb",
+      "expires": 1791941796.363689,
+      "initial_binding": {
+        "digest": "54144634dbae5a678e85f3ba82f6859653810295d9cf4d4712c647adbc2e25c0",
+        "sha": "7baff5c65ebfd220bb28079403e7c414e4758977"
+      },
+      "outside_owned_digest": "61fd869ecee19a21d05483fc3403c6007ccd0fce8429d751a2785b320da0cfa3",
+      "role": "reviewer",
+      "spec_digest": "6c3b42b66949c12cdd2d32f2492066327ef13a7fee12d517dff828ebc8506a1b",
+      "task": "TASK-AI-ONBOARD",
+      "token": "857e6fd68172421da8f61368cccef1d0"
+    },
+    {
+      "agent": "/root",
+      "at": "2026-10-14T00:38:02.316318+00:00",
+      "attempt": 1,
+      "base_sha": "db091be239aa85f9b58b384baa5a8cb5ad0e8fdb",
+      "expires": 1791941882.316308,
+      "initial_binding": {
+        "digest": "54144634dbae5a678e85f3ba82f6859653810295d9cf4d4712c647adbc2e25c0",
+        "sha": "7baff5c65ebfd220bb28079403e7c414e4758977"
+      },
+      "outside_owned_digest": "61fd869ecee19a21d05483fc3403c6007ccd0fce8429d751a2785b320da0cfa3",
+      "role": "tester",
+      "spec_digest": "6c3b42b66949c12cdd2d32f2492066327ef13a7fee12d517dff828ebc8506a1b",
+      "task": "TASK-AI-ONBOARD",
+      "token": "3801b2e50f814e9ba122d7d0da86cb3a"
+    }
+  ],
+  "evidence": [
+    {
+      "agent": "/root/onboarding_pilot",
+      "at": "2026-10-14T00:35:13.211225+00:00",
+      "attempt": 1,
+      "binding": {
+        "digest": "54144634dbae5a678e85f3ba82f6859653810295d9cf4d4712c647adbc2e25c0",
+        "sha": "7baff5c65ebfd220bb28079403e7c414e4758977"
+      },
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_ai_*.py"
+      ],
+      "duration_seconds": 31.823,
+      "exit_code": 0,
+      "kind": "focused",
+      "output_sha256": "d66ff9a3129253119c57fbbac33066ca7902312f1389ff359dcbfe125706b191",
+      "output_tail": "....................................Preparing worktree (detached HEAD f862e39)\n.......Preparing worktree (detached HEAD 3c2309d)\n........\n----------------------------------------------------------------------\nRan 51 tests in 31.663s\n\nOK\n",
+      "spec_digest": "6c3b42b66949c12cdd2d32f2492066327ef13a7fee12d517dff828ebc8506a1b",
+      "token": "84f2b0a54d8e4960baebfc42eb47d7fd"
+    },
+    {
+      "agent": "/root",
+      "at": "2026-10-14T00:38:02.558271+00:00",
+      "attempt": 1,
+      "binding": {
+        "digest": "54144634dbae5a678e85f3ba82f6859653810295d9cf4d4712c647adbc2e25c0",
+        "sha": "7baff5c65ebfd220bb28079403e7c414e4758977"
+      },
+      "command": [
+        "python3",
+        "tools/ai_attribution.py",
+        "check-history",
+        "--baseline",
+        "3cdf2d6",
+        "--head",
+        "HEAD"
+      ],
+      "duration_seconds": 0.214,
+      "exit_code": 0,
+      "kind": "full",
+      "output_sha256": "ee7be04530a09b34c3630e5502dae689aa2078636146dc11542a22b5f000e596",
+      "output_tail": "Validated 2 commits after baseline 3cdf2d634b7ac32c82f965b58347f7ac85ac9365\n",
+      "spec_digest": "6c3b42b66949c12cdd2d32f2492066327ef13a7fee12d517dff828ebc8506a1b",
+      "token": "3801b2e50f814e9ba122d7d0da86cb3a"
+    }
+  ],
+  "execution": {
+    "attempt": 1,
+    "status": "complete"
+  },
+  "history": [
+    {
+      "action": "transition backlog -> research",
+      "at": "2026-10-14T00:33:34.546919+00:00",
+      "attempt": 0
+    },
+    {
+      "action": "transition research -> build: Research not needed: implementation and contracts are already reviewed.",
+      "at": "2026-10-14T00:33:34.738878+00:00",
+      "attempt": 0
+    },
+    {
+      "action": "claim worker",
+      "at": "2026-10-14T00:33:53.354464+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "evidence focused",
+      "at": "2026-10-14T00:35:45.034737+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "release",
+      "at": "2026-10-14T00:36:21.193293+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "transition build -> review",
+      "at": "2026-10-14T00:36:21.364544+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "claim reviewer",
+      "at": "2026-10-14T00:36:36.363820+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "review",
+      "at": "2026-10-14T00:37:27.791563+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "release",
+      "at": "2026-10-14T00:38:01.546314+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "transition review -> test",
+      "at": "2026-10-14T00:38:01.798227+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "claim tester",
+      "at": "2026-10-14T00:38:02.316443+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "evidence full",
+      "at": "2026-10-14T00:38:02.772486+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "release",
+      "at": "2026-10-14T00:38:02.982849+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "transition test -> integrate",
+      "at": "2026-10-14T00:38:03.393094+00:00",
+      "attempt": 1
+    },
+    {
+      "action": "finish",
+      "at": "2026-10-14T00:38:05.358819+00:00",
+      "attempt": 1
+    }
+  ],
+  "id": "TASK-AI-ONBOARD",
+  "manual": {
+    "reason": "Workflow documentation and disposable Git checks only; no live window behavior.",
+    "status": "not-required"
+  },
+  "owned_paths": [
+    {
+      "operation": "create",
+      "path": "docs/ai/handoffs/TASK-AI-ONBOARD.md"
+    },
+    {
+      "operation": "edit",
+      "path": ".agents/contributions"
+    }
+  ],
+  "plan": "ai-workflow-implementation.md",
+  "read_set": [
+    "AGENTS.md",
+    "docs/ai/runbook.md",
+    ".agents/workflow-stack.json"
+  ],
+  "result": "Fresh host worker and independent reviewer passed cold-start onboarding; 51 workflow tests plus committed-history attribution validated on the clean candidate.",
+  "reviews": [
+    {
+      "agent": "/root/review_onboarding_pilot",
+      "at": "2026-10-14T00:37:27.791435+00:00",
+      "attempt": 1,
+      "binding": {
+        "digest": "54144634dbae5a678e85f3ba82f6859653810295d9cf4d4712c647adbc2e25c0",
+        "sha": "7baff5c65ebfd220bb28079403e7c414e4758977"
+      },
+      "quality": "pass",
+      "spec": "pass",
+      "spec_digest": "6c3b42b66949c12cdd2d32f2492066327ef13a7fee12d517dff828ebc8506a1b",
+      "summary": "Independent review inspected db091be239aa85f9b58b384baa5a8cb5ad0e8fdb..7baff5c65ebfd220bb28079403e7c414e4758977: clean candidate, only the assigned handoff and contribution record changed; handoff documents successful bootstrap/profile/doctor and bounded onboarding with unavailable checks stated honestly. Local hooksPath, executable hooks, Codex session and CLAUDE symlink match the handoff. Contribution record matches task/base/path/tool and commit trailers. Canonical focused evidence binds 51 passing tests to this exact SHA and source digest. No actionable spec or quality findings; no tests or live macOS checks rerun.",
+      "token": "857e6fd68172421da8f61368cccef1d0"
+    }
+  ],
+  "revision": 16,
+  "schema_version": 1,
+  "skills": [
+    "minfwm-task-execution"
+  ],
+  "spec": {
+    "acceptance": [
+      "Bootstrap and profile validation succeed in the fresh worktree; only assigned handoff and contribution records change."
+    ],
+    "summary": "A fresh agent verifies selected skills, local hooks and bounded task onboarding in the isolated candidate; writes one factual handoff."
+  },
+  "stage": "done",
+  "title": "Verify cold-start AI onboarding",
+  "usage": "unavailable",
+  "worker": "/root/onboarding_pilot"
+}
