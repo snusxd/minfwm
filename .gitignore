@@ -27,7 +27,6 @@ Icon
 *.dylib
 *.dll
 minfwm
-minfwmc
 
 # --- IDEs and Editors ---
 .vscode/

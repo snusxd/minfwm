@@ -15,7 +15,7 @@ origins. Native macOS Spaces are intentionally not implemented in phase one.
 
 ## Runtime flow
 
-1. `minfwmd` checks Accessibility permission and snapshots connected displays.
+1. `minfwm daemon` checks Accessibility permission and snapshots connected displays.
 2. `AXObserver` tracks application and window events on the main run loop.
 3. `InputInterceptor` consumes Super panning and restores a timed-out
    event tap.

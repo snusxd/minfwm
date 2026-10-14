@@ -174,7 +174,7 @@ void testExactIo() {
 
 void testCommandLineParsing() {
     {
-        const char* argv[] = {"minfwmc", "reload"};
+        const char* argv[] = {"minfwm", "reload"};
         const auto result = minfwm::parseCommandLine(2, argv);
         assert(result.command.has_value());
         assert(result.command->command == ParsedCommandLine::Command::RELOAD);
@@ -188,7 +188,7 @@ void testCommandLineParsing() {
     }
 
     {
-        const char* argv[] = {"minfwmc", "camera", "move", "--y", "-2.25", "--x", "1.5"};
+        const char* argv[] = {"minfwm", "camera", "move", "--y", "-2.25", "--x", "1.5"};
         const auto result = minfwm::parseCommandLine(7, argv);
         assert(result.command.has_value());
         assert(result.command->command == ParsedCommandLine::Command::CAMERA_MOVE);
@@ -197,7 +197,7 @@ void testCommandLineParsing() {
     }
 
     {
-        const char* argv[] = {"minfwmc", "camera", "move", "--x=1", "--y=-2"};
+        const char* argv[] = {"minfwm", "camera", "move", "--x=1", "--y=-2"};
         const auto result = minfwm::parseCommandLine(5, argv);
         assert(result.command.has_value());
         assert(result.command->x == 1.0F);
@@ -205,14 +205,14 @@ void testCommandLineParsing() {
     }
 
     const std::array<std::vector<const char*>, 8> invalidArguments = {
-        std::vector<const char*> {"minfwmc"},
-        std::vector<const char*> {"minfwmc", "reload", "extra"},
+        std::vector<const char*> {"minfwm"},
+        std::vector<const char*> {"minfwm", "reload", "extra"},
         std::vector<const char*> {"minfwm", "dev-update", "extra"},
-        std::vector<const char*> {"minfwmc", "camera", "move", "--x", "nan", "--y", "0"},
-        std::vector<const char*> {"minfwmc", "camera", "move", "--x", "1", "--x", "2", "--y", "3"},
-        std::vector<const char*> {"minfwmc", "camera", "move", "--x", "1", "--z", "2", "--y", "3"},
-        std::vector<const char*> {"minfwmc", "camera", "move", "--x", "1", "--y"},
-        std::vector<const char*> {"minfwmc", "camera", "move", "--x", "1.2oops", "--y", "3"}
+        std::vector<const char*> {"minfwm", "camera", "move", "--x", "nan", "--y", "0"},
+        std::vector<const char*> {"minfwm", "camera", "move", "--x", "1", "--x", "2", "--y", "3"},
+        std::vector<const char*> {"minfwm", "camera", "move", "--x", "1", "--z", "2", "--y", "3"},
+        std::vector<const char*> {"minfwm", "camera", "move", "--x", "1", "--y"},
+        std::vector<const char*> {"minfwm", "camera", "move", "--x", "1.2oops", "--y", "3"}
     };
     for (const auto& arguments : invalidArguments) {
         const auto result = minfwm::parseCommandLine(

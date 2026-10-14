@@ -84,30 +84,16 @@ add_library(minfwm_daemon_runtime STATIC
 target_include_directories(minfwm_daemon_runtime SYSTEM PRIVATE third_party/tomlplusplus)
 target_link_libraries(minfwm_daemon_runtime PUBLIC minfwm_ipc_transport minfwm_window_runtime ${COMMON_LIBS})
 
-add_executable(minfwmd src/daemon/main.mm)
-target_link_libraries(minfwmd PRIVATE minfwm_daemon_runtime)
-
-# CLI
-add_executable(minfwmc
-    src/cli/main.mm
-    src/cli/IPCClient.mm
-    src/cli/CommandLine.cpp
-    src/cli/DaemonControl.mm
-)
-target_link_libraries(minfwmc PRIVATE minfwm_common ${COMMON_LIBS})
-target_compile_definitions(minfwmc PRIVATE
-    MINFWM_BUILD_COMMIT="${MINFWM_BUILD_COMMIT}"
-    MINFWM_BUILD_VERSION="${MINFWM_BUILD_VERSION}"
-    MINFWM_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-)
-
+# CLI and daemon share one executable. LaunchAgent starts it with the `daemon`
+# subcommand; normal invocations continue to use the CLI commands.
 add_executable(minfwm
     src/cli/main.mm
     src/cli/IPCClient.mm
     src/cli/CommandLine.cpp
     src/cli/DaemonControl.mm
+    src/daemon/main.mm
 )
-target_link_libraries(minfwm PRIVATE minfwm_common ${COMMON_LIBS})
+target_link_libraries(minfwm PRIVATE minfwm_common minfwm_daemon_runtime ${COMMON_LIBS})
 target_compile_definitions(minfwm PRIVATE
     MINFWM_BUILD_COMMIT="${MINFWM_BUILD_COMMIT}"
     MINFWM_BUILD_VERSION="${MINFWM_BUILD_VERSION}"

@@ -54,7 +54,7 @@ std::string serviceTarget() {
     return "gui/" + std::to_string(static_cast<unsigned long>(getuid())) + "/" + kLabel;
 }
 
-bool executablePaths(std::filesystem::path& daemonPath,
+bool executablePaths(std::filesystem::path& executablePath,
                      std::filesystem::path& plistPath,
                      std::string& error) {
     std::array<char, MAXPATHLEN> executableBuffer{};
@@ -68,14 +68,14 @@ bool executablePaths(std::filesystem::path& daemonPath,
     // current version into the LaunchAgent and make macOS treat each upgrade
     // as a different Accessibility client.
     std::error_code pathError;
-    const auto executablePath = std::filesystem::absolute(executableBuffer.data(), pathError);
+    executablePath = std::filesystem::absolute(executableBuffer.data(), pathError);
     if (pathError) {
         error = "could not make the minfwm executable path absolute";
         return false;
     }
-    daemonPath = executablePath.lexically_normal().parent_path() / "minfwmd";
-    if (access(daemonPath.c_str(), X_OK) != 0) {
-        error = "minfwmd must be installed next to minfwm (expected " + daemonPath.string() + ")";
+    executablePath = executablePath.lexically_normal();
+    if (access(executablePath.c_str(), X_OK) != 0) {
+        error = "minfwm is not executable (expected " + executablePath.string() + ")";
         return false;
     }
 
@@ -88,20 +88,20 @@ bool executablePaths(std::filesystem::path& daemonPath,
     return true;
 }
 
-bool installLaunchAgent(const std::filesystem::path& daemonPath,
+bool installLaunchAgent(const std::filesystem::path& executablePath,
                         const std::filesystem::path& plistPath,
                         std::string& error) {
     @autoreleasepool {
         NSDictionary* plist = @{
             @"Label": [NSString stringWithUTF8String:kLabel],
-            @"ProgramArguments": @[[NSString stringWithUTF8String:daemonPath.c_str()]],
+            @"ProgramArguments": @[[NSString stringWithUTF8String:executablePath.c_str()], @"daemon"],
             @"RunAtLoad": @YES,
             // Restart after unexpected failures, but don't loop on setup
             // failures such as missing Accessibility permission or SA support.
             @"KeepAlive": @{ @"SuccessfulExit": @NO },
-            @"StandardOutPath": [NSString stringWithFormat:@"%@/Library/Logs/minfwmd.log",
+            @"StandardOutPath": [NSString stringWithFormat:@"%@/Library/Logs/minfwm.log",
                                                             NSHomeDirectory()],
-            @"StandardErrorPath": [NSString stringWithFormat:@"%@/Library/Logs/minfwmd.log",
+            @"StandardErrorPath": [NSString stringWithFormat:@"%@/Library/Logs/minfwm.log",
                                                              NSHomeDirectory()]
         };
         NSError* directoryError = nil;
@@ -174,11 +174,11 @@ bool bootout(const std::string& target, std::string& error) {
 } // namespace
 
 bool controlDaemon(std::string_view action, std::string& error) {
-    std::filesystem::path daemonPath;
+    std::filesystem::path executablePath;
     std::filesystem::path plistPath;
     const bool needsAgent = action == "start" || action == "restart" || action == "enable";
-    if (needsAgent && !executablePaths(daemonPath, plistPath, error)) return false;
-    if (needsAgent && !installLaunchAgent(daemonPath, plistPath, error)) return false;
+    if (needsAgent && !executablePaths(executablePath, plistPath, error)) return false;
+    if (needsAgent && !installLaunchAgent(executablePath, plistPath, error)) return false;
 
     const std::string target = serviceTarget();
     if (action == "stop") {

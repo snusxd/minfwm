@@ -19,7 +19,7 @@ Install the latest stable release from the to macOS 14+
 brew install snusxd/minfwm/minfwm
 ```
 
-Grant `minfwmd` Accessibility permission in System Settings, then enable the
+Grant `minfwm` Accessibility permission in System Settings, then enable the
 per-user LaunchAgent:
 
 ```sh
@@ -42,9 +42,8 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-For a foreground run, start `./build/minfwmd`. Keep `minfwmd` beside `minfwm`
-when using the LaunchAgent. The daemon socket is `$TMPDIR/minfwm.sock`, owned by
-the current user with mode `0600`.
+For a foreground run, start `./build/minfwm daemon`. The daemon socket is
+`$TMPDIR/minfwm.sock`, owned by the current user with mode `0600`.
 
 ## Features and documentation
 

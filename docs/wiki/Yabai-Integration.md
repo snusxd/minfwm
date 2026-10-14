@@ -15,9 +15,9 @@ python3 tools/build_yabai_sa.py
 sudo ./build/yabai-minfwm/bin/yabai --load-sa
 ```
 
-Disable System Integrity Protection before setup. Stop `minfwmd` before
-loading. This replaces the installed Yabai SA and may restart Dock. To revert,
-stop minfwmd, uninstall using
+Disable System Integrity Protection before setup. Stop the daemon with
+`minfwm stop` before loading. This replaces the installed Yabai SA and may
+restart Dock. To revert, stop the daemon with `minfwm stop`, uninstall using
 the original Yabai `--uninstall-sa`, then load the original `--load-sa`. An SA
 unload may leave transforms in WindowServer, so confirm normal native dragging
 before restarting the daemon.

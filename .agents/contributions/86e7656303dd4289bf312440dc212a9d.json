@@ -1,0 +1,24 @@
+{
+  "assistance": "ai",
+  "base": "5985183cca69ccd1debf712fef47b6a866984599",
+  "id": "86e7656303dd4289bf312440dc212a9d",
+  "paths": [
+    ".github/workflows/release.yml",
+    ".gitignore",
+    "AGENTS.md",
+    "CMakeLists.txt",
+    "GEMINI.md",
+    "README.md",
+    "docs/wiki/Getting-Started.md",
+    "docs/wiki/Yabai-Integration.md",
+    "src/cli/DaemonControl.mm",
+    "src/cli/main.mm",
+    "src/daemon/main.mm",
+    "tests/IPCProtocolTests.cpp"
+  ],
+  "schema_version": 1,
+  "task": "binary-consolidation",
+  "tools": [
+    "codex"
+  ]
+}

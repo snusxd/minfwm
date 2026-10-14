@@ -3,7 +3,7 @@
 ## Requirements
 
 - macOS 14 or newer, AppleClang, C++20, and CMake 3.20 or newer.
-- Accessibility permission for `minfwmd`.
+- Accessibility permission for `minfwm`.
 - Disabled System Integrity Protection (SIP).
 - The compatible [Yabai Scripting Addition](https://github.com/snusxd/minfwm/wiki/Yabai-Integration) built and loaded separately; the Homebrew formula does not install it.
 
@@ -13,11 +13,11 @@
 cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
-./build/minfwmd
+./build/minfwm daemon
 ```
 
 Grant Accessibility permission in System Settings, then restart the daemon.
-For per-user login startup, keep `minfwmd` beside `minfwm` and run:
+For per-user login startup, run:
 
 ```sh
 ./build/minfwm enable
