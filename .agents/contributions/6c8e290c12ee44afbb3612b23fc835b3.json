@@ -1,0 +1,21 @@
+{
+  "assistance": "ai",
+  "base": "2b4884f3a86ff6b4b1abbf7ec4e11bda8a22bc68",
+  "id": "6c8e290c12ee44afbb3612b23fc835b3",
+  "paths": [
+    "config/minfwm.toml.example",
+    "docs/wiki/Configuration.md",
+    "docs/wiki/Getting-Started.md",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.hpp",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/TrackpadInput.hpp",
+    "src/daemon/TrackpadInput.mm"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}

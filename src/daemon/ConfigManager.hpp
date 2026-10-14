@@ -9,6 +9,7 @@ namespace minfwm {
 struct ConfigSnapshot {
     bool enableWindowShadows = false;
     bool invertZoomScrollDirection = false;
+    bool trackInvertZoomDirection = false;
     bool rewindOnFocus = true;
     bool centerOnCmdTab = true;
     bool animationsEnabled = true;

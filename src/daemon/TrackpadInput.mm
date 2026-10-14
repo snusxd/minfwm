@@ -4,6 +4,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 
 #include <dlfcn.h>
+#include <cmath>
 #include <iostream>
 #include <utility>
 
@@ -65,7 +66,11 @@ struct TrackpadInput::Impl {
     Handler handler;
     bool registered = false;
     bool active = false;
+    size_t fingerCount = 0;
+    bool pinching = false;
     MTPoint previousCentroid{};
+    float previousRadius = 0.0f;
+    float pinchStartRadius = 0.0f;
 
     static void onContacts(MTDeviceRef, MTTouch* touches, size_t count, double, size_t, void* context) {
         auto* self = static_cast<Impl*>(context);
@@ -81,31 +86,78 @@ struct TrackpadInput::Impl {
             ++activeCount;
         }
 
-        if (activeCount != 3) {
+        if (activeCount != 3 && activeCount != 4) {
             if (self->active) {
                 self->active = false;
-                self->handler(false, {});
+                self->fingerCount = 0;
+                self->pinching = false;
+                self->handler(false, {}, 0.0f);
             }
             return;
         }
 
+        if (self->active && self->fingerCount != activeCount) {
+            self->active = false;
+            self->fingerCount = 0;
+            self->pinching = false;
+            self->handler(false, {}, 0.0f);
+        }
+
         centroid.x /= static_cast<float>(activeCount);
         centroid.y /= static_cast<float>(activeCount);
+        float squaredRadius = 0.0f;
+        for (size_t index = 0; index < count; ++index) {
+            const MTTouch& touch = touches[index];
+            if (touch.state != kTouchMake && touch.state != kTouching) continue;
+            const float dx = touch.normalized.position.x - centroid.x;
+            const float dy = touch.normalized.position.y - centroid.y;
+            squaredRadius += dx * dx + dy * dy;
+        }
+        const float radius = std::sqrt(squaredRadius / static_cast<float>(activeCount));
         if (!self->active) {
             self->active = true;
+            self->fingerCount = activeCount;
+            self->pinching = false;
             self->previousCentroid = centroid;
-            self->handler(true, {});
+            self->previousRadius = radius;
+            self->pinchStartRadius = radius;
+            self->handler(true, {}, 0.0f);
             return;
         }
 
         const MTPoint previous = self->previousCentroid;
         self->previousCentroid = centroid;
-        const CGRect displayBounds = CGDisplayBounds(CGMainDisplayID());
-        const core::Point delta{
-            (centroid.x - previous.x) * static_cast<float>(displayBounds.size.width),
-            (previous.y - centroid.y) * static_cast<float>(displayBounds.size.height),
-        };
-        if (delta.x != 0.0f || delta.y != 0.0f) self->handler(true, delta);
+        const float previousRadius = self->previousRadius;
+        self->previousRadius = radius;
+        if (self->fingerCount == 3) {
+            const CGRect displayBounds = CGDisplayBounds(CGMainDisplayID());
+            const core::Point delta{
+                (centroid.x - previous.x) * static_cast<float>(displayBounds.size.width),
+                (previous.y - centroid.y) * static_cast<float>(displayBounds.size.height),
+            };
+            if (delta.x != 0.0f || delta.y != 0.0f) self->handler(true, delta, 0.0f);
+            return;
+        }
+
+        constexpr float kPinchActivationThreshold = 0.10f;
+        constexpr float kZoomNoiseFloor = 0.001f;
+        constexpr float kZoomSensitivity = 0.015f;
+        bool pinchJustStarted = false;
+        if (!self->pinching && self->pinchStartRadius > 0.0f && radius > 0.0f &&
+            std::abs(radius / self->pinchStartRadius - 1.0f) >= kPinchActivationThreshold) {
+            self->pinching = true;
+            pinchJustStarted = true;
+        }
+
+        if (self->pinching) {
+            float zoomDelta = 0.0f;
+            if (previousRadius > 0.0f && radius > 0.0f) {
+                const float logScale = pinchJustStarted ? std::log(radius / self->pinchStartRadius) :
+                    std::log(radius / previousRadius);
+                if (std::abs(logScale) >= kZoomNoiseFloor) zoomDelta = logScale / kZoomSensitivity;
+            }
+            self->handler(true, {}, zoomDelta);
+        }
     }
 };
 
@@ -121,7 +173,7 @@ bool TrackpadInput::start(Handler handler) {
     m_impl->library = dlopen(
         "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport", RTLD_NOW | RTLD_LOCAL);
     if (!m_impl->library) {
-        std::cerr << "TrackpadInput: MultitouchSupport unavailable; three-finger pan disabled" << std::endl;
+        std::cerr << "TrackpadInput: MultitouchSupport unavailable; three-finger gestures disabled" << std::endl;
         return false;
     }
 
@@ -174,7 +226,7 @@ bool TrackpadInput::start(Handler handler) {
         stop();
         return false;
     }
-    std::cout << "TrackpadInput: listening for three-finger pan" << std::endl;
+    std::cout << "TrackpadInput: listening for three-finger pan and four-finger pinch" << std::endl;
     return true;
 }
 
@@ -196,6 +248,8 @@ void TrackpadInput::stop() {
     }
     m_impl->handler = {};
     m_impl->active = false;
+    m_impl->fingerCount = 0;
+    m_impl->pinching = false;
 }
 
 } // namespace minfwm

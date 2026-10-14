@@ -9,7 +9,7 @@ namespace minfwm {
 
 class TrackpadInput final {
 public:
-    using Handler = std::function<void(bool active, core::Point delta)>;
+    using Handler = std::function<void(bool active, core::Point panDelta, float zoomDelta)>;
 
     TrackpadInput();
     ~TrackpadInput();

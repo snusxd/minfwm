@@ -46,6 +46,8 @@ the daemon next to the invoked CLI binary.
 - Super and left-drag pans the canvas.
 - Moving three fingers on the trackpad pans the canvas and continues with
   decaying momentum after you lift them.
+- Pinching four fingers together or apart zooms the display under the pointer
+  when a compatible overview extension is available.
 - Super and vertical scroll zooms the display under the pointer when a
   compatible overview extension is available.
 - Clicking a window while zoomed restores normal scale and centers it.

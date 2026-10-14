@@ -13,6 +13,7 @@ spawn-behavior = "center"
 
 [zoom]
 invert-zoom-scroll-direction = false
+track-invert-zoom-direction = false
 rewind-on-focus = true
 zoomed-esc-center = "screen"
 
@@ -46,6 +47,7 @@ bookmarks-goto = ["Super", "Shift"]
 | `whitelist` | `["Terminal", "Music"]` | Applications whose windows remain available. |
 | `spawn-behavior` | `"center"` | Placement policy for newly observed windows. |
 | `invert-zoom-scroll-direction` | `false` | Reverse vertical-scroll zoom direction. |
+| `zoom.track-invert-zoom-direction` | `false` | Reverse four-finger trackpad pinch zoom direction independently of scroll zoom. |
 | `rewind-on-focus` | `true` | When zoomed, clicking a window exits overview and returns the camera. When `false`, clicks and other input pass through to windows while the camera stays zoomed. |
 | `camera.center-on-cmd-tab` | `true` | Center the camera on the active application's focused window after switching apps with `Cmd+Tab`. |
 | `zoomed-esc-center` | `"screen"` | Escape anchor: `screen`, `mouse`, or `focus`. |

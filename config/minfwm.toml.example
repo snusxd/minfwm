@@ -27,6 +27,8 @@ spawn-behavior = "center"
 [zoom]
 # Reverse Super wheel zoom without changing ordinary application scrolling.
 invert-zoom-scroll-direction = false
+# Reverse four-finger trackpad pinch zoom independently of wheel zoom.
+track-invert-zoom-direction = false
 # Return the camera to a focused application after it is activated.
 rewind-on-focus = true
 # Escape anchor while zoomed: "screen", "mouse", or "focus".

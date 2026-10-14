@@ -27,7 +27,7 @@ private:
     static CGEventRef eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
     static CGEventRef scrollTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
     void updateCursor(bool superHeld, bool dragging, CGPoint pointer);
-    void handleTrackpadPan(bool active, core::Point delta);
+    void handleTrackpadPan(bool active, core::Point delta, float zoomDelta);
     void applyTrackpadPanDelta(core::Point delta);
     void advanceTrackpadMomentum();
     void finishTrackpadPan();
@@ -48,6 +48,7 @@ private:
     double m_trackpadMomentumLastTick = 0.0;
     NSTimer* m_trackpadMomentumTimer = nil;
     bool m_trackpadGestureActive = false;
+    bool m_trackpadZoomGestureActive = false;
     uint64_t m_overviewButtons = 0;
     std::bitset<256> m_overviewKeys;
     bool m_zoomScrollCaptured = false;

@@ -148,11 +148,11 @@ bool InputInterceptor::start() {
 
     m_trackpadCallbackEnabled = std::make_shared<std::atomic_bool>(true);
     const auto callbackEnabled = m_trackpadCallbackEnabled;
-    m_trackpadInput.start([this, callbackEnabled](bool active, core::Point delta) {
+    m_trackpadInput.start([this, callbackEnabled](bool active, core::Point delta, float zoomDelta) {
         m_trackpadTouchActive.store(active, std::memory_order_release);
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!callbackEnabled->load(std::memory_order_acquire)) return;
-            handleTrackpadPan(active, delta);
+            handleTrackpadPan(active, delta, zoomDelta);
         });
     });
     return true;
@@ -168,6 +168,7 @@ void InputInterceptor::stop() {
     m_trackpadScrollCaptured = false;
     m_trackpadPanDisplayId.reset();
     m_trackpadGestureActive = false;
+    m_trackpadZoomGestureActive = false;
     m_trackpadPanVelocity = {};
     if (m_trackpadMomentumTimer) {
         [m_trackpadMomentumTimer invalidate];
@@ -204,9 +205,13 @@ void InputInterceptor::stop() {
     }
 }
 
-void InputInterceptor::handleTrackpadPan(bool active, core::Point delta) {
+void InputInterceptor::handleTrackpadPan(bool active, core::Point delta, float zoomDelta) {
     auto& wm = WindowManager::instance();
     if (!active) {
+        if (m_trackpadZoomGestureActive) {
+            m_trackpadZoomGestureActive = false;
+            return;
+        }
         if (!m_trackpadGestureActive) return;
         m_trackpadGestureActive = false;
         const double now = CACurrentMediaTime();
@@ -226,6 +231,20 @@ void InputInterceptor::handleTrackpadPan(bool active, core::Point delta) {
         [[NSRunLoop mainRunLoop] addTimer:m_trackpadMomentumTimer forMode:NSRunLoopCommonModes];
         return;
     }
+
+    if (zoomDelta != 0.0f) {
+        if (!m_trackpadZoomGestureActive) finishTrackpadPan();
+        m_trackpadZoomGestureActive = true;
+        CGEventRef pointerEvent = CGEventCreate(nullptr);
+        const CGPoint location = pointerEvent ? CGEventGetLocation(pointerEvent) : CGPointZero;
+        if (pointerEvent) CFRelease(pointerEvent);
+        const bool invert = ConfigManager::instance().snapshot().trackInvertZoomDirection;
+        (void)wm.requestOverviewZoom({static_cast<float>(location.x), static_cast<float>(location.y)},
+                                     invert ? -zoomDelta : zoomDelta);
+        return;
+    }
+    if (m_trackpadZoomGestureActive) return;
+    if (delta.x == 0.0f && delta.y == 0.0f) return;
 
     if (!m_trackpadGestureActive) {
         if (m_trackpadMomentumTimer) {
