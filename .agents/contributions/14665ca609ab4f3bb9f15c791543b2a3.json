@@ -1,0 +1,13 @@
+{
+  "assistance": "ai",
+  "base": "b8bcb93f3df651fa45c812b4907b96edff9a9b5c",
+  "id": "14665ca609ab4f3bb9f15c791543b2a3",
+  "paths": [
+    "README.md"
+  ],
+  "schema_version": 1,
+  "task": "release-ci",
+  "tools": [
+    "codex"
+  ]
+}

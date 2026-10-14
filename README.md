@@ -30,27 +30,8 @@ are `start`, `stop`, `restart`, `disable`, and `reload`. Keep `minfwmd` beside
 `minfwm` when using the LaunchAgent. The daemon socket is
 `$TMPDIR/minfwm.sock`, owned by the current user with mode `0600`.
 
-## Controls
+## Features and documentation
 
-- Hold Super and drag with the left mouse button to pan the canvas.
-- Hold Super and scroll vertically to zoom the display under the pointer
-  when the compatible overview extension is available.
-- Click a window while zoomed to restore normal scale and center it.
-- Press Escape to exit overview. The return anchor is configurable.
-- Press Cmd+1…9 to load a camera bookmark; Cmd+Shift+1…9 saves one.
-- Press Super+P to pin or unpin the focused window.
-
-## Configuration and documentation
-
-The optional configuration file is `~/.config/minfwm/minfwm.toml`. Copy
-[`config/minfwm.toml.example`](config/minfwm.toml.example) to get started; reload
-settings with `./build/minfwm reload`. Invalid configuration keeps the last
-valid settings active. The `[pins]` option `always-on-top` controls whether
-pinned windows stay above other windows.
-
-See the [project Wiki](https://github.com/snusxd/minfwm/wiki) for the complete
-[getting-started guide](https://github.com/snusxd/minfwm/wiki/Getting-Started),
-[configuration reference](https://github.com/snusxd/minfwm/wiki/Configuration),
-[architecture](https://github.com/snusxd/minfwm/wiki/Architecture),
-[development guide](https://github.com/snusxd/minfwm/wiki/Development), and
-[macOS acceptance checks](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance).
+See [FEATURES.md](FEATURES.md) for a quick overview of implemented features.
+For setup, configuration, and detailed guides, visit the
+[project Wiki](https://github.com/snusxd/minfwm/wiki).
