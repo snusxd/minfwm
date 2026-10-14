@@ -1,0 +1,17 @@
+{
+  "assistance": "ai",
+  "base": "867254113733047da97f2d3dfea16c8135e9b87f",
+  "id": "f003381550974997aa3703f4c4010ace",
+  "paths": [
+    ".github/workflows/release.yml",
+    "CMakeLists.txt",
+    "VERSION_MAJOR",
+    "docs/wiki/Releases.md",
+    "src/cli/main.mm"
+  ],
+  "schema_version": 1,
+  "task": "release-ci",
+  "tools": [
+    "codex"
+  ]
+}

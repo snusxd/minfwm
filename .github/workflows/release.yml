@@ -1,21 +1,52 @@
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Build and publish macOS release
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - run: cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
+      - name: Calculate next release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          major="$(tr -d '[:space:]' < VERSION_MAJOR)"
+          if [[ ! "$major" =~ ^(0|[1-9][0-9]*)$ ]]; then
+            echo "VERSION_MAJOR must contain one non-negative integer" >&2
+            exit 1
+          fi
+
+          latest=0
+          while IFS= read -r candidate; do
+            if [[ "$candidate" =~ ^v${major}\.([0-9]+)$ ]]; then
+              count="${BASH_REMATCH[1]}"
+              count_num=$((10#$count))
+              if (( count_num > latest )); then latest="$count_num"; fi
+            fi
+          done < <(git tag --list "v${major}.*")
+
+          tag="v${major}.$((latest + 1))"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Next release: $tag"
+      - name: Configure
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DMINFWM_BUILD_VERSION="$RELEASE_TAG"
       - run: cmake --build build --parallel
       - run: ctest --test-dir build --output-on-failure
       - name: Package release binaries
@@ -26,7 +57,5 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="$GITHUB_REF_NAME"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --generate-notes
-          gh release upload "$tag" release/minfwm-macos.tar.gz release/SHA256SUMS --clobber
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$RELEASE_TAG" release/minfwm-macos.tar.gz release/SHA256SUMS --target "$GITHUB_SHA" --title "$RELEASE_TAG" --generate-notes

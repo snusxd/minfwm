@@ -11,6 +11,10 @@
 #define MINFWM_BUILD_COMMIT "unknown"
 #endif
 
+#ifndef MINFWM_BUILD_VERSION
+#define MINFWM_BUILD_VERSION MINFWM_BUILD_COMMIT
+#endif
+
 #ifndef MINFWM_SOURCE_DIR
 #define MINFWM_SOURCE_DIR "."
 #endif
@@ -77,7 +81,7 @@ int main(int argc, const char * argv[]) {
         }
         if (command == minfwm::ParsedCommandLine::Command::VERSION) {
             std::cout << "minfwm "
-                      << (parsed.command->devVersion ? latestLocalCommit() : MINFWM_BUILD_COMMIT)
+                      << (parsed.command->devVersion ? latestLocalCommit() : MINFWM_BUILD_VERSION)
                       << '\n';
             return 0;
         }

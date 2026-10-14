@@ -11,6 +11,7 @@ execute_process(
 if(NOT MINFWM_BUILD_COMMIT)
     set(MINFWM_BUILD_COMMIT "unknown")
 endif()
+set(MINFWM_BUILD_VERSION "${MINFWM_BUILD_COMMIT}" CACHE STRING "Version shown by minfwm version")
 
 include(CTest)
 
@@ -95,6 +96,7 @@ add_executable(minfwmc
 target_link_libraries(minfwmc PRIVATE minfwm_common ${COMMON_LIBS})
 target_compile_definitions(minfwmc PRIVATE
     MINFWM_BUILD_COMMIT="${MINFWM_BUILD_COMMIT}"
+    MINFWM_BUILD_VERSION="${MINFWM_BUILD_VERSION}"
     MINFWM_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
@@ -107,6 +109,7 @@ add_executable(minfwm
 target_link_libraries(minfwm PRIVATE minfwm_common ${COMMON_LIBS})
 target_compile_definitions(minfwm PRIVATE
     MINFWM_BUILD_COMMIT="${MINFWM_BUILD_COMMIT}"
+    MINFWM_BUILD_VERSION="${MINFWM_BUILD_VERSION}"
     MINFWM_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
