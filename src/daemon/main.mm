@@ -34,8 +34,11 @@ int main(int argc, const char * argv[]) {
         // Verify accessibility permissions
         NSDictionary *options = @{(id)kAXTrustedCheckOptionPrompt: @YES};
         if (!AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)options)) {
-            std::cerr << "minfwmd: Error - Accessibility permissions not granted." << std::endl;
-            return 1;
+            std::cerr << "minfwmd: Accessibility permission is not active. Grant it in System Settings, then run `minfwm restart`."
+                      << std::endl;
+            // Exit successfully so launchd's KeepAlive policy doesn't relaunch
+            // the daemon and show the same permission prompt forever.
+            return 0;
         }
         auto systemWide = minfwm::CFRef<AXUIElementRef>::adopt(AXUIElementCreateSystemWide());
         if (!systemWide || AXUIElementSetMessagingTimeout(systemWide.get(), 0.1f) != kAXErrorSuccess) {
@@ -53,7 +56,7 @@ int main(int argc, const char * argv[]) {
         if (!wm.initialize()) {
             std::cerr << "minfwmd: required Yabai Scripting Addition is unavailable; see the installation guide" << std::endl;
             server.stop();
-            return 1;
+            return 0;
         }
 
         minfwm::AXObserver observer;

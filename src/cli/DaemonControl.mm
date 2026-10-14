@@ -63,12 +63,17 @@ bool executablePaths(std::filesystem::path& daemonPath,
         error = "could not determine the minfwm executable path";
         return false;
     }
-    char resolvedPath[PATH_MAX];
-    if (realpath(executableBuffer.data(), resolvedPath) == nullptr) {
-        error = "could not resolve the minfwm executable path";
+    // Keep the invocation path's symlinks. Homebrew's stable bin links point
+    // into versioned Cellar directories; resolving them here would bake the
+    // current version into the LaunchAgent and make macOS treat each upgrade
+    // as a different Accessibility client.
+    std::error_code pathError;
+    const auto executablePath = std::filesystem::absolute(executableBuffer.data(), pathError);
+    if (pathError) {
+        error = "could not make the minfwm executable path absolute";
         return false;
     }
-    daemonPath = std::filesystem::path(resolvedPath).parent_path() / "minfwmd";
+    daemonPath = executablePath.lexically_normal().parent_path() / "minfwmd";
     if (access(daemonPath.c_str(), X_OK) != 0) {
         error = "minfwmd must be installed next to minfwm (expected " + daemonPath.string() + ")";
         return false;
@@ -91,7 +96,9 @@ bool installLaunchAgent(const std::filesystem::path& daemonPath,
             @"Label": [NSString stringWithUTF8String:kLabel],
             @"ProgramArguments": @[[NSString stringWithUTF8String:daemonPath.c_str()]],
             @"RunAtLoad": @YES,
-            @"KeepAlive": @YES,
+            // Restart after unexpected failures, but don't loop on setup
+            // failures such as missing Accessibility permission or SA support.
+            @"KeepAlive": @{ @"SuccessfulExit": @NO },
             @"StandardOutPath": [NSString stringWithFormat:@"%@/Library/Logs/minfwmd.log",
                                                             NSHomeDirectory()],
             @"StandardErrorPath": [NSString stringWithFormat:@"%@/Library/Logs/minfwmd.log",

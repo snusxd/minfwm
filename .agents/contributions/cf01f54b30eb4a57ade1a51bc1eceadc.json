@@ -1,0 +1,14 @@
+{
+  "assistance": "ai",
+  "base": "f47c4002e9ae2b01a91c6d539120bc70330aab5c",
+  "id": "cf01f54b30eb4a57ade1a51bc1eceadc",
+  "paths": [
+    "src/cli/DaemonControl.mm",
+    "src/daemon/main.mm"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}
