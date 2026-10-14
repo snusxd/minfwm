@@ -1,0 +1,13 @@
+{
+  "assistance": "ai",
+  "base": "04578f8d203c9b4006d6a29d516ca6a9488ee4dd",
+  "id": "5c984565d68647ee832086c84ded7481",
+  "paths": [
+    ".github/workflows/release.yml"
+  ],
+  "schema_version": 1,
+  "task": "release-ci",
+  "tools": [
+    "codex"
+  ]
+}

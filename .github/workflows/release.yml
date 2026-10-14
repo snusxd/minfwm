@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish macOS release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
+      - run: cmake --build build --parallel
+      - run: ctest --test-dir build --output-on-failure
+      - name: Package release binaries
+        run: |
+          mkdir -p release
+          tar -C build -czf release/minfwm-macos.tar.gz minfwm minfwmd
+          shasum -a 256 release/minfwm-macos.tar.gz > release/SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --generate-notes
+          gh release upload "$tag" release/minfwm-macos.tar.gz release/SHA256SUMS --clobber
