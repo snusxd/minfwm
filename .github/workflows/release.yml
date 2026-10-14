@@ -31,7 +31,7 @@ jobs:
             exit 1
           fi
 
-          latest=0
+          latest=-1
           while IFS= read -r candidate; do
             if [[ "$candidate" =~ ^v${major}\.([0-9]+)$ ]]; then
               count="${BASH_REMATCH[1]}"
