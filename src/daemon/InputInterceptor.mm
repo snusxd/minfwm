@@ -31,6 +31,28 @@ bool hasUnconfiguredPinModifier(CGEventFlags flags, const std::vector<std::strin
             std::find(modifiers.begin(), modifiers.end(), "Ctrl") == modifiers.end());
 }
 
+CGEventFlags flagsForModifiers(const std::vector<std::string>& modifiers,
+                               const std::vector<std::string>& superModifiers) {
+    CGEventFlags flags = 0;
+    for (const std::string& modifier : modifiers) {
+        if (modifier == "Super") {
+            for (const std::string& superModifier : superModifiers) {
+                flags |= flagForModifier(superModifier);
+            }
+        } else {
+            flags |= flagForModifier(modifier);
+        }
+    }
+    return flags;
+}
+
+bool matchesModifierChord(CGEventFlags eventFlags, const std::vector<std::string>& modifiers,
+                          const std::vector<std::string>& superModifiers) {
+    constexpr CGEventFlags kModifierMask = kCGEventFlagMaskCommand | kCGEventFlagMaskAlternate |
+        kCGEventFlagMaskShift | kCGEventFlagMaskControl;
+    return (eventFlags & kModifierMask) == flagsForModifiers(modifiers, superModifiers);
+}
+
 int64_t keyCodeForShortcut(const std::vector<std::string>& shortcut) {
     if (shortcut.size() != 2 || shortcut[0] != "Super" || shortcut[1].size() != 1 ||
         shortcut[1][0] < 'A' || shortcut[1][0] > 'Z') return -1;
@@ -399,8 +421,6 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
 
     if (type == kCGEventKeyDown) {
         CGEventFlags flags = CGEventGetFlags(event);
-        bool cmd = flags & kCGEventFlagMaskCommand;
-        bool shift = flags & kCGEventFlagMaskShift;
         int64_t keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
         const ConfigSnapshot config = ConfigManager::instance().snapshot();
         const bool exactSuperChord = superHeld(flags, superModifiers) &&
@@ -430,14 +450,16 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         else if (keycode == 28) index = 8;
         else if (keycode == 25) index = 9;
 
-        if (index != -1 && cmd) {
+        if (index != -1 && matchesModifierChord(flags, config.bookmarksAddModifiers, superModifiers)) {
             const CGPoint point = CGEventGetLocation(event);
             Display& display = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)});
-            if (shift) {
-                display.saveBookmark(index);
-            } else {
-                display.loadBookmark(index);
-            }
+            display.saveBookmark(index);
+            return nullptr;
+        }
+        if (index != -1 && matchesModifierChord(flags, config.bookmarksGotoModifiers, superModifiers)) {
+            const CGPoint point = CGEventGetLocation(event);
+            Display& display = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)});
+            display.loadBookmark(index);
             return NULL;
         }
     }

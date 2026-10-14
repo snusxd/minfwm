@@ -22,6 +22,8 @@ multi-display-mode = "isolated"
 super = ["Cmd", "Alt"]
 center-camera-to-focus = ["Super", "F"]
 center-focus-to-camera = ["Super", "S"]
+bookmarks-add = ["Super"]
+bookmarks-goto = ["Super", "Shift"]
 ```
 
 | Key | Default | Meaning |
@@ -36,10 +38,15 @@ center-focus-to-camera = ["Super", "S"]
 | `keybinds.super` | `["Cmd", "Alt"]` | `Super` modifier chord for pan, zoom, and pin. Supported values: `Cmd`, `Alt`, `Shift`, `Ctrl`. |
 | `keybinds.center-camera-to-focus` | `["Super", "F"]` | Move the camera to center the focused window. |
 | `keybinds.center-focus-to-camera` | `["Super", "S"]` | Move the focused window to the center of the camera. |
+| `keybinds.bookmarks-add` | `["Super"]` | Save the current camera position in the bookmark selected by the pressed digit. |
+| `keybinds.bookmarks-goto` | `["Super", "Shift"]` | Return to the bookmark selected by the pressed digit. |
 
 In shortcuts, `Super` means the modifier chord configured here. The two center
-shortcuts accept `Super` followed by one uppercase letter from `A` to `Z`. By
-default, `Super` is `Cmd+Alt`.
+shortcuts accept `Super` followed by one uppercase letter from `A` to `Z`.
+Bookmark bindings configure modifiers only; the pressed digit selects bookmark
+1 through 9. By default, `Super` is `Cmd+Alt`, so `Super+1..9` saves bookmarks
+and `Super+Shift+1..9` returns to them. Bookmark modifier arrays accept unique
+`Super`, `Cmd`, `Alt`, `Shift`, and `Ctrl` values.
 
 Click selection always centers the selected window; `zoomed-esc-center` only
 controls Escape. Changing settings takes effect after `./build/minfwm reload`.

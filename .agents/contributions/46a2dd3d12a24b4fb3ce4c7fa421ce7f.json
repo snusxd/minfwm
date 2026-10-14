@@ -1,0 +1,17 @@
+{
+  "assistance": "ai",
+  "base": "85475c6a55f2c18f4011ccaeb2a9c8e1c2d4c438",
+  "id": "46a2dd3d12a24b4fb3ce4c7fa421ce7f",
+  "paths": [
+    "config/minfwm.toml.example",
+    "docs/wiki/Configuration.md",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-BOOKMARK-KEYBINDS",
+  "tools": [
+    "codex"
+  ]
+}

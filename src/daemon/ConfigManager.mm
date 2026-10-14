@@ -187,6 +187,53 @@ bool readShortcut(const TomlTable* table, std::string_view name,
     return true;
 }
 
+bool readBookmarkModifiers(const TomlTable* table, std::string_view name,
+                           std::vector<std::string>& out, std::string& error) {
+    if (!table) return true;
+    const TomlNode* node = table->get(name);
+    if (!node) return true;
+    const toml::array* values = node->as_array();
+    if (!values || values->empty()) {
+        error = "keybinds." + std::string(name) + " must be a non-empty array of modifier names";
+        return false;
+    }
+
+    std::vector<std::string> parsed;
+    parsed.reserve(values->size());
+    for (const TomlNode& item : *values) {
+        const auto value = item.value<std::string>();
+        if (!value || (*value != "Super" && *value != "Cmd" && *value != "Alt" &&
+                       *value != "Shift" && *value != "Ctrl") ||
+            std::find(parsed.begin(), parsed.end(), *value) != parsed.end()) {
+            error = "keybinds." + std::string(name) +
+                " must contain unique Super, Cmd, Alt, Shift, or Ctrl modifiers";
+            return false;
+        }
+        parsed.push_back(*value);
+    }
+    out = std::move(parsed);
+    return true;
+}
+
+unsigned bookmarkModifierMask(const std::vector<std::string>& modifiers,
+                              const std::vector<std::string>& superModifiers) {
+    unsigned mask = 0;
+    const auto add = [&mask](const std::string& modifier) {
+        if (modifier == "Cmd") mask |= 1u << 0;
+        else if (modifier == "Alt") mask |= 1u << 1;
+        else if (modifier == "Shift") mask |= 1u << 2;
+        else if (modifier == "Ctrl") mask |= 1u << 3;
+    };
+    for (const std::string& modifier : modifiers) {
+        if (modifier == "Super") {
+            for (const std::string& superModifier : superModifiers) add(superModifier);
+        } else {
+            add(modifier);
+        }
+    }
+    return mask;
+}
+
 bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
     if (!rejectUnknownKeys(root, {"window", "zoom", "display", "keybinds", "pins"},
                            {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
@@ -204,7 +251,8 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center"}, error)) return false;
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
-                                       {"super", "center-camera-to-focus", "center-focus-to-camera"}, error)) return false;
+                                       {"super", "center-camera-to-focus", "center-focus-to-camera",
+                                        "bookmarks-add", "bookmarks-goto"}, error)) return false;
     if (pins && !rejectUnknownKeys(*pins, "pins", {"always-on-top"}, error)) return false;
 
     if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
@@ -217,7 +265,15 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readBool(root, pins, "always-on-top", candidate.pinsAlwaysOnTop, error) ||
         !readSuperKey(keybinds, candidate.superModifiers, error) ||
         !readShortcut(keybinds, "center-camera-to-focus", candidate.centerCameraToFocus, error) ||
-        !readShortcut(keybinds, "center-focus-to-camera", candidate.centerFocusToCamera, error)) {
+        !readShortcut(keybinds, "center-focus-to-camera", candidate.centerFocusToCamera, error) ||
+        !readBookmarkModifiers(keybinds, "bookmarks-add", candidate.bookmarksAddModifiers, error) ||
+        !readBookmarkModifiers(keybinds, "bookmarks-goto", candidate.bookmarksGotoModifiers, error)) {
+        return false;
+    }
+
+    if (bookmarkModifierMask(candidate.bookmarksAddModifiers, candidate.superModifiers) ==
+        bookmarkModifierMask(candidate.bookmarksGotoModifiers, candidate.superModifiers)) {
+        error = "keybinds.bookmarks-add and keybinds.bookmarks-goto must resolve to different modifier chords";
         return false;
     }
 
