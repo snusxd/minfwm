@@ -12,6 +12,7 @@ public:
 
     [[nodiscard]] std::int64_t id() const noexcept;
     [[nodiscard]] const DisplayGeometry& geometry() const noexcept;
+    [[nodiscard]] bool updateGeometry(DisplayGeometry geometry) noexcept;
 
     [[nodiscard]] Camera& camera() noexcept;
     [[nodiscard]] const Camera& camera() const noexcept;

@@ -67,6 +67,18 @@ int main() {
         expect(publicAXWindow && publicAXWindow->wid() == 0,
                "default AX pool does not require the optional WID resolver");
 
+        minfwm::WindowPool displayPool(&fixedWindowId);
+        minfwm::WindowPool secondDisplayPool(&noWindowId);
+        const auto transferred = displayPool.addWindow(firstRef);
+        expect(secondDisplayPool.addExistingWindow(transferred), "existing window can transfer to another display pool");
+        expect(secondDisplayPool.findWindowByAXRef(firstRef) == transferred &&
+               secondDisplayPool.findWindowByWID(42) == transferred,
+               "display transfer preserves the window model and indexes");
+        displayPool.removeWindow(firstRef);
+        expect(displayPool.windows().empty() && secondDisplayPool.windows().size() == 1,
+               "old display releases a transferred window");
+        expect(!secondDisplayPool.addExistingWindow(transferred), "display transfer rejects duplicate ownership");
+
         expect(pool.addWindow(nullptr) == nullptr, "null AX ref is rejected");
 
         minfwm::WindowPool processPool;

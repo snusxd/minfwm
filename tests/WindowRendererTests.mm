@@ -159,6 +159,22 @@ void testPartialHideAndRestore() {
            "retry does not repeat an already successful unhide");
 }
 
+void testWindowIsParkedOutsideAllDisplaysAfterLeavingItsCanvas() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    ClientWindow window(nullptr, 77);
+    initializeWindow(window);
+    WindowRenderer renderer(ax, sa);
+
+    // The owner display ends at x=1920; a neighbouring monitor starts there.
+    expect(renderer.hide(window, {1920, 100, 640, 480}, {0, 0, 1920, 1080}, 1,
+                         core::Point{3840, 1200}).succeeded(),
+           "a window fully beyond its canvas is parked with the display transform");
+    expect(sa.calls == std::vector<std::string>{"move"} && sa.x == 3840 && sa.y == 1200,
+           "fully departed windows are parked beyond the connected desktop union");
+    expect(ax.calls.empty(), "transform parking avoids resizing or hiding the client window");
+}
+
 void testUnverifiedMoveIsRetried() {
     RecordingBackend ax, sa;
     ClientWindow window(nullptr, 42);
@@ -432,6 +448,7 @@ int main() {
     testExternalApplicationSuspension();
     testFallbackAndShutdown();
     testPartialHideAndRestore();
+    testWindowIsParkedOutsideAllDisplaysAfterLeavingItsCanvas();
     testInvalidGeometry();
     testRestoreFailures();
     testUnverifiedMoveIsRetried();

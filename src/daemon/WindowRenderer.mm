@@ -291,17 +291,25 @@ BackendResult WindowRenderer::renderOverview(ClientWindow& window, core::Rect ph
 }
 
 BackendResult WindowRenderer::hide(ClientWindow& window, core::Rect physical,
-                                    core::Rect displayBounds, double now) {
+                                    core::Rect displayBounds, double now,
+                                    std::optional<core::Point> parkingPosition) {
     if (!window.originalPhysicalRect) return {BackendCode::failed};
     if (window.isHidden) return {BackendCode::ok};
     if (now < window.hideRetryTime) return {BackendCode::failed};
     window.hideRetryTime = now + 0.5;
     // A fully culled window can retain its native frame. Resetting a transform
     // and AX-shrinking it exposes it to AppKit's minimum-size/edge corrections.
-    const bool outside = physical.right() <= displayBounds.x || physical.x >= displayBounds.right() ||
+    const bool contained = physical.x >= displayBounds.x && physical.y >= displayBounds.y &&
+        physical.right() <= displayBounds.right() && physical.bottom() <= displayBounds.bottom();
+    const bool fullyOutside = physical.right() <= displayBounds.x || physical.x >= displayBounds.right() ||
         physical.bottom() <= displayBounds.y || physical.y >= displayBounds.bottom();
     int translatedX = 0, translatedY = 0;
-    if (m_yabai.usesTransforms() && outside && pixelPosition(physical, translatedX, translatedY)) {
+    const core::Rect parkedFrame = parkingPosition
+        ? core::Rect{parkingPosition->x, parkingPosition->y, physical.w, physical.h}
+        : physical;
+    const bool canParkWithTransform = parkingPosition ? !contained : fullyOutside;
+    if (m_yabai.usesTransforms() && canParkWithTransform &&
+        pixelPosition(parkedFrame, translatedX, translatedY)) {
         const BackendResult translated = m_yabai.move(window.ref(), window.wid(), translatedX, translatedY);
         if (translated.succeeded()) {
             window.isHidden = true;

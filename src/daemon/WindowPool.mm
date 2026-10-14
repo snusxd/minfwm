@@ -146,6 +146,35 @@ std::shared_ptr<ClientWindow> WindowPool::addWindow(AXUIElementRef windowRef) {
     return window;
 }
 
+bool WindowPool::addExistingWindow(std::shared_ptr<ClientWindow> window) {
+    if (!window || !window->ref() || findWindowByAXRef(window->ref())) return false;
+    if (window->wid() != 0 && findWindowByWID(window->wid())) return false;
+
+    m_windows.push_back(window);
+    try {
+        const auto [refEntry, refInserted] = m_windowsByAXRef.emplace(window->ref(), window);
+        if (!refInserted) {
+            m_windows.pop_back();
+            return false;
+        }
+
+        if (window->wid() != 0) {
+            const auto [widEntry, widInserted] = m_windowsByWID.emplace(window->wid(), window);
+            if (!widInserted) {
+                m_windowsByAXRef.erase(refEntry);
+                m_windows.pop_back();
+                return false;
+            }
+        }
+    } catch (...) {
+        if (window->wid() != 0) m_windowsByWID.erase(window->wid());
+        m_windowsByAXRef.erase(window->ref());
+        m_windows.pop_back();
+        throw;
+    }
+    return true;
+}
+
 void WindowPool::removeWindow(AXUIElementRef windowRef) {
     auto window = findWindowByAXRef(windowRef);
     if (!window && windowRef) {

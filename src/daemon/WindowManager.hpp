@@ -34,6 +34,12 @@ public:
         m_state.saveBookmark(index);
     }
 
+    bool updateScreen(core::Rect bounds, core::Rect usableBounds) {
+        if (!m_state.updateGeometry(core::DisplayGeometry{m_id, bounds})) return false;
+        m_usableBounds = usableBounds;
+        return true;
+    }
+
     void loadBookmark(int index) {
         (void)m_state.loadBookmark(index);
     }
@@ -53,6 +59,7 @@ public:
     }
 
     bool initialize(bool allowAdministratorLoad = true);
+    void refreshDisplays();
     void shutdown();
     bool saveLayoutSnapshot(std::string& error);
     void finishLayoutRestore();
@@ -73,11 +80,13 @@ public:
     void centerCameraOnWindow(AXUIElementRef element);
     void syncPhysicalToVirtual(AXUIElementRef element);
     void beginNativeInteraction(core::Point pointer);
+    void noteNativeDrag();
     void endNativeInteraction();
     void flushNativeInteractionForPan();
     bool beginDragEverywhere(core::Point pointer);
-    void dragWindowBy(core::Point delta);
-    void endDragEverywhere();
+    void dragWindowTo(core::Point pointer);
+    void endDragEverywhere(core::Point pointer);
+    void cancelDragEverywhere();
     bool requestOverviewZoom(core::Point pointer, float delta);
     bool overviewActive() const;
     bool overviewReturning() const;
@@ -102,6 +111,8 @@ private:
     void commitNativeInteraction();
     void refreshWindowSnapshot(double now);
     void addNativeCandidate(const std::shared_ptr<ClientWindow>& window);
+    bool moveWindowToDisplay(const std::shared_ptr<ClientWindow>& window, Display& target,
+                             core::Rect physical);
     std::shared_ptr<ClientWindow> windowAtPoint(core::Point pointer) const;
     void applyOverviewExit();
     void restoreLayoutSnapshot();
@@ -114,11 +125,15 @@ private:
     double m_windowRefreshTime = 0;
     bool m_nativePointerHeld = false;
     bool m_nativeCommitPending = false;
+    bool m_nativeWindowDragged = false;
     double m_nativeCommitTime = 0;
     std::map<int64_t, core::Point> m_nativeCameras;
     std::vector<std::shared_ptr<ClientWindow>> m_nativeCandidates;
+    std::map<const ClientWindow*, core::Rect> m_nativeStartFrames;
     std::shared_ptr<ClientWindow> m_draggedWindow;
     int64_t m_draggedWindowDisplayId = 0;
+    bool m_dragEverywhereMoved = false;
+    core::Point m_dragPointerOffset{};
     struct ZoomRequest { int64_t displayId; core::Point anchor; float delta; };
     std::optional<ZoomRequest> m_zoomRequest;
     struct OverviewExit { core::Point pointer; bool selectWindow; };

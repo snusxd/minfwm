@@ -12,7 +12,7 @@ public:
     ~DisplayFrameClock();
     DisplayFrameClock(const DisplayFrameClock&) = delete;
     DisplayFrameClock& operator=(const DisplayFrameClock&) = delete;
-    bool start(std::function<void(int64_t)> callback);
+    bool start(std::function<void(int64_t)> callback, std::function<void()> screenChanged = {});
     void stop();
 
 private:

@@ -19,6 +19,7 @@ public:
     bool start();
     void stop();
     void reconcileWindows();
+    void screenConfigurationChanged();
 
 private:
     struct AppObserver {

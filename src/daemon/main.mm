@@ -72,6 +72,10 @@ int main(int argc, const char * argv[]) {
         minfwm::DisplayFrameClock frameClock;
         const bool displayLinked = frameClock.start([&wm](int64_t displayId) {
             if (!g_stopRequested) wm.updateWindows(displayId);
+        }, [&wm, &observer] {
+            if (g_stopRequested) return;
+            wm.refreshDisplays();
+            observer.screenConfigurationChanged();
         });
         if (!displayLinked) std::cerr << "minfwmd: display link unavailable; using 60 Hz fallback" << std::endl;
 

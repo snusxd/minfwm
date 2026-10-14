@@ -3,6 +3,7 @@
 #include "ConfigManager.hpp"
 #include "YabaiSA.hpp"
 #include "../core/Visibility.hpp"
+#include "../core/WindowOwnership.hpp"
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #include <cmath>
@@ -101,6 +102,46 @@ bool WindowManager::initialize(bool allowAdministratorLoad) {
     std::cout << "WindowManager: pinned always-on-top enabled" << std::endl;
     m_initialized = true;
     return true;
+}
+
+void WindowManager::refreshDisplays() {
+    if (!m_initialized) return;
+
+    std::size_t added = 0;
+    std::size_t updated = 0;
+    for (NSScreen* screen in NSScreen.screens) {
+        NSDictionary* description = [screen deviceDescription];
+        NSNumber* displayID = description[@"NSScreenNumber"];
+        if (!displayID) continue;
+
+        const int64_t id = displayID.longLongValue;
+        const float topOrigin = axTopOriginForScreen(screen);
+        const NSRect frame = screen.frame;
+        const core::Rect bounds{static_cast<float>(frame.origin.x), topOrigin,
+                                static_cast<float>(frame.size.width), static_cast<float>(frame.size.height)};
+        const NSRect usable = screen.visibleFrame;
+        const core::Rect usableBounds{
+            static_cast<float>(usable.origin.x),
+            topOrigin + static_cast<float>(NSMaxY(frame) - NSMaxY(usable)),
+            static_cast<float>(usable.size.width), static_cast<float>(usable.size.height)};
+
+        if (Display* display = displayById(id)) {
+            if (display->updateScreen(bounds, usableBounds)) ++updated;
+            continue;
+        }
+
+        m_displays.push_back(std::make_unique<Display>(
+            id, bounds, WindowPool::yabaiWindowIdResolver(), usableBounds));
+        ++added;
+        std::cout << "WindowManager: Added display " << id << " ["
+                  << frame.size.width << "x" << frame.size.height << "]" << std::endl;
+    }
+
+    if (added || updated) {
+        std::cout << "WindowManager: refreshed displays (added=" << added
+                  << ", updated=" << updated << ")" << std::endl;
+        updateWindows();
+    }
 }
 
 Display& WindowManager::mainDisplay() {
@@ -283,8 +324,10 @@ void WindowManager::shutdown() {
     m_windowRefreshTime = 0;
     m_nativePointerHeld = false;
     m_nativeCommitPending = false;
+    m_nativeWindowDragged = false;
     m_nativeCameras.clear();
     m_nativeCandidates.clear();
+    m_nativeStartFrames.clear();
     m_zoomRequest.reset();
     m_overviewExit.reset();
     m_overviewFocus.reset();
@@ -353,7 +396,8 @@ bool WindowManager::toggleFocusedWindowPin() {
 
     Display& display = displayForWindow(window->ref());
     const core::Rect physical = display.state().virtualToPhysical(window->virtualRect);
-    window->preferNativePosition = core::canUseNativePosition(physical, display.usableBounds());
+    window->preferNativePosition = core::frameFitsDisplay(physical, display.state().geometry().bounds) &&
+        core::canUseNativePosition(physical, display.usableBounds());
     if (!m_renderer.releaseToNative(*window, physical, CACurrentMediaTime()).succeeded()) {
         std::cerr << "WindowManager: could not pin window WID=" << window->wid() << std::endl;
         return false;
@@ -506,6 +550,20 @@ void WindowManager::updateWindows(int64_t displayId) {
     const ConfigSnapshot config = ConfigManager::instance().snapshot();
     const core::VisibilityPolicy visibility(config.overscanBufferPx);
 
+    core::Rect desktopBounds = m_displays.front()->state().geometry().bounds;
+    for (const auto& display : m_displays) {
+        const core::Rect bounds = display->state().geometry().bounds;
+        const float left = std::min(desktopBounds.x, bounds.x);
+        const float top = std::min(desktopBounds.y, bounds.y);
+        const float right = std::max(desktopBounds.right(), bounds.right());
+        const float bottom = std::max(desktopBounds.bottom(), bounds.bottom());
+        desktopBounds = {left, top, right - left, bottom - top};
+    }
+    // Yabai moves a transformed window in global desktop coordinates. Park
+    // windows beyond the complete desktop so a culled window cannot appear
+    // on a neighbouring monitor whose physical coordinates overlap its canvas.
+    const core::Point parkingPosition{desktopBounds.right() + 64.0f, desktopBounds.bottom() + 64.0f};
+
     for (auto& display : m_displays) {
         if (displayId && display->id() != displayId) continue;
         double& previousFrame = m_zoomFrameTimes[display->id()];
@@ -532,6 +590,16 @@ void WindowManager::updateWindows(int64_t displayId) {
             adoptWindow(*display, window);
             if (!window->virtualCoordinatesInitialized) continue;
             advanceWindowAnimation(*window, now);
+            const core::Rect physical = state.virtualToPhysical(window->virtualRect);
+            const core::Rect displayBounds = state.geometry().bounds;
+            const bool fullyOutsideDisplay = physical.right() <= displayBounds.x ||
+                physical.x >= displayBounds.right() || physical.bottom() <= displayBounds.y ||
+                physical.y >= displayBounds.bottom();
+            const bool beingDragged = window == m_draggedWindow;
+            if (fullyOutsideDisplay && !beingDragged) {
+                (void)m_renderer.hide(*window, physical, displayBounds, now, parkingPosition);
+                continue;
+            }
             if (window->isAuxiliaryWindow && !window->isHidden && m_onscreenWindows &&
                 !m_onscreenWindows->contains(window->wid())) {
                 if (!window->applicationSuspended) (void)m_renderer.suspend(*window, now);
@@ -551,7 +619,7 @@ void WindowManager::updateWindows(int64_t displayId) {
             }
             if (state.overviewActive()) {
                 if (!window->wid()) continue;
-                const auto overview = m_renderer.renderOverview(*window, state.virtualToPhysical(window->virtualRect), state.scale(), now);
+                const auto overview = m_renderer.renderOverview(*window, physical, state.scale(), now);
                 if (!overview.succeeded()) {
                     std::cerr << "WindowManager: overview failed WID=" << window->wid()
                               << " PID=" << window->pid() << " scale=" << state.scale()
@@ -561,18 +629,18 @@ void WindowManager::updateWindows(int64_t displayId) {
                 }
                 continue;
             }
-            window->preferNativePosition = core::canUseNativePosition(state.virtualToPhysical(window->virtualRect), display->usableBounds());
+            window->preferNativePosition = core::frameFitsDisplay(physical, displayBounds) &&
+                core::canUseNativePosition(physical, display->usableBounds());
             const bool focused = m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get());
             const bool protectedWindow = focused || isWhitelisted(*window);
-            const bool shouldRender = protectedWindow ||
+            const bool shouldRender = beingDragged || protectedWindow ||
                 visibility.shouldRender(window->virtualRect, state.viewport(), focused);
 
             if (!shouldRender) {
-                (void)m_renderer.hide(*window, state.virtualToPhysical(window->virtualRect),
-                                      state.geometry().bounds, now);
+                (void)m_renderer.hide(*window, physical, displayBounds, now, parkingPosition);
                 continue;
             }
-            (void)m_renderer.render(*window, state.virtualToPhysical(window->virtualRect), now);
+            (void)m_renderer.render(*window, physical, now);
         }
         if (overviewFailed) {
             std::cerr << "WindowManager: overview unavailable for a window; returning to native scale" << std::endl;
@@ -585,7 +653,14 @@ void WindowManager::updateWindows(int64_t displayId) {
                 if (window->pinned) continue;
                 if (window->applicationSuspended) continue;
                 const auto physical = state.virtualToPhysical(window->virtualRect);
-                window->preferNativePosition = core::canUseNativePosition(physical, display->usableBounds());
+                const auto bounds = state.geometry().bounds;
+                if (physical.right() <= bounds.x || physical.x >= bounds.right() ||
+                    physical.bottom() <= bounds.y || physical.y >= bounds.bottom()) {
+                    (void)m_renderer.hide(*window, physical, bounds, now, parkingPosition);
+                    continue;
+                }
+                window->preferNativePosition = core::frameFitsDisplay(physical, bounds) &&
+                    core::canUseNativePosition(physical, display->usableBounds());
                 (void)m_renderer.render(*window, physical, now);
             }
         }
@@ -661,6 +736,31 @@ void WindowManager::centerFocusedWindowToCamera() {
     Display& display = displayForWindow(window->ref());
     centerWindow(window);
     updateWindows(display.id());
+}
+
+bool WindowManager::moveWindowToDisplay(const std::shared_ptr<ClientWindow>& window, Display& target,
+                                        core::Rect physical) {
+    if (!window || !window->ref()) return false;
+    Display* source = nullptr;
+    for (auto& display : m_displays) {
+        if (display->windowPool().findWindowByAXRef(window->ref()) == window) {
+            source = display.get();
+            break;
+        }
+    }
+    if (!source) return false;
+    if (source == &target) return m_renderer.acceptNativeGeometry(*window, physical, target.state());
+    if (target.windowPool().findWindowByAXRef(window->ref()) ||
+        (window->wid() != 0 && target.windowPool().findWindowByWID(window->wid()))) return false;
+    if (!target.windowPool().addExistingWindow(window)) return false;
+    if (!m_renderer.acceptNativeGeometry(*window, physical, target.state())) {
+        target.windowPool().removeWindow(window->ref());
+        return false;
+    }
+    source->windowPool().removeWindow(window->ref());
+    std::cout << "WindowManager: moved window WID=" << window->wid()
+              << " to display " << target.id() << std::endl;
+    return true;
 }
 
 void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
@@ -782,6 +882,8 @@ void WindowManager::beginNativeInteraction(core::Point pointer) {
     if (!m_nativeCommitPending) {
         m_nativeCameras.clear();
         m_nativeCandidates.clear();
+        m_nativeStartFrames.clear();
+        m_nativeWindowDragged = false;
         for (const auto& display : m_displays) m_nativeCameras.emplace(display->id(), display->camera().position());
     }
     m_nativePointerHeld = true;
@@ -801,6 +903,9 @@ void WindowManager::beginNativeInteraction(core::Point pointer) {
             !CGRectContainsPoint(frame, CGPointMake(pointer.x, pointer.y))) continue;
         for (const auto& display : m_displays) {
             if (auto window = display->windowPool().findWindowByWID(wid)) {
+                m_nativeStartFrames[window.get()] = core::Rect{
+                    static_cast<float>(frame.origin.x), static_cast<float>(frame.origin.y),
+                    static_cast<float>(frame.size.width), static_cast<float>(frame.size.height)};
                 addNativeCandidate(window);
                 if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
                     std::cout << "INPUT down WID=" << wid << " visual=" << frame.origin.x << ',' << frame.origin.y
@@ -813,6 +918,10 @@ void WindowManager::beginNativeInteraction(core::Point pointer) {
     }
 }
 
+void WindowManager::noteNativeDrag() {
+    if (m_nativePointerHeld && !m_nativeStartFrames.empty()) m_nativeWindowDragged = true;
+}
+
 void WindowManager::endNativeInteraction() {
     if (!m_nativePointerHeld) return;
     m_nativePointerHeld = false;
@@ -823,6 +932,9 @@ void WindowManager::endNativeInteraction() {
 void WindowManager::flushNativeInteractionForPan() {
     m_nativePointerHeld = false;
     m_nativeCommitTime = 0;
+    m_nativeWindowDragged = false;
+    m_nativeStartFrames.clear();
+    m_nativeCandidates.clear();
 }
 
 bool WindowManager::beginDragEverywhere(core::Point pointer) {
@@ -832,54 +944,94 @@ bool WindowManager::beginDragEverywhere(core::Point pointer) {
         window->applicationSuspended || window->needsGeometryRestore) return false;
     m_draggedWindow = std::move(window);
     m_draggedWindowDisplayId = displayForWindow(m_draggedWindow->ref()).id();
+    m_dragEverywhereMoved = false;
+    const core::Rect physical = displayForWindow(m_draggedWindow->ref()).state().virtualToPhysical(m_draggedWindow->virtualRect);
+    m_dragPointerOffset = {pointer.x - physical.x, pointer.y - physical.y};
     m_draggedWindow->positionAnimation.reset();
     return true;
 }
 
-void WindowManager::dragWindowBy(core::Point delta) {
-    if (!m_draggedWindow || !std::isfinite(delta.x) || !std::isfinite(delta.y)) return;
+void WindowManager::dragWindowTo(core::Point pointer) {
+    if (!m_draggedWindow || !std::isfinite(pointer.x) || !std::isfinite(pointer.y)) return;
     Display* display = displayById(m_draggedWindowDisplayId);
     if (!display) return;
-    const float scale = display->state().scale();
-    if (!std::isfinite(scale) || scale <= 0) return;
-    m_draggedWindow->virtualRect.x += delta.x / scale;
-    m_draggedWindow->virtualRect.y += delta.y / scale;
+    const auto virtualPoint = display->state().physicalToVirtual(
+        core::Point{pointer.x - m_dragPointerOffset.x, pointer.y - m_dragPointerOffset.y});
+    if (!std::isfinite(virtualPoint.x) || !std::isfinite(virtualPoint.y)) return;
+    if (virtualPoint.x != m_draggedWindow->virtualRect.x ||
+        virtualPoint.y != m_draggedWindow->virtualRect.y) m_dragEverywhereMoved = true;
+    m_draggedWindow->virtualRect.x = virtualPoint.x;
+    m_draggedWindow->virtualRect.y = virtualPoint.y;
 }
 
-void WindowManager::endDragEverywhere() {
-    m_draggedWindow.reset();
-    m_draggedWindowDisplayId = 0;
-}
-
-void WindowManager::commitNativeInteraction() {
-    for (auto& display : m_displays) {
-        core::DisplayState observationState = display->state();
-        if (const auto camera = m_nativeCameras.find(display->id()); camera != m_nativeCameras.end()) {
-            observationState.camera().setPosition(camera->second.x, camera->second.y);
-        }
-        for (const auto& window : display->windowPool().windows()) {
-            if (std::find(m_nativeCandidates.begin(), m_nativeCandidates.end(), window) == m_nativeCandidates.end()) continue;
-            if (!window || !window->ref() || !window->virtualCoordinatesInitialized || window->isHidden || window->needsGeometryRestore) continue;
-            CGPoint position{};
-            if (!readWindowPosition(window->ref(), m_yabaiBackend.usesTransforms() ? window->wid() : 0, position)) continue;
-            core::Rect physical{static_cast<float>(position.x), static_cast<float>(position.y), window->virtualRect.w, window->virtualRect.h};
-            CGSize size{};
-            if (readAXSize(window->ref(), size) && std::isfinite(size.width) && std::isfinite(size.height) && size.width > 0 && size.height > 0) {
-                physical.w = size.width;
-                physical.h = size.height;
-            }
-            const bool accepted = m_renderer.acceptNativeGeometry(*window, physical, observationState);
-            if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
-                std::cout << "INPUT drop WID=" << window->wid() << " physical=" << physical.x << ',' << physical.y
-                          << " camera=" << observationState.camera().x() << ',' << observationState.camera().y()
-                          << " virtual=" << window->virtualRect.x << ',' << window->virtualRect.y
-                          << " accepted=" << accepted << std::endl;
+void WindowManager::endDragEverywhere(core::Point pointer) {
+    if (m_draggedWindow && m_dragEverywhereMoved) {
+        if (Display* source = displayById(m_draggedWindowDisplayId)) {
+            const core::Rect physical = source->state().virtualToPhysical(m_draggedWindow->virtualRect);
+            Display& target = displayForPoint(pointer);
+            if (&target != source && moveWindowToDisplay(m_draggedWindow, target, physical)) {
+                // Drag-everywhere updates virtual geometry before the native
+                // frame is guaranteed to reach its final position.
+                m_draggedWindow->lastRenderedX = std::numeric_limits<float>::quiet_NaN();
+                m_draggedWindow->lastRenderedY = std::numeric_limits<float>::quiet_NaN();
             }
         }
     }
+    m_draggedWindow.reset();
+    m_draggedWindowDisplayId = 0;
+    m_dragEverywhereMoved = false;
+}
+
+void WindowManager::cancelDragEverywhere() {
+    m_draggedWindow.reset();
+    m_draggedWindowDisplayId = 0;
+    m_dragEverywhereMoved = false;
+}
+
+void WindowManager::commitNativeInteraction() {
+    for (const auto& window : m_nativeCandidates) {
+        if (!window || !window->ref() || !window->virtualCoordinatesInitialized || window->isHidden ||
+            window->needsGeometryRestore) continue;
+        Display& source = displayForWindow(window->ref());
+        core::DisplayState observationState = source.state();
+        if (const auto camera = m_nativeCameras.find(source.id()); camera != m_nativeCameras.end()) {
+            observationState.camera().setPosition(camera->second.x, camera->second.y);
+        }
+        CGPoint position{};
+        if (!readWindowPosition(window->ref(), m_yabaiBackend.usesTransforms() ? window->wid() : 0, position)) continue;
+        core::Rect physical{static_cast<float>(position.x), static_cast<float>(position.y),
+                            window->virtualRect.w, window->virtualRect.h};
+        CGSize size{};
+        if (readAXSize(window->ref(), size) && std::isfinite(size.width) &&
+            std::isfinite(size.height) && size.width > 0 && size.height > 0) {
+            physical.w = static_cast<float>(size.width);
+            physical.h = static_cast<float>(size.height);
+        }
+        Display& target = displayForPoint({physical.x + physical.w / 2.0f,
+                                           physical.y + physical.h / 2.0f});
+        const auto start = m_nativeStartFrames.find(window.get());
+        const auto cameraAtStart = m_nativeCameras.find(source.id());
+        const bool cameraUnchanged = cameraAtStart != m_nativeCameras.end() &&
+            std::abs(source.camera().x() - cameraAtStart->second.x) <= 0.01f &&
+            std::abs(source.camera().y() - cameraAtStart->second.y) <= 0.01f;
+        const bool transfer = start != m_nativeStartFrames.end() &&
+            core::shouldTransferWindow(m_nativeWindowDragged, cameraUnchanged, start->second,
+                                       physical, source.id(), target.id());
+        const bool accepted = transfer
+            ? moveWindowToDisplay(window, target, physical)
+            : m_renderer.acceptNativeGeometry(*window, physical, observationState);
+        if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+            std::cout << "INPUT drop WID=" << window->wid() << " physical=" << physical.x << ',' << physical.y
+                      << " camera=" << observationState.camera().x() << ',' << observationState.camera().y()
+                      << " virtual=" << window->virtualRect.x << ',' << window->virtualRect.y
+                      << " accepted=" << accepted << std::endl;
+        }
+    }
     m_nativeCommitPending = false;
+    m_nativeWindowDragged = false;
     m_nativeCameras.clear();
     m_nativeCandidates.clear();
+    m_nativeStartFrames.clear();
 }
 
 } // namespace minfwm

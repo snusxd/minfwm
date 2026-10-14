@@ -203,6 +203,13 @@ void AXObserver::reconcileWindows() {
     wm.updateWindows();
 }
 
+void AXObserver::screenConfigurationChanged() {
+    if (!m_started) return;
+    m_refreshPending = true;
+    m_nextReconcileTime = 0;
+    reconcileWindows();
+}
+
 bool AXObserver::focusActivatedApplication(pid_t pid) {
     const auto application = m_appObservers.find(pid);
     if (application == m_appObservers.end()) return false;

@@ -413,7 +413,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         interceptor->updateCursor(false, false, CGPointZero);
         WindowManager::instance().setPanning(false);
         WindowManager::instance().endNativeInteraction();
-        WindowManager::instance().endDragEverywhere();
+        WindowManager::instance().cancelDragEverywhere();
         interceptor->m_dragEverywhereActive = false;
         const CGPoint pointer = event ? CGEventGetLocation(event) : CGPointZero;
         WindowManager::instance().exitOverview({static_cast<float>(pointer.x), static_cast<float>(pointer.y)}, false);
@@ -492,15 +492,14 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (interceptor->m_dragEverywhereActive) {
         if (type == kCGEventLeftMouseDragged) {
             if (matchesModifierChord(currentFlags, dragEverywhereModifiers, superModifiers)) {
-                wm.dragWindowBy({static_cast<float>(CGEventGetIntegerValueField(event, kCGMouseEventDeltaX)),
-                                 static_cast<float>(CGEventGetIntegerValueField(event, kCGMouseEventDeltaY))});
+                wm.dragWindowTo(pointer);
             }
             interceptor->updateCursor(zoomModifiers, zoomModifiers &&
                 matchesModifierChord(currentFlags, dragEverywhereModifiers, superModifiers), location);
             return nullptr;
         }
         if (type == kCGEventLeftMouseUp) {
-            wm.endDragEverywhere();
+            wm.endDragEverywhere(pointer);
             interceptor->m_dragEverywhereActive = false;
             interceptor->updateCursor(zoomModifiers, false, location);
             return nullptr;
@@ -550,6 +549,9 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
                 const CGPoint point = CGEventGetLocation(event);
                 wm.beginNativeInteraction({static_cast<float>(point.x), static_cast<float>(point.y)});
             }
+        } else if (type == kCGEventLeftMouseDragged) {
+            if (update.consume) wm.flushNativeInteractionForPan();
+            else wm.noteNativeDrag();
         } else if (type == kCGEventLeftMouseUp && !update.consume) {
             wm.endNativeInteraction();
         }

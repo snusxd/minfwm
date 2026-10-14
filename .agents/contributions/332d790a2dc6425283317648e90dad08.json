@@ -1,0 +1,31 @@
+{
+  "assistance": "ai",
+  "base": "00e8198ca839d534870ebe9a77cafaff40ea2c2e",
+  "id": "332d790a2dc6425283317648e90dad08",
+  "paths": [
+    "docs/wiki/Acceptance-macos.md",
+    "src/core/DisplayState.cpp",
+    "src/core/DisplayState.hpp",
+    "src/core/WindowOwnership.hpp",
+    "src/daemon/AXObserver.hpp",
+    "src/daemon/AXObserver.mm",
+    "src/daemon/DisplayFrameClock.hpp",
+    "src/daemon/DisplayFrameClock.mm",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/WindowPool.hpp",
+    "src/daemon/WindowPool.mm",
+    "src/daemon/WindowRenderer.hpp",
+    "src/daemon/WindowRenderer.mm",
+    "src/daemon/main.mm",
+    "tests/GeometryTests.cpp",
+    "tests/WindowPoolTests.mm",
+    "tests/WindowRendererTests.mm"
+  ],
+  "schema_version": 1,
+  "task": "MULTI-DISPLAY-CANVAS",
+  "tools": [
+    "codex"
+  ]
+}

@@ -83,6 +83,7 @@ public:
     WindowPool& operator=(const WindowPool&) = delete;
 
     std::shared_ptr<ClientWindow> addWindow(AXUIElementRef windowRef);
+    bool addExistingWindow(std::shared_ptr<ClientWindow> window);
     void removeWindow(AXUIElementRef windowRef);
     void removeWindowsForPid(pid_t pid);
     std::vector<std::shared_ptr<ClientWindow>> removeMissingWindows(const std::unordered_set<uint32_t>& liveIds);

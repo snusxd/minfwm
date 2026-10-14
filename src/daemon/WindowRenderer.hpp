@@ -4,6 +4,7 @@
 #include "WindowPool.hpp"
 #include "WindowPosition.hpp"
 #include "../core/DisplayState.hpp"
+#include <optional>
 #include <utility>
 
 namespace minfwm {
@@ -20,7 +21,8 @@ public:
     BackendResult suspend(ClientWindow& window, double now);
     BackendResult releaseToNative(ClientWindow& window, core::Rect physical, double now);
     BackendResult setPinnedLayer(ClientWindow& window, bool alwaysOnTop);
-    BackendResult hide(ClientWindow& window, core::Rect physical, core::Rect displayBounds, double now);
+    BackendResult hide(ClientWindow& window, core::Rect physical, core::Rect displayBounds, double now,
+                       std::optional<core::Point> parkingPosition = std::nullopt);
     BackendResult restore(ClientWindow& window, double now);
     bool acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state);
 

@@ -26,14 +26,16 @@ struct DisplayFrameClock::Impl {
     std::vector<Entry> entries;
     id screenObserver = nil;
     std::function<void(int64_t)> callback;
+    std::function<void()> screenChanged;
 };
 
 DisplayFrameClock::DisplayFrameClock() : m_impl(std::make_unique<Impl>()) {}
 DisplayFrameClock::~DisplayFrameClock() { stop(); }
 
-bool DisplayFrameClock::start(std::function<void(int64_t)> callback) {
+bool DisplayFrameClock::start(std::function<void(int64_t)> callback, std::function<void()> screenChanged) {
     stop();
     m_impl->callback = std::move(callback);
+    m_impl->screenChanged = std::move(screenChanged);
     for (NSScreen* screen in NSScreen.screens) {
         NSNumber* number = screen.deviceDescription[@"NSScreenNumber"];
         if (!number) continue;
@@ -45,13 +47,15 @@ bool DisplayFrameClock::start(std::function<void(int64_t)> callback) {
         [link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
         m_impl->entries.push_back({link, target});
     }
-    // A new display link must follow mode/refresh-rate changes on the same
-    // display. The callback does not mutate WindowManager's display ownership.
+    // Refresh both display links and WindowManager's per-display state when
+    // AppKit reports a topology or mode change.
     m_impl->screenObserver = [[NSNotificationCenter.defaultCenter
         addObserverForName:NSApplicationDidChangeScreenParametersNotification object:nil
         queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*) {
             const auto callbackCopy = m_impl->callback;
-            (void)start(callbackCopy);
+            const auto screenChangedCopy = m_impl->screenChanged;
+            if (screenChangedCopy) screenChangedCopy();
+            (void)start(callbackCopy, screenChangedCopy);
         }] retain];
     return !m_impl->entries.empty();
 }
@@ -69,6 +73,7 @@ void DisplayFrameClock::stop() {
     }
     m_impl->entries.clear();
     m_impl->callback = {};
+    m_impl->screenChanged = {};
 }
 
 }

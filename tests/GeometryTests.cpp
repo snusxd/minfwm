@@ -1,6 +1,7 @@
 #include "Camera.hpp"
 #include "DisplayState.hpp"
 #include "Visibility.hpp"
+#include "WindowOwnership.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -31,6 +32,9 @@ int main() {
     using minfwm::core::Point;
     using minfwm::core::Rect;
     using minfwm::core::VisibilityPolicy;
+    using minfwm::core::shouldTransferWindow;
+    using minfwm::core::frameFitsDisplay;
+    using minfwm::core::nearestDisplay;
 
     Camera camera;
     camera.move(-125.0f, 80.0f);
@@ -53,6 +57,13 @@ int main() {
 
     DisplayState display({ 7, { -1920.0f, -300.0f, 1920.0f, 1080.0f } });
     display.camera().setPosition(-500.0f, 200.0f);
+    expect(display.updateGeometry({7, {-2560.0f, -300.0f, 2560.0f, 1440.0f}}),
+           "screen geometry can update without replacing its display state");
+    expectNear(display.camera().x(), -500.0f, "screen geometry updates preserve that display camera");
+    expect(!display.updateGeometry({8, {0, 0, 1920, 1080}}), "screen geometry cannot change display identity");
+    expect(!display.updateGeometry({7, {0, 0, 0, 1080}}), "invalid screen geometry is rejected");
+    expect(display.updateGeometry({7, {-1920.0f, -300.0f, 1920.0f, 1080.0f}}),
+           "valid screen geometry can be restored after rejected updates");
     const Point physicalOrigin = display.virtualToPhysical(Point{ -500.0f, 200.0f });
     expectNear(physicalOrigin.x, -1920.0f, "negative display origin is preserved on x");
     expectNear(physicalOrigin.y, -300.0f, "negative display origin is preserved on y");
@@ -69,10 +80,48 @@ int main() {
     VisibilityPolicy policy(100.0f);
     expect(policy.shouldRender({ -600.0f, 200.0f, 100.0f, 100.0f }, viewport, false),
            "window inside overscan buffer is rendered");
+    expect(policy.shouldRender({ viewport.right() - 20.0f, viewport.y, 100.0f, 100.0f }, viewport, false),
+           "window partially outside its viewport remains rendered at the edge");
     expect(!policy.shouldRender({ 1700.0f, 200.0f, 100.0f, 100.0f }, viewport, false),
            "window outside overscan buffer is not rendered");
     expect(policy.shouldRender({ 1700.0f, 200.0f, 100.0f, 100.0f }, viewport, true),
            "focused window bypasses visibility culling");
+
+    const Rect beforeDrag{1700, 100, 640, 480};
+    const Rect afterCrossing{2050, 100, 640, 480};
+    expect(!shouldTransferWindow(false, true, beforeDrag, afterCrossing, 1, 2),
+           "camera projection crossing another display does not transfer ownership");
+    expect(!shouldTransferWindow(true, false, beforeDrag, afterCrossing, 1, 2),
+           "camera movement during a mouse drag does not transfer ownership");
+    expect(!shouldTransferWindow(true, true, beforeDrag, beforeDrag, 1, 2),
+           "a mouse drag without window movement does not transfer ownership");
+    expect(shouldTransferWindow(true, true, beforeDrag, afterCrossing, 1, 2),
+           "a user drag across the display boundary transfers ownership");
+    DisplayState leftCanvas({1, {0, 0, 1920, 1080}});
+    DisplayState rightCanvas({2, {1920, 0, 1920, 1080}});
+    const Rect rightBefore = rightCanvas.virtualToPhysical({100, 100, 640, 480});
+    leftCanvas.camera().move(300, 0);
+    const Rect rightAfter = rightCanvas.virtualToPhysical({100, 100, 640, 480});
+    expectNear(rightAfter.x, rightBefore.x,
+               "moving one display camera leaves the other display presentation unchanged");
+    expect(leftCanvas.virtualToPhysical({100, 100, 640, 480}).x != rightBefore.x,
+           "each display maps its own virtual canvas to its physical origin");
+    expect(frameFitsDisplay({1280, 100, 640, 480}, {0, 0, 1920, 1080}),
+           "a window ending at its owner display edge can use native positioning");
+    expect(!frameFitsDisplay({1281, 100, 640, 480}, {0, 0, 1920, 1080}),
+           "a window entering the adjacent monitor cannot switch to native positioning");
+    const DisplayGeometry adjacentDisplays[] = {{1, {0, 0, 1920, 1080}}, {2, {1920, 0, 1920, 1080}}};
+    const Rect partlyDragged{1500, 100, 640, 480};
+    expect(nearestDisplay(adjacentDisplays, {1950, 200}) == 2 &&
+           nearestDisplay(adjacentDisplays, {partlyDragged.x + partlyDragged.w / 2, 200}) == 1,
+           "drag-everywhere destination follows the released pointer even while the window center remains on its source display");
+    const Point grabOffset{120, 30};
+    const Point dragPointer{1980, 240};
+    const Point draggedOrigin = leftCanvas.physicalToVirtual(
+        Point{dragPointer.x - grabOffset.x, dragPointer.y - grabOffset.y});
+    const Point projectedOrigin = leftCanvas.virtualToPhysical(draggedOrigin);
+    expectNear(projectedOrigin.x + grabOffset.x, dragPointer.x,
+               "absolute pointer drag keeps the grabbed point under the cursor across displays");
 
     display.saveBookmark(3);
     display.camera().setPosition(0.0f, 0.0f);

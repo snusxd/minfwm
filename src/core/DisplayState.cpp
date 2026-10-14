@@ -118,6 +118,23 @@ const DisplayGeometry& DisplayState::geometry() const noexcept {
     return m_geometry;
 }
 
+bool DisplayState::updateGeometry(DisplayGeometry geometry) noexcept {
+    const Rect bounds = geometry.bounds;
+    if (geometry.id != m_geometry.id || !std::isfinite(bounds.x) || !std::isfinite(bounds.y) ||
+        !std::isfinite(bounds.w) || !std::isfinite(bounds.h) || bounds.w <= 0 || bounds.h <= 0) {
+        return false;
+    }
+    if (bounds.x == m_geometry.bounds.x && bounds.y == m_geometry.bounds.y &&
+        bounds.w == m_geometry.bounds.w && bounds.h == m_geometry.bounds.h) {
+        return true;
+    }
+    m_geometry = geometry;
+    m_return.reset();
+    m_cameraTransition.reset();
+    m_targetScale = m_scale;
+    return true;
+}
+
 Camera& DisplayState::camera() noexcept {
     return m_camera;
 }

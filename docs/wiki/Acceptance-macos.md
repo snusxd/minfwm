@@ -10,6 +10,10 @@ are manual-only. Build/CTest success does not prove those interactions.
 - Pan with Super drag; verify focus, pin/unpin, native dragging, and camera
   bookmarks.
 - Check a secondary display with a negative origin and independent cameras.
+- Connect a display while the daemon is running; verify it gets an independent
+  camera, new windows are assigned to it, and native window drags transfer
+  ownership between display canvases. Pan a camera until windows pass beyond its
+  visible edge and verify those windows stay on their original canvas.
 - Verify window visibility, native geometry, and restoration after normal exit.
 - Check translation, overview zoom, selection, Escape, application frame
   correction, and process-exit recovery.
