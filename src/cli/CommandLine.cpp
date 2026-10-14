@@ -69,6 +69,22 @@ CommandLineParseResult parseCommandLine(int argc, const char* const* argv) {
             ParsedCommandLine{ParsedCommandLine::Command::RELOAD, 0.0F, 0.0F}, {}};
     }
 
+    if (command == "status" || command == "version") {
+        if (command == "status" && argc != 2) {
+            return invalidArguments("status does not accept arguments");
+        }
+        if (command == "version" && argc != 2 &&
+            !(argc == 3 && argv[2] != nullptr && std::string_view(argv[2]) == "--dev")) {
+            return invalidArguments("version accepts only the --dev option");
+        }
+        ParsedCommandLine parsed;
+        parsed.command = command == "status"
+            ? ParsedCommandLine::Command::STATUS
+            : ParsedCommandLine::Command::VERSION;
+        parsed.devVersion = command == "version" && argc == 3;
+        return CommandLineParseResult{parsed, {}};
+    }
+
     if (command == "start" || command == "stop" || command == "restart" ||
         command == "enable" || command == "disable") {
         if (argc != 2) {

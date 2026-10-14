@@ -239,4 +239,11 @@ bool controlDaemon(std::string_view action, std::string& error) {
     return false;
 }
 
+std::string daemonStatus() {
+    const auto result = runLaunchctl({"print", serviceTarget()});
+    if (result.status != 0) return "stopped";
+    if (result.output.find("state = running") != std::string::npos) return "running";
+    return "loaded, not running";
+}
+
 } // namespace minfwm

@@ -1,0 +1,18 @@
+{
+  "assistance": "ai",
+  "base": "c74618183aa272da7751844b1b081f5025d054ae",
+  "id": "ade8baba6a7c4b66b6a3daa76cc964c5",
+  "paths": [
+    "CMakeLists.txt",
+    "src/cli/CommandLine.cpp",
+    "src/cli/CommandLine.hpp",
+    "src/cli/DaemonControl.hpp",
+    "src/cli/DaemonControl.mm",
+    "src/cli/main.mm"
+  ],
+  "schema_version": 1,
+  "task": "minfwm-cli-status-version",
+  "tools": [
+    "codex"
+  ]
+}

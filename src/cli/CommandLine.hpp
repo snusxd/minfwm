@@ -13,12 +13,15 @@ struct ParsedCommandLine {
         STOP,
         RESTART,
         ENABLE,
-        DISABLE
+        DISABLE,
+        STATUS,
+        VERSION
     };
 
     Command command = Command::RELOAD;
     float x = 0.0F;
     float y = 0.0F;
+    bool devVersion = false;
 };
 
 struct CommandLineParseResult {

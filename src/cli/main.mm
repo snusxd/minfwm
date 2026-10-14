@@ -7,6 +7,14 @@
 #include <csignal>
 #include <iostream>
 
+#ifndef MINFWM_BUILD_COMMIT
+#define MINFWM_BUILD_COMMIT "unknown"
+#endif
+
+#ifndef MINFWM_SOURCE_DIR
+#define MINFWM_SOURCE_DIR "."
+#endif
+
 namespace {
 
 const char* errorCodeName(minfwm::ErrorCode error) {
@@ -24,7 +32,30 @@ const char* errorCodeName(minfwm::ErrorCode error) {
 }
 
 void printUsage() {
-    std::cerr << "Usage: minfwm [start|stop|restart|reload|enable|disable] | camera move --x <value> --y <value>\n";
+    std::cerr << "Usage: minfwm [start|stop|restart|reload|enable|disable|status|version [--dev]] | camera move --x <value> --y <value>\n";
+}
+
+std::string latestLocalCommit() {
+    NSTask* task = [[NSTask alloc] init];
+    task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/git"];
+    task.arguments = @[@"-C", [NSString stringWithUTF8String:MINFWM_SOURCE_DIR],
+                       @"rev-parse", @"--short", @"HEAD"];
+    NSPipe* pipe = [NSPipe pipe];
+    task.standardOutput = pipe;
+    task.standardError = [NSPipe pipe];
+    NSError* error = nil;
+    if (![task launchAndReturnError:&error]) return "unknown";
+    NSData* data = [[pipe fileHandleForReading] readDataToEndOfFile];
+    [task waitUntilExit];
+    if (task.terminationStatus != 0) return "unknown";
+    NSString* output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    const char* commit = output.UTF8String;
+    if (commit == nullptr) return "unknown";
+    std::string result(commit);
+    while (!result.empty() && (result.back() == '\n' || result.back() == '\r')) {
+        result.pop_back();
+    }
+    return result.empty() ? "unknown" : result;
 }
 
 } // namespace
@@ -40,6 +71,16 @@ int main(int argc, const char * argv[]) {
         }
 
         const auto command = parsed.command->command;
+        if (command == minfwm::ParsedCommandLine::Command::STATUS) {
+            std::cout << "minfwmd: " << minfwm::daemonStatus() << '\n';
+            return 0;
+        }
+        if (command == minfwm::ParsedCommandLine::Command::VERSION) {
+            std::cout << "minfwm "
+                      << (parsed.command->devVersion ? latestLocalCommit() : MINFWM_BUILD_COMMIT)
+                      << '\n';
+            return 0;
+        }
         if (command == minfwm::ParsedCommandLine::Command::START ||
             command == minfwm::ParsedCommandLine::Command::STOP ||
             command == minfwm::ParsedCommandLine::Command::RESTART ||

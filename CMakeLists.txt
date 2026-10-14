@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
 project(minfwm LANGUAGES CXX OBJCXX OBJC)
 
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE MINFWM_BUILD_COMMIT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT MINFWM_BUILD_COMMIT)
+    set(MINFWM_BUILD_COMMIT "unknown")
+endif()
+
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -82,6 +93,10 @@ add_executable(minfwmc
     src/cli/DaemonControl.mm
 )
 target_link_libraries(minfwmc PRIVATE minfwm_common ${COMMON_LIBS})
+target_compile_definitions(minfwmc PRIVATE
+    MINFWM_BUILD_COMMIT="${MINFWM_BUILD_COMMIT}"
+    MINFWM_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
 
 add_executable(minfwm
     src/cli/main.mm
@@ -90,6 +105,10 @@ add_executable(minfwm
     src/cli/DaemonControl.mm
 )
 target_link_libraries(minfwm PRIVATE minfwm_common ${COMMON_LIBS})
+target_compile_definitions(minfwm PRIVATE
+    MINFWM_BUILD_COMMIT="${MINFWM_BUILD_COMMIT}"
+    MINFWM_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
 
 # Run explicitly on a desktop session; never run as part of automated CTest.
 add_executable(minfwm_manual_window_move EXCLUDE_FROM_ALL tools/ManualWindowMove.mm)
