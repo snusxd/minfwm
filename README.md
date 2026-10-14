@@ -2,16 +2,17 @@
 
 ![minfwm preview](docs/images/preview.png)
 
-`minfwm` is an infinite 2D window canvas for macOS 14 and newer. It places
-windows on a virtual desktop that spans connected displays. It requires the
-Yabai Scripting Addition to present windows above the menu bar.
+`minfwm` is an infinite 2D window canvas for macOS. It places windows on a virtual desktop that spans connected displays.
+
+> [!WARNING]
+> This project is completely vibecoded.
+
+## Installation and usage
 
 > [!IMPORTANT]
 > Install the compatible Yabai Scripting Addition separately. Setup requires disabling SIP; see the [Yabai integration guide](https://github.com/snusxd/minfwm/wiki/Yabai-Integration).
 
-## Installation and usage
-
-Install the latest stable release from the
+Install the latest stable release from the to macOS 14+
 [Homebrew tap](https://github.com/snusxd/homebrew-minfwm):
 
 ```sh
@@ -27,7 +28,9 @@ minfwm status
 minfwm camera move --x 100 --y 0
 ```
 
-Use `minfwm start`, `stop`, or `restart` to control the daemon. `minfwm reload`
+Use `minfwm start`, `stop`, or `restart` to control the daemon. In a source
+checkout, `./build/minfwm dev-update` saves the current virtual window layout and
+camera, then restarts the daemon next to that CLI binary. `minfwm reload`
 applies configuration changes; `minfwm disable` stops the daemon and removes
 login startup.
 
