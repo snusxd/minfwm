@@ -16,6 +16,9 @@ invert-zoom-scroll-direction = false
 rewind-on-focus = true
 zoomed-esc-center = "screen"
 
+[camera]
+mouse-movement-multiplier = 1.0
+
 [display]
 multi-display-mode = "isolated"
 
@@ -37,6 +40,7 @@ bookmarks-goto = ["Super", "Shift"]
 | `invert-zoom-scroll-direction` | `false` | Reverse vertical-scroll zoom direction. |
 | `rewind-on-focus` | `true` | Automatically center the camera on a window when its application gains focus. When `false`, windows remain interactive while zoomed and app focus does not recenter the camera. |
 | `zoomed-esc-center` | `"screen"` | Escape anchor: `screen`, `mouse`, or `focus`. |
+| `camera.mouse-movement-multiplier` | `1.0` | Scale camera movement while dragging: `2.0` moves twice as far as the cursor; `0.5` moves half as far. Must be finite and non-negative. |
 | `multi-display-mode` | `"isolated"` | Camera coordination policy for displays. |
 | `keybinds.super` | `["Cmd", "Alt"]` | `Super` modifier chord for pan, zoom, and pin. Supported values: `Cmd`, `Alt`, `Shift`, `Ctrl`. |
 | `keybinds.center-camera-to-focus` | `["Super", "F"]` | Move the camera to center the focused window. |

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -110,6 +111,30 @@ bool readOverscan(const TomlTable& root, const TomlTable* table, float& out, std
 
     if (!std::isfinite(value) || value < 0.0 || value > 100000.0) {
         error = "overscan-buffer-px must be a finite number from 0 to 100000";
+        return false;
+    }
+    out = static_cast<float>(value);
+    return true;
+}
+
+bool readMouseMovementMultiplier(const TomlTable& root, const TomlTable* table,
+                                 float& out, std::string& error) {
+    const TomlNode* node = get(root, table, "mouse-movement-multiplier", error);
+    if (!error.empty()) return false;
+    if (!node) return true;
+
+    double value = 0.0;
+    if (const auto floating = node->value<double>()) {
+        value = *floating;
+    } else if (const auto integer = node->value<std::int64_t>()) {
+        value = static_cast<double>(*integer);
+    } else {
+        error = "mouse-movement-multiplier must be a finite non-negative number";
+        return false;
+    }
+
+    if (!std::isfinite(value) || value < 0.0 || value > std::numeric_limits<float>::max()) {
+        error = "mouse-movement-multiplier must be a finite non-negative number representable as float";
         return false;
     }
     out = static_cast<float>(value);
@@ -235,13 +260,14 @@ unsigned bookmarkModifierMask(const std::vector<std::string>& modifiers,
 }
 
 bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
-    if (!rejectUnknownKeys(root, {"window", "zoom", "display", "keybinds", "pins"},
-                           {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
+    if (!rejectUnknownKeys(root, {"window", "zoom", "camera", "display", "keybinds", "pins"},
+                           {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center", "mouse-movement-multiplier",
                             "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior",
                             "always-on-top"}, error)) return false;
 
     const TomlTable* window = tableAt(root, "window", error);
     const TomlTable* zoom = tableAt(root, "zoom", error);
+    const TomlTable* camera = tableAt(root, "camera", error);
     const TomlTable* display = tableAt(root, "display", error);
     const TomlTable* keybinds = tableAt(root, "keybinds", error);
     const TomlTable* pins = tableAt(root, "pins", error);
@@ -249,6 +275,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
 
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
     if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center", "rewind-on-focus"}, error)) return false;
+    if (camera && !rejectUnknownKeys(*camera, "camera", {"mouse-movement-multiplier"}, error)) return false;
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
                                        {"super", "center-camera-to-focus", "center-focus-to-camera",
@@ -259,6 +286,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readBool(root, zoom, "invert-zoom-scroll-direction", candidate.invertZoomScrollDirection, error) ||
         !readBool(root, zoom, "rewind-on-focus", candidate.rewindOnFocus, error) ||
         !readString(root, zoom, "zoomed-esc-center", candidate.zoomedEscCenter, error) ||
+        !readMouseMovementMultiplier(root, camera, candidate.mouseMovementMultiplier, error) ||
         !readString(root, display, "multi-display-mode", candidate.multiDisplayMode, error) ||
         !readOverscan(root, window, candidate.overscanBufferPx, error) ||
         !readWhitelist(root, window, candidate.whitelist, error) ||

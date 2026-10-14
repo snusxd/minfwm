@@ -437,7 +437,9 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         if (!wm.overviewReturning() && update.displayId && (update.delta.x != 0 || update.delta.y != 0)) {
             if (Display* display = wm.displayById(*update.displayId)) {
                 display->state().cancelCameraAnimation();
-                display->camera().move(update.delta.x / display->state().scale(), update.delta.y / display->state().scale());
+                const float multiplier = ConfigManager::instance().snapshot().mouseMovementMultiplier;
+                display->camera().move(update.delta.x * multiplier / display->state().scale(),
+                                       update.delta.y * multiplier / display->state().scale());
             }
         }
         if (update.consume || (wm.overviewActive() && rewindOnFocus && type != kCGEventFlagsChanged)) return nullptr;

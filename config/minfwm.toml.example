@@ -8,6 +8,7 @@
 # invert-zoom-scroll-direction = false
 # rewind-on-focus = true
 # zoomed-esc-center = "screen"
+# camera.mouse-movement-multiplier = 1.0
 # multi-display-mode = "isolated"
 # pins.always-on-top = true
 
@@ -24,6 +25,10 @@ invert-zoom-scroll-direction = false
 rewind-on-focus = true
 # Escape anchor while zoomed: "screen", "mouse", or "focus".
 zoomed-esc-center = "screen"
+
+[camera]
+# Scale camera panning relative to cursor movement. 2.0 is twice as fast; 0.5 is half speed.
+mouse-movement-multiplier = 1.0
 
 [display]
 multi-display-mode = "isolated"

@@ -12,6 +12,7 @@ struct ConfigSnapshot {
     bool rewindOnFocus = true;
     std::string zoomedEscCenter = "screen";
     std::string multiDisplayMode = "isolated";
+    float mouseMovementMultiplier = 1.0f;
     float overscanBufferPx = 500.0f;
     std::vector<std::string> whitelist = {"Terminal", "Music"};
     std::string spawnBehavior = "center";

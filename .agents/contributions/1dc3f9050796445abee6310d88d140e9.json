@@ -1,0 +1,17 @@
+{
+  "assistance": "ai",
+  "base": "b4661017cc8801faf1caabd6c74f06416b6d6b3a",
+  "id": "1dc3f9050796445abee6310d88d140e9",
+  "paths": [
+    "config/minfwm.toml.example",
+    "docs/wiki/Configuration.md",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.mm"
+  ],
+  "schema_version": 1,
+  "task": "mouse-movement-multiplier",
+  "tools": [
+    "codex"
+  ]
+}
