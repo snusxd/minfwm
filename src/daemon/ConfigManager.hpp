@@ -15,6 +15,7 @@ struct ConfigSnapshot {
     std::vector<std::string> whitelist = {"Terminal", "Music"};
     std::string spawnBehavior = "center";
     bool pinsAlwaysOnTop = true;
+    std::vector<std::string> superModifiers = {"Cmd", "Alt"};
 };
 
 class ConfigManager {

@@ -1,0 +1,22 @@
+{
+  "assistance": "ai",
+  "base": "7d27fe23917f2e76153f48344f525d7b50842dd3",
+  "id": "9b9c82c638df4426ae50c0b56065f3b8",
+  "paths": [
+    "GEMINI.md",
+    "README.md",
+    "config/minfwm.toml.example",
+    "docs/wiki/Acceptance-macos.md",
+    "docs/wiki/Configuration.md",
+    "docs/wiki/Getting-Started.md",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.mm",
+    "tests/PanGestureTests.cpp"
+  ],
+  "schema_version": 1,
+  "task": "configurable-super-shortcut",
+  "tools": [
+    "codex"
+  ]
+}

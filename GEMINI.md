@@ -17,7 +17,7 @@ origins. Native macOS Spaces are intentionally not implemented in phase one.
 
 1. `minfwmd` checks Accessibility permission and snapshots connected displays.
 2. `AXObserver` tracks application and window events on the main run loop.
-3. `InputInterceptor` consumes Cmd+Option panning and restores a timed-out
+3. `InputInterceptor` consumes Super panning and restores a timed-out
    event tap.
 4. Visibility culling keeps focused and whitelisted windows available; other
    windows use one AX hide policy and are restored on shutdown.

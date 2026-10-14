@@ -17,6 +17,9 @@ zoomed-esc-center = "screen"
 
 [display]
 multi-display-mode = "isolated"
+
+[keybinds]
+super = ["Cmd", "Alt"]
 ```
 
 | Key | Default | Meaning |
@@ -28,8 +31,11 @@ multi-display-mode = "isolated"
 | `invert-zoom-scroll-direction` | `false` | Reverse vertical-scroll zoom direction. |
 | `zoomed-esc-center` | `"screen"` | Escape anchor: `screen`, `mouse`, or `focus`. |
 | `multi-display-mode` | `"isolated"` | Camera coordination policy for displays. |
+| `keybinds.super` | `["Cmd", "Alt"]` | `Super` modifier chord for pan, zoom, and pin. Supported values: `Cmd`, `Alt`, `Shift`, `Ctrl`. |
 
-The `[keybinds]` section is reserved and does not configure shortcuts. Click
-selection always centers the selected window; `zoomed-esc-center` only controls
-Escape. Changing settings takes effect after `./build/minfwm reload`. The full
-example is in `config/minfwm.toml.example` in the source repository.
+In shortcuts, `Super` means the modifier chord configured here. By default,
+`Super` is `Cmd+Alt`.
+
+Click selection always centers the selected window; `zoomed-esc-center` only
+controls Escape. Changing settings takes effect after `./build/minfwm reload`.
+The full example is in `config/minfwm.toml.example` in the source repository.

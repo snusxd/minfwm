@@ -39,12 +39,12 @@ Useful commands:
 
 ## Controls
 
-- Cmd+Option and left-drag pans the canvas.
-- Cmd+Option and vertical scroll zooms the display under the pointer when a
+- Super and left-drag pans the canvas.
+- Super and vertical scroll zooms the display under the pointer when a
   compatible overview extension is available.
 - Clicking a window while zoomed restores normal scale and centers it.
 - Escape exits overview; its return anchor is configurable.
 - Cmd+1…9 loads a camera bookmark; Cmd+Shift+1…9 saves one.
-- Cmd+Option+P pins or unpins the focused window.
+- Super+P pins or unpins the focused window.
 
-See [Configuration](Configuration.md) for the supported options.
+See [Configuration](https://github.com/snusxd/minfwm/wiki/Configuration) for the supported options.

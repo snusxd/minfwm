@@ -1,7 +1,35 @@
 #import "InputInterceptor.hpp"
 #import "WindowManager.hpp"
+#import "ConfigManager.hpp"
 #import <iostream>
 #include <cmath>
+#include <algorithm>
+
+namespace {
+
+CGEventFlags flagForModifier(const std::string& modifier) {
+    if (modifier == "Cmd") return kCGEventFlagMaskCommand;
+    if (modifier == "Alt") return kCGEventFlagMaskAlternate;
+    if (modifier == "Shift") return kCGEventFlagMaskShift;
+    if (modifier == "Ctrl") return kCGEventFlagMaskControl;
+    return 0;
+}
+
+bool superHeld(CGEventFlags flags, const std::vector<std::string>& modifiers) {
+    return std::all_of(modifiers.begin(), modifiers.end(), [flags](const std::string& modifier) {
+        const CGEventFlags requiredFlag = flagForModifier(modifier);
+        return requiredFlag != 0 && (flags & requiredFlag) != 0;
+    });
+}
+
+bool hasUnconfiguredPinModifier(CGEventFlags flags, const std::vector<std::string>& modifiers) {
+    return ((flags & kCGEventFlagMaskShift) &&
+            std::find(modifiers.begin(), modifiers.end(), "Shift") == modifiers.end()) ||
+           ((flags & kCGEventFlagMaskControl) &&
+            std::find(modifiers.begin(), modifiers.end(), "Ctrl") == modifiers.end());
+}
+
+} // namespace
 
 namespace minfwm {
 
@@ -120,8 +148,13 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (!event) return event;
 
     auto& wm = WindowManager::instance();
+    const bool usesSuperKey = type == kCGEventScrollWheel || type == kCGEventLeftMouseDown ||
+        type == kCGEventLeftMouseUp || type == kCGEventLeftMouseDragged || type == kCGEventFlagsChanged ||
+        type == kCGEventKeyDown;
+    const std::vector<std::string> superModifiers = usesSuperKey ?
+        ConfigManager::instance().snapshot().superModifiers : std::vector<std::string>{};
     const CGEventFlags currentFlags = CGEventGetFlags(event);
-    const bool zoomModifiers = (currentFlags & kCGEventFlagMaskCommand) && (currentFlags & kCGEventFlagMaskAlternate);
+    const bool zoomModifiers = usesSuperKey && superHeld(currentFlags, superModifiers);
     const CGPoint location = CGEventGetLocation(event);
     const core::Point pointer{static_cast<float>(location.x), static_cast<float>(location.y)};
 
@@ -191,7 +224,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (type == kCGEventLeftMouseDown || type == kCGEventLeftMouseUp ||
         type == kCGEventLeftMouseDragged || type == kCGEventFlagsChanged) {
         const CGEventFlags flags = CGEventGetFlags(event);
-        const bool modifiersHeld = (flags & kCGEventFlagMaskCommand) && (flags & kCGEventFlagMaskAlternate);
+        const bool modifiersHeld = superHeld(flags, superModifiers);
         const core::PanEvent panEvent = type == kCGEventLeftMouseDown ? core::PanEvent::mouseDown :
             type == kCGEventLeftMouseUp ? core::PanEvent::mouseUp :
             type == kCGEventLeftMouseDragged ? core::PanEvent::mouseDragged : core::PanEvent::modifiersChanged;
@@ -231,7 +264,8 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         bool shift = flags & kCGEventFlagMaskShift;
         int64_t keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
 
-        if (keycode == 35 && cmd && option && !(flags & (kCGEventFlagMaskShift | kCGEventFlagMaskControl))) {
+        if (keycode == 35 && superHeld(flags, superModifiers) &&
+            !hasUnconfiguredPinModifier(flags, superModifiers)) {
             const bool repeating = CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat) != 0;
             if (!repeating) (void)wm.toggleFocusedWindowPin();
             return nullptr;

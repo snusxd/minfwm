@@ -30,13 +30,13 @@ are `start`, `stop`, `restart`, `disable`, and `reload`. Keep `minfwmd` beside
 
 ## Controls
 
-- Hold Cmd+Option and drag with the left mouse button to pan the canvas.
-- Hold Cmd+Option and scroll vertically to zoom the display under the pointer
+- Hold Super and drag with the left mouse button to pan the canvas.
+- Hold Super and scroll vertically to zoom the display under the pointer
   when the compatible overview extension is available.
 - Click a window while zoomed to restore normal scale and center it.
 - Press Escape to exit overview. The return anchor is configurable.
 - Press Cmd+1…9 to load a camera bookmark; Cmd+Shift+1…9 saves one.
-- Press Cmd+Option+P to pin or unpin the focused window.
+- Press Super+P to pin or unpin the focused window.
 
 ## Configuration and documentation
 

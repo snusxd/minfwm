@@ -7,7 +7,7 @@ are manual-only. Build/CTest success does not prove those interactions.
 
 - Start without Yabai SA; grant and revoke Accessibility permission; verify
   clear errors and orderly startup/shutdown.
-- Pan with Cmd+Option drag; verify focus, pin/unpin, native dragging, and camera
+- Pan with Super drag; verify focus, pin/unpin, native dragging, and camera
   bookmarks.
 - Check a secondary display with a negative origin and independent cameras.
 - Verify window visibility, native geometry, and restoration after normal exit.

@@ -46,7 +46,7 @@ int main() {
            "ordinary gesture retains its mouse-up");
 
     expect(gesture.handle(PanEvent::mouseDown, true, 2).consume,
-           "Cmd+Option mouse-down captures the gesture");
+           "Super mouse-down captures the gesture");
     expect(gesture.isPanning(), "captured gesture enters panning");
     const auto drag = gesture.handle(PanEvent::mouseDragged, true, 1, {10, -20});
     expect(drag.consume && drag.displayId == 2,

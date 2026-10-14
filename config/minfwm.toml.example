@@ -17,7 +17,7 @@ whitelist = ["Terminal", "Music"]
 spawn-behavior = "center"
 
 [zoom]
-# Reverse Cmd+Option wheel zoom without changing ordinary application scrolling.
+# Reverse Super wheel zoom without changing ordinary application scrolling.
 invert-zoom-scroll-direction = false
 # Escape anchor while zoomed: "screen", "mouse", or "focus".
 zoomed-esc-center = "screen"
@@ -29,7 +29,9 @@ multi-display-mode = "isolated"
 always-on-top = true
 
 [keybinds]
-# Cmd+Option + left-drag pans; Cmd+Option + vertical-scroll zooms.
+# Modifier names: "Cmd", "Alt", "Shift", "Ctrl". Defaults to ["Cmd", "Alt"].
+# Super + left-drag pans; Super + vertical-scroll zooms.
+# Example: super = ["Ctrl", "Alt"]
 # Cmd+1..9 loads a bookmark; Cmd+Shift+1..9 saves it.
-# Cmd+Option+P pins/unpins the focused window; Escape exits overview.
-# These bindings are documented here, not configurable yet.
+# Super+P pins/unpins the focused window; Escape exits overview.
+super = ["Cmd", "Alt"]
