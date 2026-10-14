@@ -16,6 +16,7 @@ struct ConfigSnapshot {
     float animationSpeed = 1.0f;
     std::string zoomedEscCenter = "screen";
     std::string multiDisplayMode = "isolated";
+    std::vector<std::string> ignoredDisplays;
     float mouseMovementMultiplier = 1.0f;
     float trackpadMovementMultiplier = 1.0f;
     bool trackpadInvertX = false;

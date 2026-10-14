@@ -263,6 +263,7 @@ void InputInterceptor::handleTrackpadPan(bool active, core::Point delta, float z
         CGEventRef pointerEvent = CGEventCreate(nullptr);
         const CGPoint pointer = pointerEvent ? CGEventGetLocation(pointerEvent) : CGPointZero;
         if (pointerEvent) CFRelease(pointerEvent);
+        if (wm.isIgnoredDisplayAtPoint({static_cast<float>(pointer.x), static_cast<float>(pointer.y)})) return;
         m_trackpadPanDisplayId = wm.displayForPoint(
             {static_cast<float>(pointer.x), static_cast<float>(pointer.y)}).id();
         wm.setPanning(true);
@@ -324,7 +325,9 @@ void InputInterceptor::finishTrackpadPan() {
 }
 
 void InputInterceptor::updateCursor(bool superHeld, bool dragging, CGPoint pointer) {
-    if (!superHeld) {
+    const bool ignoredDisplay = superHeld && WindowManager::instance().isIgnoredDisplayAtPoint(
+        {static_cast<float>(pointer.x), static_cast<float>(pointer.y)});
+    if (!superHeld || ignoredDisplay) {
         if (m_cursorOverlay) [m_cursorOverlay orderOut:nil];
         if (m_systemCursorHidden) {
             CGDisplayShowCursor(kCGDirectMainDisplay);
@@ -334,7 +337,7 @@ void InputInterceptor::updateCursor(bool superHeld, bool dragging, CGPoint point
             (void)setCursorHidingInBackground(false);
             m_backgroundCursorHidingEnabled = false;
         }
-        m_cursorUnavailableForHold = false;
+        if (!superHeld) m_cursorUnavailableForHold = false;
         m_closedHandCursorActive = false;
         return;
     }
@@ -574,7 +577,9 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         int64_t displayId = 0;
         if (type == kCGEventLeftMouseDown && modifiersHeld) {
             const CGPoint point = CGEventGetLocation(event);
-            displayId = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)}).id();
+            if (!wm.isIgnoredDisplayAtPoint({static_cast<float>(point.x), static_cast<float>(point.y)})) {
+                displayId = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)}).id();
+            }
         }
         core::Point delta;
         if (type == kCGEventLeftMouseDragged) {
@@ -648,12 +653,14 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
 
         if (index != -1 && matchesModifierChord(flags, config.bookmarksAddModifiers, superModifiers)) {
             const CGPoint point = CGEventGetLocation(event);
+            if (wm.isIgnoredDisplayAtPoint({static_cast<float>(point.x), static_cast<float>(point.y)})) return event;
             Display& display = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)});
             display.saveBookmark(index);
             return nullptr;
         }
         if (index != -1 && matchesModifierChord(flags, config.bookmarksGotoModifiers, superModifiers)) {
             const CGPoint point = CGEventGetLocation(event);
+            if (wm.isIgnoredDisplayAtPoint({static_cast<float>(point.x), static_cast<float>(point.y)})) return event;
             Display& display = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)});
             display.loadBookmark(index);
             return NULL;

@@ -33,6 +33,7 @@ int main() {
     using minfwm::core::Rect;
     using minfwm::core::VisibilityPolicy;
     using minfwm::core::shouldTransferWindow;
+    using minfwm::core::shouldReleaseToIgnoredDisplay;
     using minfwm::core::shouldPreferNativePosition;
     using minfwm::core::frameFitsDisplay;
     using minfwm::core::nearestDisplay;
@@ -98,6 +99,16 @@ int main() {
            "a mouse drag without window movement does not transfer ownership");
     expect(shouldTransferWindow(true, true, beforeDrag, afterCrossing, 1, 2),
            "a user drag across the display boundary transfers ownership");
+    expect(!shouldReleaseToIgnoredDisplay(false, true, beforeDrag, afterCrossing, true),
+           "camera projection onto an ignored display does not release a window");
+    expect(!shouldReleaseToIgnoredDisplay(true, false, beforeDrag, afterCrossing, true),
+           "a moving camera cannot release a dragged window to an ignored display");
+    expect(!shouldReleaseToIgnoredDisplay(true, true, beforeDrag, beforeDrag, true),
+           "a click without window movement does not release its canvas");
+    expect(!shouldReleaseToIgnoredDisplay(true, true, beforeDrag, afterCrossing, false),
+           "a managed destination keeps the managed transfer path");
+    expect(shouldReleaseToIgnoredDisplay(true, true, beforeDrag, afterCrossing, true),
+           "a user drag into an ignored display releases native ownership");
     DisplayState leftCanvas({1, {0, 0, 1920, 1080}});
     DisplayState rightCanvas({2, {1920, 0, 1920, 1080}});
     const Rect rightBefore = rightCanvas.virtualToPhysical({100, 100, 640, 480});

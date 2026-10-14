@@ -15,6 +15,7 @@ struct ParsedCommandLine {
         ENABLE,
         DISABLE,
         STATUS,
+        LIST_DISPLAYS,
         VERSION,
         DEV_UPDATE
     };

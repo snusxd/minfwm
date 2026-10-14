@@ -14,6 +14,7 @@
 # camera.trackpad-invert-x = false
 # camera.trackpad-invert-y = false
 # multi-display-mode = "isolated"
+# display.ignored-displays = []
 # pins.always-on-top = true
 # animations.enable = true
 # animations.speed = 1.0
@@ -47,6 +48,7 @@ trackpad-invert-y = false
 
 [display]
 multi-display-mode = "isolated"
+ignored-displays = []
 
 [pins]
 always-on-top = true

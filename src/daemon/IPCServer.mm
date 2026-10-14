@@ -268,6 +268,9 @@ ErrorCode IPCServer::dispatchRequest(const Request& request) {
                         if (!ConfigManager::instance().load()) {
                             std::lock_guard lock(state->mutex);
                             state->result = ErrorCode::INTERNAL;
+                        } else {
+                            WindowManager::instance().refreshDisplays();
+                            WindowManager::instance().updateWindows();
                         }
                     } catch (...) {
                         std::lock_guard lock(state->mutex);

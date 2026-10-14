@@ -88,6 +88,36 @@ void initializeWindow(ClientWindow& window) {
     window.virtualCoordinatesInitialized = true;
 }
 
+void testReleaseToIgnoredDisplay() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    sa.transformed = true;
+    sa.layerCode = BackendCode::ok;
+    ClientWindow window(nullptr, 83);
+    initializeWindow(window);
+    window.isLayerSet = true;
+    window.layerAttempted = true;
+    WindowRenderer renderer(ax, sa);
+    expect(renderer.releaseToNative(window, {2200, 120, 640, 480}, 5).succeeded(),
+           "releasing a transformed window to an ignored display succeeds");
+    expect(sa.x == 2200 && sa.y == 120 && !sa.transformed && ax.calls.empty(),
+           "native handoff keeps the destination frame and clears the transform");
+    expect(sa.layer == kCGNormalWindowLevelKey && !window.isLayerSet,
+           "native handoff restores the ordinary window layer");
+
+    window.isHidden = true;
+    window.isAXHidden = true;
+    window.needsGeometryRestore = true;
+    ax.hiddenCode = BackendCode::ok;
+    ax.calls.clear();
+    expect(renderer.releaseToNative(window, {2250, 180, 640, 480}, 6).succeeded(),
+           "reloading an ignored display can release a parked window");
+    expect(std::find(ax.calls.begin(), ax.calls.end(), "show") != ax.calls.end() &&
+           std::find(ax.calls.begin(), ax.calls.end(), "resize") != ax.calls.end() &&
+           !window.isHidden && !window.needsGeometryRestore,
+           "parked window is shown at its original size before native release");
+}
+
 void testFallbackAndShutdown() {
     RecordingBackend ax, sa;
     sa.moveCode = BackendCode::failed;
@@ -541,6 +571,7 @@ void testExternalApplicationSuspension() {
 }
 
 int main() {
+    testReleaseToIgnoredDisplay();
     testOverviewPresentationAndReturn();
     testExternalApplicationSuspension();
     testFallbackAndShutdown();

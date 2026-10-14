@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
 #include "CommandLine.hpp"
 #include "DaemonControl.hpp"
 #include "IPCClient.hpp"
@@ -39,7 +40,7 @@ const char* errorCodeName(minfwm::ErrorCode error) {
 }
 
 void printUsage() {
-    std::cerr << "Usage: minfwm [daemon|start|stop|restart|dev-update|reload|enable|disable|status|version [--dev]] | camera move --x <value> --y <value>\n";
+    std::cerr << "Usage: minfwm [daemon|start|stop|restart|dev-update|reload|enable|disable|status|list displays|version [--dev]] | camera move --x <value> --y <value>\n";
 }
 
 std::string latestLocalCommit() {
@@ -87,6 +88,18 @@ int main(int argc, const char * argv[]) {
         const auto command = parsed.command->command;
         if (command == minfwm::ParsedCommandLine::Command::STATUS) {
             std::cout << "minfwm daemon: " << minfwm::daemonStatus() << '\n';
+            return 0;
+        }
+        if (command == minfwm::ParsedCommandLine::Command::LIST_DISPLAYS) {
+            for (NSScreen* screen in NSScreen.screens) {
+                NSDictionary* description = screen.deviceDescription;
+                NSNumber* displayID = description[@"NSScreenNumber"];
+                if (!displayID) continue;
+                NSString* name = screen.localizedName;
+                const char* utf8Name = name.UTF8String;
+                std::cout << displayID.longLongValue << "\t"
+                          << (utf8Name ? utf8Name : "") << '\n';
+            }
             return 0;
         }
         if (command == minfwm::ParsedCommandLine::Command::VERSION) {

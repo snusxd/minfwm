@@ -50,6 +50,17 @@ BackendResult WindowRenderer::releaseToNative(ClientWindow& window, core::Rect p
     window.positionRetryTime = 0;
     window.hideRetryTime = 0;
 
+    if (window.isAXHidden) {
+        const auto shown = m_ax.setHidden(window.ref(), window.wid(), false);
+        if (!shown.succeeded()) return shown;
+        window.isAXHidden = false;
+    }
+    if (window.needsGeometryRestore) {
+        if (!resetTransform(window).succeeded()) return {BackendCode::failed};
+        const auto resized = m_ax.resize(window.ref(), window.wid(), physical.w, physical.h);
+        if (!resized.succeeded()) return resized;
+    }
+
     // Transfer the currently presented position to the native frame before
     // dropping any Yabai transform, so pinning does not jump to the old frame.
     BackendResult moved{BackendCode::failed};
@@ -72,6 +83,7 @@ BackendResult WindowRenderer::releaseToNative(ClientWindow& window, core::Rect p
     window.isHidden = false;
     window.isAXHidden = false;
     window.needsGeometryRestore = false;
+    window.applicationSuspended = false;
     return {BackendCode::ok};
 }
 

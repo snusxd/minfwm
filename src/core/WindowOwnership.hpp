@@ -5,14 +5,24 @@
 
 namespace minfwm::core {
 
+[[nodiscard]] inline bool userMovedWindow(bool windowDragged, bool cameraUnchanged,
+                                          Rect start, Rect end) noexcept {
+    return windowDragged && cameraUnchanged &&
+        std::isfinite(start.x) && std::isfinite(start.y) &&
+        std::isfinite(end.x) && std::isfinite(end.y) &&
+        (std::abs(end.x - start.x) > 1.0f || std::abs(end.y - start.y) > 1.0f);
+}
+
 // Only an observed user drag may change the canvas that owns a window.
 [[nodiscard]] inline bool shouldTransferWindow(bool windowDragged, bool cameraUnchanged,
                                                 Rect start, Rect end, std::int64_t sourceDisplay,
                                                 std::int64_t targetDisplay) noexcept {
-    return windowDragged && cameraUnchanged && sourceDisplay != targetDisplay &&
-        std::isfinite(start.x) && std::isfinite(start.y) &&
-        std::isfinite(end.x) && std::isfinite(end.y) &&
-        (std::abs(end.x - start.x) > 1.0f || std::abs(end.y - start.y) > 1.0f);
+    return sourceDisplay != targetDisplay && userMovedWindow(windowDragged, cameraUnchanged, start, end);
+}
+
+[[nodiscard]] inline bool shouldReleaseToIgnoredDisplay(bool windowDragged, bool cameraUnchanged,
+                                                        Rect start, Rect end, bool targetIgnored) noexcept {
+    return targetIgnored && userMovedWindow(windowDragged, cameraUnchanged, start, end);
 }
 
 [[nodiscard]] inline bool frameFitsDisplay(Rect frame, Rect bounds) noexcept {

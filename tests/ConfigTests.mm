@@ -38,6 +38,22 @@ int main() {
     expect(parsed.enableWindowShadows, "boolean value is parsed");
     expect(parsed.overscanBufferPx == 250.5f, "finite numeric value is parsed");
     expect(parsed.whitelist.size() == 2, "string array is parsed");
+    expect(minfwm::ConfigManager::parseText(
+               "[display]\nignored-displays = [\"Built-in Retina Display\", \"XV271 Z\"]\n",
+               parsed, error) && parsed.ignoredDisplays.size() == 2 &&
+           parsed.ignoredDisplays[0] == "Built-in Retina Display" &&
+           parsed.ignoredDisplays[1] == "XV271 Z",
+           "ignored display names are parsed without changing their order");
+    const auto ignored = parsed.ignoredDisplays;
+    for (const char* invalid : {
+             "[display]\nignored-displays = \"Built-in Retina Display\"\n",
+             "[display]\nignored-displays = [\"\"]\n",
+             "[display]\nignored-displays = [\"XV271 Z\", \"XV271 Z\"]\n",
+             "[display]\nignored-displays = [1]\n"}) {
+        expect(!minfwm::ConfigManager::parseText(invalid, parsed, error) &&
+               parsed.ignoredDisplays == ignored,
+               "invalid ignored display config preserves the previous snapshot");
+    }
     minfwm::ConfigSnapshot legacy;
     expect(minfwm::ConfigManager::parseText("enable-window-shadows = true\nwhitelist = [\"Terminal\"]\n", legacy, error) &&
            legacy.enableWindowShadows && legacy.whitelist.size() == 1,

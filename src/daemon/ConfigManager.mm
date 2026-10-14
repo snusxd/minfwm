@@ -190,6 +190,30 @@ bool readWhitelist(const TomlTable& root, const TomlTable* table,
     return true;
 }
 
+bool readIgnoredDisplays(const TomlTable& root, const TomlTable* table,
+                         std::vector<std::string>& out, std::string& error) {
+    const TomlNode* node = get(root, table, "ignored-displays", error);
+    if (!error.empty()) return false;
+    if (!node) return true;
+    const toml::array* values = node->as_array();
+    if (!values) {
+        error = "ignored-displays must be an array of non-empty display names";
+        return false;
+    }
+    std::vector<std::string> parsed;
+    parsed.reserve(values->size());
+    for (const TomlNode& item : *values) {
+        const auto value = item.value<std::string>();
+        if (!value || value->empty() || std::find(parsed.begin(), parsed.end(), *value) != parsed.end()) {
+            error = "ignored-displays must contain unique, non-empty display names";
+            return false;
+        }
+        parsed.push_back(*value);
+    }
+    out = std::move(parsed);
+    return true;
+}
+
 bool readSuperKey(const TomlTable* table, std::vector<std::string>& out, std::string& error) {
     if (!table) return true;
     const TomlNode* node = table->get("super");
@@ -309,7 +333,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     if (!rejectUnknownKeys(root, {"window", "zoom", "camera", "display", "keybinds", "pins", "animations"},
                            {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
                             "center-on-cmd-tab", "mouse-movement-multiplier", "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior",
-                            "always-on-top"}, error)) return false;
+                            "always-on-top", "ignored-displays"}, error)) return false;
 
     const TomlTable* window = tableAt(root, "window", error);
     const TomlTable* zoom = tableAt(root, "zoom", error);
@@ -326,7 +350,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     if (camera && !rejectUnknownKeys(*camera, "camera", {"center-on-cmd-tab", "mouse-movement-multiplier",
                                                            "trackpad-movement-multiplier", "trackpad-invert-x",
                                                            "trackpad-invert-y"}, error)) return false;
-    if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
+    if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode", "ignored-displays"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
                                        {"super", "center-camera-to-focus", "center-focus-to-camera",
                                         "drag-everywhere", "bookmarks-add", "bookmarks-goto"}, error)) return false;
@@ -344,6 +368,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readBool(root, camera, "trackpad-invert-x", candidate.trackpadInvertX, error) ||
         !readBool(root, camera, "trackpad-invert-y", candidate.trackpadInvertY, error) ||
         !readString(root, display, "multi-display-mode", candidate.multiDisplayMode, error) ||
+        !readIgnoredDisplays(root, display, candidate.ignoredDisplays, error) ||
         !readOverscan(root, window, candidate.overscanBufferPx, error) ||
         !readWhitelist(root, window, candidate.whitelist, error) ||
         !readString(root, window, "spawn-behavior", candidate.spawnBehavior, error) ||

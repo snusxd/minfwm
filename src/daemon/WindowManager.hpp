@@ -67,6 +67,8 @@ public:
     // Get display for a window or camera
     Display& mainDisplay();
     Display& displayForPoint(core::Point point);
+    bool isIgnoredDisplayAtPoint(core::Point point) const;
+    bool isWindowOnIgnoredDisplay(AXUIElementRef window) const;
     Display* displayById(int64_t id);
     Display& displayForWindow(AXUIElementRef window);
     
@@ -101,12 +103,14 @@ public:
     void reconcileApplicationWindows(pid_t pid, const std::vector<AXUIElementRef>& liveWindows);
 
     bool isPanning() const { return m_isPanning; }
+    bool nativeInteractionPending() const { return m_nativePointerHeld || m_nativeCommitPending; }
     void setPanning(bool panning) { m_isPanning = panning; }
 
 private:
     WindowManager() = default;
 
     NSScreen* screenForDisplay(int64_t displayId) const;
+    bool isIgnoredDisplay(int64_t displayId) const;
     float axTopOriginForScreen(NSScreen* screen) const;
     bool isWhitelisted(const ClientWindow& window) const;
     void commitNativeInteraction();
@@ -114,6 +118,8 @@ private:
     void addNativeCandidate(const std::shared_ptr<ClientWindow>& window);
     bool moveWindowToDisplay(const std::shared_ptr<ClientWindow>& window, Display& target,
                              core::Rect physical);
+    bool releaseWindowToIgnoredDisplay(const std::shared_ptr<ClientWindow>& window,
+                                       core::Rect physical);
     std::shared_ptr<ClientWindow> windowAtPoint(core::Point pointer) const;
     void applyOverviewExit();
     void restoreLayoutSnapshot();
@@ -134,6 +140,7 @@ private:
     std::shared_ptr<ClientWindow> m_draggedWindow;
     int64_t m_draggedWindowDisplayId = 0;
     bool m_dragEverywhereMoved = false;
+    std::optional<core::Rect> m_dragStartVirtualRect;
     core::Point m_dragPointerOffset{};
     struct ZoomRequest { int64_t displayId; core::Point anchor; float delta; };
     std::optional<ZoomRequest> m_zoomRequest;

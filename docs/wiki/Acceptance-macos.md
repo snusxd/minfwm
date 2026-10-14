@@ -19,6 +19,13 @@ are manual-only. Build/CTest success does not prove those interactions.
   camera, new windows are assigned to it, and native window drags transfer
   ownership between display canvases. Pan a camera until windows pass beyond its
   visible edge and verify those windows stay on their original canvas.
+- With one display ignored, drag a window by its title bar and with drag
+  everywhere from a managed display onto the ignored display. Verify the window
+  remains visible and follows ordinary macOS positioning there. Drag it back
+  and verify the managed camera picks it up without a jump. Pan the managed
+  camera across the ignored display without dragging a window; its ownership
+  must stay with the managed canvas. Repeat after changing `ignored-displays`
+  and running `minfwm reload`.
 - Verify window visibility, native geometry, and restoration after normal exit.
 - Check translation, overview zoom, selection, Escape, application frame
   correction, and process-exit recovery.

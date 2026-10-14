@@ -26,6 +26,7 @@ trackpad-invert-y = false
 
 [display]
 multi-display-mode = "isolated"
+ignored-displays = []
 
 [animations]
 enable = true
@@ -58,6 +59,7 @@ bookmarks-goto = ["Super", "Shift"]
 | `animations.enable` | `true` | Enable camera, zoom, and window movement animations. |
 | `animations.speed` | `1.0` | Animation speed multiplier: `2.0` is twice as fast and `0.5` is half speed. Must be between `0.1` and `10`. |
 | `multi-display-mode` | `"isolated"` | Camera coordination policy for displays. |
+| `display.ignored-displays` | `[]` | Display names from `minfwm list displays` that minfwm leaves unmanaged. |
 | `keybinds.super` | `["Cmd", "Alt"]` | `Super` modifier chord for pan, zoom, and pin. Supported values: `Cmd`, `Alt`, `Shift`, `Ctrl`. |
 | `keybinds.center-camera-to-focus` | `["Super", "F"]` | Move the camera to center the focused window. |
 | `keybinds.center-focus-to-camera` | `["Super", "S"]` | Move the focused window to the center of the camera. |

@@ -167,7 +167,11 @@ bool AXObserver::refreshWindows(AppObserver& app, bool centerNewWindows) {
     if (AXUIElementGetPid(app.element.get(), &pid) != kAXErrorSuccess || pid <= 0) return false;
     auto& wm = WindowManager::instance();
     wm.reconcileApplicationWindows(pid, liveWindows);
-    std::erase_if(app.windows, [&](const auto& window) { return !wm.findWindow(window.get()); });
+    std::erase_if(app.windows, [&](const auto& window) {
+        return std::none_of(liveWindows.begin(), liveWindows.end(), [&](AXUIElementRef live) {
+            return CFEqual(window.get(), live);
+        });
+    });
     for (CFIndex i = 0; i < CFArrayGetCount(windowList); ++i) {
         auto windowRef = static_cast<AXUIElementRef>(CFArrayGetValueAtIndex(windowList, i));
         succeeded = observeWindow(app, windowRef, centerNewWindows) && succeeded;
@@ -186,14 +190,10 @@ void AXObserver::reconcileWindows() {
         m_sessionIds = session;
     }
     auto& wm = WindowManager::instance();
-    for (auto& [pid, app] : m_appObservers) {
-        // WindowServer reconciliation removes stale model records even if
-        // the application never supports AX destruction notifications.
-        std::erase_if(app.windows, [&](const auto& window) { return !wm.findWindow(window.get()); });
-    }
     // Retained-but-closed windows need AX enumeration even if no WID was
     // destroyed. Defer these cross-process reads during camera gestures.
-    if ((!m_refreshPending && now < m_nextAXRefreshTime) || wm.isPanning() || wm.overviewActive()) return;
+    if ((!m_refreshPending && now < m_nextAXRefreshTime) || wm.isPanning() ||
+        wm.overviewActive() || wm.nativeInteractionPending()) return;
     m_refreshPending = false;
     m_nextAXRefreshTime = now + 2;
     for (auto& [pid, app] : m_appObservers) (void)refreshWindows(app, false);
@@ -233,8 +233,20 @@ bool AXObserver::focusActivatedApplication(pid_t pid) {
 
 bool AXObserver::observeWindow(AppObserver& app, AXUIElementRef element, bool center) {
     if (!element || CFGetTypeID(element) != AXUIElementGetTypeID()) return false;
+    auto& wm = WindowManager::instance();
+    const auto adoptIfManaged = [&]() {
+        if (wm.findWindow(element) || wm.nativeInteractionPending() ||
+            wm.isWindowOnIgnoredDisplay(element)) return;
+        Display& display = wm.displayForWindow(element);
+        auto window = display.windowPool().addWindow(element);
+        if (window) window->centerOnAdoption = center;
+        wm.adoptWindow(display, window);
+    };
     for (const auto& existing : app.windows) {
-        if (CFEqual(existing.get(), element)) return true;
+        if (CFEqual(existing.get(), element)) {
+            adoptIfManaged();
+            return true;
+        }
     }
     bool succeeded = true;
     const CFStringRef notifications[] = {
@@ -250,13 +262,7 @@ bool AXObserver::observeWindow(AppObserver& app, AXUIElementRef element, bool ce
         }
     }
     app.windows.push_back(CFRef<AXUIElementRef>::retain(element));
-    auto& wm = WindowManager::instance();
-    if (!wm.findWindow(element)) {
-        Display& display = wm.displayForWindow(element);
-        auto window = display.windowPool().addWindow(element);
-        if (window) window->centerOnAdoption = center;
-        wm.adoptWindow(display, window);
-    }
+    adoptIfManaged();
     return succeeded;
 }
 
@@ -289,6 +295,8 @@ void AXObserver::axCallback(AXObserverRef observer, AXUIElementRef element, CFSt
         std::erase_if(app.windows, [element](const auto& window) { return CFEqual(window.get(), element); });
     } else if (CFStringCompare(notification, kAXWindowMovedNotification, 0) == kCFCompareEqualTo ||
                CFStringCompare(notification, kAXWindowResizedNotification, 0) == kCFCompareEqualTo) {
+        if (wm.nativeInteractionPending()) self->m_refreshPending = true;
+        (void)self->observeWindow(app, element, false);
         wm.syncPhysicalToVirtual(element);
     } else if (CFStringCompare(notification, kAXFocusedWindowChangedNotification, 0) == kCFCompareEqualTo) {
         CFRef<CFTypeRef> focusedValue;

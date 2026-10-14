@@ -51,6 +51,13 @@ bool numberValue(NSDictionary* dictionary, NSString* key, double& value) {
     return std::isfinite(value);
 }
 
+bool isIgnoredDisplayName(NSString* name, const std::vector<std::string>& ignoredDisplays) {
+    if (!name) return false;
+    const char* value = name.UTF8String;
+    if (!value) return false;
+    return std::find(ignoredDisplays.begin(), ignoredDisplays.end(), value) != ignoredDisplays.end();
+}
+
 } // namespace
 
 bool WindowManager::initialize(bool allowAdministratorLoad) {
@@ -58,6 +65,7 @@ bool WindowManager::initialize(bool allowAdministratorLoad) {
 
     std::cout << "WindowManager: Initializing public AX backend" << std::endl;
     ConfigManager::instance().load();
+    const auto ignoredDisplays = ConfigManager::instance().snapshot().ignoredDisplays;
     m_displays.clear();
     const bool yabaiAvailable = m_yabaiBackend.initialize(allowAdministratorLoad);
     if (!yabaiAvailable || !m_yabaiBackend.usesTransforms() || !m_yabaiBackend.supportsPinnedLevels()) {
@@ -70,6 +78,11 @@ bool WindowManager::initialize(bool allowAdministratorLoad) {
         NSDictionary* description = [screen deviceDescription];
         NSNumber* displayID = [description objectForKey:@"NSScreenNumber"];
         if (!displayID) continue;
+        if (isIgnoredDisplayName(screen.localizedName, ignoredDisplays)) {
+            std::cout << "WindowManager: Ignoring display " << displayID.longLongValue << " ("
+                      << screen.localizedName.UTF8String << ")" << std::endl;
+            continue;
+        }
 
         const float topOrigin = axTopOriginForScreen(screen);
         const NSRect frame = [screen frame];
@@ -113,6 +126,8 @@ void WindowManager::refreshDisplays() {
         NSDictionary* description = [screen deviceDescription];
         NSNumber* displayID = description[@"NSScreenNumber"];
         if (!displayID) continue;
+        const bool ignored = isIgnoredDisplayName(
+            screen.localizedName, ConfigManager::instance().snapshot().ignoredDisplays);
 
         const int64_t id = displayID.longLongValue;
         const float topOrigin = axTopOriginForScreen(screen);
@@ -129,6 +144,7 @@ void WindowManager::refreshDisplays() {
             if (display->updateScreen(bounds, usableBounds)) ++updated;
             continue;
         }
+        if (ignored) continue;
 
         m_displays.push_back(std::make_unique<Display>(
             id, bounds, WindowPool::yabaiWindowIdResolver(), usableBounds));
@@ -147,6 +163,9 @@ void WindowManager::refreshDisplays() {
 Display& WindowManager::mainDisplay() {
     if (m_displays.empty()) {
         throw std::runtime_error("WindowManager: no display is initialized");
+    }
+    for (auto& display : m_displays) {
+        if (!isIgnoredDisplay(display->id())) return *display;
     }
     return *m_displays.front();
 }
@@ -295,11 +314,33 @@ void WindowManager::finishLayoutRestore() {
 Display& WindowManager::displayForPoint(core::Point point) {
     std::vector<core::DisplayGeometry> geometry;
     geometry.reserve(m_displays.size());
-    for (const auto& display : m_displays) geometry.push_back(display->state().geometry());
+    for (const auto& display : m_displays) {
+        if (!isIgnoredDisplay(display->id())) geometry.push_back(display->state().geometry());
+    }
     if (const auto id = core::nearestDisplay(geometry, point)) {
         if (Display* display = displayById(*id)) return *display;
     }
     return mainDisplay();
+}
+
+bool WindowManager::isIgnoredDisplayAtPoint(core::Point point) const {
+    for (NSScreen* screen in NSScreen.screens) {
+        const NSRect frame = screen.frame;
+        const float topOrigin = axTopOriginForScreen(screen);
+        if (point.x < NSMinX(frame) || point.x >= NSMaxX(frame) ||
+            point.y < topOrigin || point.y >= topOrigin + NSHeight(frame)) continue;
+        return isIgnoredDisplayName(screen.localizedName,
+                                    ConfigManager::instance().snapshot().ignoredDisplays);
+    }
+    return false;
+}
+
+bool WindowManager::isWindowOnIgnoredDisplay(AXUIElementRef window) const {
+    CGPoint position{0.0, 0.0};
+    CGSize size{0.0, 0.0};
+    if (!readAXPoint(window, position) || !readAXSize(window, size)) return false;
+    return isIgnoredDisplayAtPoint({static_cast<float>(position.x + size.width / 2.0),
+                                    static_cast<float>(position.y + size.height / 2.0)});
 }
 
 void WindowManager::shutdown() {
@@ -328,6 +369,8 @@ void WindowManager::shutdown() {
     m_nativeCameras.clear();
     m_nativeCandidates.clear();
     m_nativeStartFrames.clear();
+    m_draggedWindow.reset();
+    m_dragStartVirtualRect.reset();
     m_zoomRequest.reset();
     m_overviewExit.reset();
     m_overviewFocus.reset();
@@ -347,6 +390,12 @@ NSScreen* WindowManager::screenForDisplay(int64_t displayId) const {
         if (number && [number longLongValue] == displayId) return screen;
     }
     return nil;
+}
+
+bool WindowManager::isIgnoredDisplay(int64_t displayId) const {
+    NSScreen* screen = screenForDisplay(displayId);
+    return screen && isIgnoredDisplayName(screen.localizedName,
+        ConfigManager::instance().snapshot().ignoredDisplays);
 }
 
 float WindowManager::axTopOriginForScreen(NSScreen* screen) const {
@@ -377,6 +426,7 @@ std::shared_ptr<ClientWindow> WindowManager::findWindow(AXUIElementRef element) 
 }
 
 bool WindowManager::toggleFocusedWindowPin() {
+    if (m_focusedWindow && isWindowOnIgnoredDisplay(m_focusedWindow.get())) return false;
     auto window = m_focusedWindow ? findWindow(m_focusedWindow.get()) : nullptr;
     if (!window) window = m_lastFocusedWindow.lock();
     if (!window || !window->virtualCoordinatesInitialized || !findWindow(window->ref())) return false;
@@ -566,6 +616,21 @@ void WindowManager::updateWindows(int64_t displayId) {
 
     for (auto& display : m_displays) {
         if (displayId && display->id() != displayId) continue;
+        if (isIgnoredDisplay(display->id())) {
+            // A reload can make an already managed display native. Release
+            // every visible window before this canvas stops rendering it.
+            const auto windows = display->windowPool().windows();
+            const core::Rect usable = display->usableBounds();
+            for (const auto& window : windows) {
+                if (!window || !window->virtualCoordinatesInitialized ||
+                    m_hiddenApplications.contains(window->pid())) continue;
+                core::Rect physical = display->state().virtualToPhysical(window->virtualRect);
+                physical.x = std::clamp(physical.x, usable.x, std::max(usable.x, usable.right() - physical.w));
+                physical.y = std::clamp(physical.y, usable.y, std::max(usable.y, usable.bottom() - physical.h));
+                (void)releaseWindowToIgnoredDisplay(window, physical);
+            }
+            continue;
+        }
         double& previousFrame = m_zoomFrameTimes[display->id()];
         display->state().advanceZoom(previousFrame ? now - previousFrame : 0,
                                      config.animationSpeed, config.animationsEnabled);
@@ -731,6 +796,7 @@ void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
 }
 
 void WindowManager::centerCameraToFocusedWindow() {
+    if (m_focusedWindow && isWindowOnIgnoredDisplay(m_focusedWindow.get())) return;
     auto focused = m_focusedWindow ? findWindow(m_focusedWindow.get()) : nullptr;
     if (!focused) focused = m_lastFocusedWindow.lock();
     if (focused) centerCameraOnWindow(focused->ref());
@@ -738,6 +804,7 @@ void WindowManager::centerCameraToFocusedWindow() {
 
 void WindowManager::centerFocusedWindowToCamera() {
     if (m_nativePointerHeld || m_nativeCommitPending || m_isPanning || overviewActive()) return;
+    if (m_focusedWindow && isWindowOnIgnoredDisplay(m_focusedWindow.get())) return;
     auto window = m_focusedWindow ? findWindow(m_focusedWindow.get()) : nullptr;
     if (!window) window = m_lastFocusedWindow.lock();
     if (!window || !window->virtualCoordinatesInitialized || !findWindow(window->ref())) return;
@@ -771,6 +838,28 @@ bool WindowManager::moveWindowToDisplay(const std::shared_ptr<ClientWindow>& win
     return true;
 }
 
+bool WindowManager::releaseWindowToIgnoredDisplay(const std::shared_ptr<ClientWindow>& window,
+                                                   core::Rect physical) {
+    if (!window || !window->ref()) return false;
+    Display* source = nullptr;
+    for (auto& display : m_displays) {
+        if (display->windowPool().findWindowByAXRef(window->ref()) == window) {
+            source = display.get();
+            break;
+        }
+    }
+    if (!source) return false;
+    if (!m_renderer.releaseToNative(*window, physical, CACurrentMediaTime()).succeeded()) {
+        window->lastRenderedX = std::numeric_limits<float>::quiet_NaN();
+        window->lastRenderedY = std::numeric_limits<float>::quiet_NaN();
+        return false;
+    }
+    source->windowPool().removeWindow(window->ref());
+    std::cout << "WindowManager: released window WID=" << window->wid()
+              << " to ignored display" << std::endl;
+    return true;
+}
+
 void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
     if (overviewActive()) return; // Presentation scaling is never a native model resize.
     const auto window = findWindow(element);
@@ -778,6 +867,7 @@ void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
         if (window) addNativeCandidate(window);
         return;
     }
+    if (isWindowOnIgnoredDisplay(element) && !window) return;
     if (!window || window->isHidden || window->needsGeometryRestore || window->positionNeedsVerification ||
         window->rejectedPosition || m_isPanning || window->positionAnimation) return;
     if (CACurrentMediaTime() - window->lastProgrammaticMoveTime < 0.25) return;
@@ -812,7 +902,8 @@ void WindowManager::addNativeCandidate(const std::shared_ptr<ClientWindow>& wind
 
 bool WindowManager::requestOverviewZoom(core::Point pointer, float delta) {
     if (!m_initialized || !m_yabaiBackend.supportsOverview() || m_nativePointerHeld || overviewReturning() ||
-        !std::isfinite(delta) || !std::isfinite(pointer.x) || !std::isfinite(pointer.y)) return false;
+        !std::isfinite(delta) || !std::isfinite(pointer.x) || !std::isfinite(pointer.y) ||
+        isIgnoredDisplayAtPoint(pointer)) return false;
     if (ConfigManager::instance().snapshot().invertZoomScrollDirection) delta = -delta;
     const auto id = displayForPoint(pointer).id();
     if (m_zoomRequest && m_zoomRequest->displayId == id) delta += m_zoomRequest->delta;
@@ -947,13 +1038,14 @@ void WindowManager::flushNativeInteractionForPan() {
 }
 
 bool WindowManager::beginDragEverywhere(core::Point pointer) {
-    if (!m_initialized || overviewReturning()) return false;
+    if (!m_initialized || overviewReturning() || isIgnoredDisplayAtPoint(pointer)) return false;
     auto window = windowAtPoint(pointer);
     if (!window || !window->virtualCoordinatesInitialized || window->pinned || window->isHidden ||
         window->applicationSuspended || window->needsGeometryRestore) return false;
     m_draggedWindow = std::move(window);
     m_draggedWindowDisplayId = displayForWindow(m_draggedWindow->ref()).id();
     m_dragEverywhereMoved = false;
+    m_dragStartVirtualRect = m_draggedWindow->virtualRect;
     const core::Rect physical = displayForWindow(m_draggedWindow->ref()).state().virtualToPhysical(m_draggedWindow->virtualRect);
     CGPoint visualOrigin{physical.x, physical.y};
     (void)readWindowPosition(m_draggedWindow->ref(), m_draggedWindow->wid(), visualOrigin);
@@ -980,24 +1072,44 @@ void WindowManager::endDragEverywhere(core::Point pointer) {
     if (m_draggedWindow && m_dragEverywhereMoved) {
         if (Display* source = displayById(m_draggedWindowDisplayId)) {
             const core::Rect physical = source->state().virtualToPhysical(m_draggedWindow->virtualRect);
-            Display& target = displayForPoint(pointer);
-            if (&target != source && moveWindowToDisplay(m_draggedWindow, target, physical)) {
+            const core::Point center{physical.x + physical.w / 2.0f,
+                                     physical.y + physical.h / 2.0f};
+            bool transferred = false;
+            bool requestedTransfer = false;
+            if (isIgnoredDisplayAtPoint(center)) {
+                requestedTransfer = true;
+                transferred = releaseWindowToIgnoredDisplay(m_draggedWindow, physical);
+            } else {
+                Display& target = displayForPoint(pointer);
+                requestedTransfer = &target != source;
+                transferred = requestedTransfer && moveWindowToDisplay(m_draggedWindow, target, physical);
+            }
+            if (transferred) {
                 // Drag-everywhere updates virtual geometry before the native
                 // frame is guaranteed to reach its final position.
                 m_draggedWindow->lastRenderedX = std::numeric_limits<float>::quiet_NaN();
                 m_draggedWindow->lastRenderedY = std::numeric_limits<float>::quiet_NaN();
+            } else if (requestedTransfer && m_dragStartVirtualRect) {
+                // The native handoff failed; keep the managed model on its
+                // original canvas instead of parking it beyond the desktop.
+                m_draggedWindow->virtualRect = *m_dragStartVirtualRect;
             }
         }
     }
     m_draggedWindow.reset();
     m_draggedWindowDisplayId = 0;
     m_dragEverywhereMoved = false;
+    m_dragStartVirtualRect.reset();
 }
 
 void WindowManager::cancelDragEverywhere() {
+    if (m_draggedWindow && m_dragStartVirtualRect) {
+        m_draggedWindow->virtualRect = *m_dragStartVirtualRect;
+    }
     m_draggedWindow.reset();
     m_draggedWindowDisplayId = 0;
     m_dragEverywhereMoved = false;
+    m_dragStartVirtualRect.reset();
 }
 
 void WindowManager::commitNativeInteraction() {
@@ -1019,19 +1131,30 @@ void WindowManager::commitNativeInteraction() {
             physical.w = static_cast<float>(size.width);
             physical.h = static_cast<float>(size.height);
         }
-        Display& target = displayForPoint({physical.x + physical.w / 2.0f,
-                                           physical.y + physical.h / 2.0f});
+        const core::Point center{physical.x + physical.w / 2.0f,
+                                 physical.y + physical.h / 2.0f};
+        const bool targetIgnored = isIgnoredDisplayAtPoint(center);
         const auto start = m_nativeStartFrames.find(window.get());
         const auto cameraAtStart = m_nativeCameras.find(source.id());
         const bool cameraUnchanged = cameraAtStart != m_nativeCameras.end() &&
             std::abs(source.camera().x() - cameraAtStart->second.x) <= 0.01f &&
             std::abs(source.camera().y() - cameraAtStart->second.y) <= 0.01f;
-        const bool transfer = start != m_nativeStartFrames.end() &&
-            core::shouldTransferWindow(m_nativeWindowDragged, cameraUnchanged, start->second,
-                                       physical, source.id(), target.id());
-        const bool accepted = transfer
-            ? moveWindowToDisplay(window, target, physical)
-            : m_renderer.acceptNativeGeometry(*window, physical, observationState);
+        bool accepted = false;
+        if (targetIgnored) {
+            if (start != m_nativeStartFrames.end() &&
+                core::shouldReleaseToIgnoredDisplay(m_nativeWindowDragged, cameraUnchanged,
+                                                    start->second, physical, true)) {
+                accepted = releaseWindowToIgnoredDisplay(window, physical);
+            }
+        } else {
+            Display& target = displayForPoint(center);
+            const bool transfer = start != m_nativeStartFrames.end() &&
+                core::shouldTransferWindow(m_nativeWindowDragged, cameraUnchanged, start->second,
+                                           physical, source.id(), target.id());
+            accepted = transfer
+                ? moveWindowToDisplay(window, target, physical)
+                : m_renderer.acceptNativeGeometry(*window, physical, observationState);
+        }
         if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
             std::cout << "INPUT drop WID=" << window->wid() << " physical=" << physical.x << ',' << physical.y
                       << " camera=" << observationState.camera().x() << ',' << observationState.camera().y()

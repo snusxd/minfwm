@@ -85,6 +85,15 @@ CommandLineParseResult parseCommandLine(int argc, const char* const* argv) {
         return CommandLineParseResult{parsed, {}};
     }
 
+    if (command == "list") {
+        if (argc != 3 || argv[2] == nullptr || std::string_view(argv[2]) != "displays") {
+            return invalidArguments("expected: list displays");
+        }
+        ParsedCommandLine parsed;
+        parsed.command = ParsedCommandLine::Command::LIST_DISPLAYS;
+        return CommandLineParseResult{parsed, {}};
+    }
+
     if (command == "dev-update") {
         if (argc != 2) {
             return invalidArguments("dev-update does not accept arguments");
