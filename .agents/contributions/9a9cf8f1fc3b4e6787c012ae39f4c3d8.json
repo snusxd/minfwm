@@ -1,0 +1,13 @@
+{
+  "assistance": "ai",
+  "base": "7baff5c65ebfd220bb28079403e7c414e4758977",
+  "id": "9a9cf8f1fc3b4e6787c012ae39f4c3d8",
+  "paths": [
+    "docs/ai/handoffs/TASK-AI-CORE-CHECK.md"
+  ],
+  "schema_version": 1,
+  "task": "TASK-AI-CORE-CHECK",
+  "tools": [
+    "codex"
+  ]
+}
