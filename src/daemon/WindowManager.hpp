@@ -63,7 +63,10 @@ public:
     void updateWindows(int64_t displayId = 0);
     void adoptWindow(Display& display, const std::shared_ptr<ClientWindow>& window);
     void centerWindow(std::shared_ptr<ClientWindow> window);
+    void advanceWindowAnimation(ClientWindow& window, double now);
     bool toggleFocusedWindowPin();
+    void centerCameraToFocusedWindow();
+    void centerFocusedWindowToCamera();
     void centerCameraOnWindow(AXUIElementRef element);
     void syncPhysicalToVirtual(AXUIElementRef element);
     void beginNativeInteraction(core::Point pointer);

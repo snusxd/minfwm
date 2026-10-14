@@ -46,5 +46,7 @@ Useful commands:
 - Escape exits overview; its return anchor is configurable.
 - Cmd+1…9 loads a camera bookmark; Cmd+Shift+1…9 saves one.
 - Super+P pins or unpins the focused window.
+- Super+F centers the camera on the focused window.
+- Super+S centers the focused window in the camera.
 
 See [Configuration](https://github.com/snusxd/minfwm/wiki/Configuration) for the supported options.

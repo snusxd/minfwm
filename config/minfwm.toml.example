@@ -34,4 +34,7 @@ always-on-top = true
 # Example: super = ["Ctrl", "Alt"]
 # Cmd+1..9 loads a bookmark; Cmd+Shift+1..9 saves it.
 # Super+P pins/unpins the focused window; Escape exits overview.
+# Super+F centers the camera on the focused window; Super+S centers the window in the camera.
 super = ["Cmd", "Alt"]
+center-camera-to-focus = ["Super", "F"]
+center-focus-to-camera = ["Super", "S"]

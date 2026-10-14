@@ -166,6 +166,27 @@ bool readSuperKey(const TomlTable* table, std::vector<std::string>& out, std::st
     return true;
 }
 
+bool readShortcut(const TomlTable* table, std::string_view name,
+                  std::vector<std::string>& out, std::string& error) {
+    if (!table) return true;
+    const TomlNode* node = table->get(name);
+    if (!node) return true;
+    const toml::array* values = node->as_array();
+    if (!values || values->size() != 2) {
+        error = "keybinds." + std::string(name) + " must be [\"Super\", \"A-Z\"]";
+        return false;
+    }
+    const auto modifier = (*values)[0].value<std::string>();
+    const auto key = (*values)[1].value<std::string>();
+    if (!modifier || *modifier != "Super" || !key || key->size() != 1 ||
+        (*key)[0] < 'A' || (*key)[0] > 'Z') {
+        error = "keybinds." + std::string(name) + " must be [\"Super\", \"A-Z\"]";
+        return false;
+    }
+    out = {*modifier, *key};
+    return true;
+}
+
 bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
     if (!rejectUnknownKeys(root, {"window", "zoom", "display", "keybinds", "pins"},
                            {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
@@ -182,7 +203,8 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
     if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center"}, error)) return false;
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
-    if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds", {"super"}, error)) return false;
+    if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
+                                       {"super", "center-camera-to-focus", "center-focus-to-camera"}, error)) return false;
     if (pins && !rejectUnknownKeys(*pins, "pins", {"always-on-top"}, error)) return false;
 
     if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
@@ -193,7 +215,9 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readWhitelist(root, window, candidate.whitelist, error) ||
         !readString(root, window, "spawn-behavior", candidate.spawnBehavior, error) ||
         !readBool(root, pins, "always-on-top", candidate.pinsAlwaysOnTop, error) ||
-        !readSuperKey(keybinds, candidate.superModifiers, error)) {
+        !readSuperKey(keybinds, candidate.superModifiers, error) ||
+        !readShortcut(keybinds, "center-camera-to-focus", candidate.centerCameraToFocus, error) ||
+        !readShortcut(keybinds, "center-focus-to-camera", candidate.centerFocusToCamera, error)) {
         return false;
     }
 

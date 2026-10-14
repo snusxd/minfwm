@@ -31,6 +31,16 @@ bool hasUnconfiguredPinModifier(CGEventFlags flags, const std::vector<std::strin
             std::find(modifiers.begin(), modifiers.end(), "Ctrl") == modifiers.end());
 }
 
+int64_t keyCodeForShortcut(const std::vector<std::string>& shortcut) {
+    if (shortcut.size() != 2 || shortcut[0] != "Super" || shortcut[1].size() != 1 ||
+        shortcut[1][0] < 'A' || shortcut[1][0] > 'Z') return -1;
+    static constexpr int64_t keyCodes[] = {
+        0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46,
+        45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7, 16, 6,
+    };
+    return keyCodes[shortcut[1][0] - 'A'];
+}
+
 bool setCursorHidingInBackground(bool enabled) {
     using ConnectionId = int32_t;
     using MainConnectionIdFunction = ConnectionId (*)();
@@ -375,6 +385,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         interceptor->updateCursor(modifiersHeld, draggingCursor, location);
         if (!wm.overviewReturning() && update.displayId && (update.delta.x != 0 || update.delta.y != 0)) {
             if (Display* display = wm.displayById(*update.displayId)) {
+                display->state().cancelCameraAnimation();
                 display->camera().move(update.delta.x / display->state().scale(), update.delta.y / display->state().scale());
             }
         }
@@ -389,13 +400,24 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (type == kCGEventKeyDown) {
         CGEventFlags flags = CGEventGetFlags(event);
         bool cmd = flags & kCGEventFlagMaskCommand;
-        bool option = flags & kCGEventFlagMaskAlternate;
         bool shift = flags & kCGEventFlagMaskShift;
         int64_t keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+        const ConfigSnapshot config = ConfigManager::instance().snapshot();
+        const bool exactSuperChord = superHeld(flags, superModifiers) &&
+            !hasUnconfiguredPinModifier(flags, superModifiers);
+        const bool repeating = CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat) != 0;
+
+        if (exactSuperChord && !repeating && keycode == keyCodeForShortcut(config.centerCameraToFocus)) {
+            wm.centerCameraToFocusedWindow();
+            return nullptr;
+        }
+        if (exactSuperChord && !repeating && keycode == keyCodeForShortcut(config.centerFocusToCamera)) {
+            wm.centerFocusedWindowToCamera();
+            return nullptr;
+        }
 
         if (keycode == 35 && superHeld(flags, superModifiers) &&
             !hasUnconfiguredPinModifier(flags, superModifiers)) {
-            const bool repeating = CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat) != 0;
             if (!repeating) (void)wm.toggleFocusedWindowPin();
             return nullptr;
         }

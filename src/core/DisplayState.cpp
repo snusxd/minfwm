@@ -13,8 +13,19 @@ bool DisplayState::beginReturn(std::optional<Point> target, std::optional<Point>
     if (!std::isfinite(center.x) || !std::isfinite(center.y) ||
         !std::isfinite(camera.x) || !std::isfinite(camera.y)) return false;
     m_return = ReturnTransition{center, anchor, camera, m_scale};
+    m_cameraTransition.reset();
     m_targetScale = 1;
     return true;
+}
+
+bool DisplayState::animateCameraTo(Point target) noexcept {
+    if (!std::isfinite(target.x) || !std::isfinite(target.y)) return false;
+    m_cameraTransition = CameraTransition{m_camera.position(), target};
+    return true;
+}
+
+void DisplayState::cancelCameraAnimation() noexcept {
+    m_cameraTransition.reset();
 }
 
 bool DisplayState::setScaleAt(float scale, Point anchor) noexcept {
@@ -30,6 +41,7 @@ bool DisplayState::setScaleAt(float scale, Point anchor) noexcept {
 
 bool DisplayState::requestZoom(float delta, Point anchor) noexcept {
     if (returning() || !std::isfinite(delta) || !std::isfinite(anchor.x) || !std::isfinite(anchor.y)) return false;
+    m_cameraTransition.reset();
     m_targetScale = std::clamp(m_targetScale * std::exp(std::clamp(delta * 0.015f, -10.0f, 10.0f)), 0.2f, 1.0f);
     m_zoomAnchor = anchor;
     return true;
@@ -63,6 +75,24 @@ void DisplayState::advanceZoom(double elapsed) noexcept {
         }
         return;
     }
+    if (m_cameraTransition) {
+        constexpr double duration = 0.36;
+        auto& transition = *m_cameraTransition;
+        transition.elapsed = std::min(duration, transition.elapsed + elapsed);
+        const double t = transition.elapsed / duration;
+        const double progress = t * t * t * (10 + t * (-15 + t * 6));
+        const double x = transition.from.x + (transition.target.x - transition.from.x) * progress;
+        const double y = transition.from.y + (transition.target.y - transition.from.y) * progress;
+        if (!m_camera.setPosition(static_cast<float>(x), static_cast<float>(y))) {
+            m_cameraTransition.reset();
+            return;
+        }
+        if (transition.elapsed == duration) {
+            m_camera.setPosition(transition.target.x, transition.target.y);
+            m_cameraTransition.reset();
+        }
+        return;
+    }
     if (m_scale == m_targetScale) return;
     float next = m_targetScale + (m_scale - m_targetScale) * std::exp(-18.0 * elapsed);
     if (std::abs(next - m_targetScale) < 0.0001f) next = m_targetScale;
@@ -73,6 +103,7 @@ void DisplayState::resetZoom(Point anchor) noexcept {
     if (setScaleAt(1, anchor)) {
         m_targetScale = 1;
         m_return.reset();
+        m_cameraTransition.reset();
     }
 }
 

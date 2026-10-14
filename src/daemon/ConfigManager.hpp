@@ -16,6 +16,8 @@ struct ConfigSnapshot {
     std::string spawnBehavior = "center";
     bool pinsAlwaysOnTop = true;
     std::vector<std::string> superModifiers = {"Cmd", "Alt"};
+    std::vector<std::string> centerCameraToFocus = {"Super", "F"};
+    std::vector<std::string> centerFocusToCamera = {"Super", "S"};
 };
 
 class ConfigManager {

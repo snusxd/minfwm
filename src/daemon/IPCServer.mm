@@ -316,6 +316,7 @@ ErrorCode IPCServer::dispatchRequest(const Request& request) {
                             std::lock_guard lock(state->mutex);
                             state->result = ErrorCode::MALFORMED;
                         } else {
+                            wm.mainDisplay().state().cancelCameraAnimation();
                             wm.updateWindows();
                         }
                     } catch (...) {

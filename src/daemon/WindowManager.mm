@@ -361,6 +361,7 @@ void WindowManager::updateWindows(int64_t displayId) {
             }
             adoptWindow(*display, window);
             if (!window->virtualCoordinatesInitialized) continue;
+            advanceWindowAnimation(*window, now);
             if (window->isAuxiliaryWindow && !window->isHidden && m_onscreenWindows &&
                 !m_onscreenWindows->contains(window->wid())) {
                 if (!window->applicationSuspended) (void)m_renderer.suspend(*window, now);
@@ -434,9 +435,29 @@ void WindowManager::centerWindow(std::shared_ptr<ClientWindow> window) {
     if (!window || !window->virtualCoordinatesInitialized) return;
     Display& display = displayForWindow(window->ref());
     const core::Rect bounds = display.state().geometry().bounds;
-    window->lastProgrammaticMoveTime = CACurrentMediaTime();
-    window->virtualRect.x = display.camera().x() + bounds.w / display.state().scale() / 2.0f - window->virtualRect.w / 2.0f;
-    window->virtualRect.y = display.camera().y() + bounds.h / display.state().scale() / 2.0f - window->virtualRect.h / 2.0f;
+    window->positionAnimation = ClientWindow::PositionAnimation{
+        {window->virtualRect.x, window->virtualRect.y},
+        {display.camera().x() + bounds.w / display.state().scale() / 2.0f - window->virtualRect.w / 2.0f,
+         display.camera().y() + bounds.h / display.state().scale() / 2.0f - window->virtualRect.h / 2.0f},
+        CACurrentMediaTime()};
+}
+
+void WindowManager::advanceWindowAnimation(ClientWindow& window, double now) {
+    if (!window.positionAnimation) return;
+    constexpr double duration = 0.36;
+    auto& transition = *window.positionAnimation;
+    const double t = std::clamp((now - transition.startTime) / duration, 0.0, 1.0);
+    const double progress = t * t * t * (10 + t * (-15 + t * 6));
+    window.virtualRect.x = static_cast<float>(
+        transition.from.x + (transition.target.x - transition.from.x) * progress);
+    window.virtualRect.y = static_cast<float>(
+        transition.from.y + (transition.target.y - transition.from.y) * progress);
+    window.lastProgrammaticMoveTime = now;
+    if (t == 1) {
+        window.virtualRect.x = transition.target.x;
+        window.virtualRect.y = transition.target.y;
+        window.positionAnimation.reset();
+    }
 }
 
 void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
@@ -448,12 +469,28 @@ void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
     for (auto& display : m_displays) {
         if (!display->windowPool().findWindowByAXRef(element)) continue;
         const core::Rect bounds = display->state().geometry().bounds;
-        display->camera().setPosition(
-            window->virtualRect.x - bounds.w / 2.0f + window->virtualRect.w / 2.0f,
-            window->virtualRect.y - bounds.h / 2.0f + window->virtualRect.h / 2.0f);
-        updateWindows();
+        display->state().animateCameraTo(
+            core::Point{
+                window->virtualRect.x - bounds.w / 2.0f + window->virtualRect.w / 2.0f,
+                window->virtualRect.y - bounds.h / 2.0f + window->virtualRect.h / 2.0f});
         return;
     }
+}
+
+void WindowManager::centerCameraToFocusedWindow() {
+    auto focused = m_focusedWindow ? findWindow(m_focusedWindow.get()) : nullptr;
+    if (!focused) focused = m_lastFocusedWindow.lock();
+    if (focused) centerCameraOnWindow(focused->ref());
+}
+
+void WindowManager::centerFocusedWindowToCamera() {
+    if (m_nativePointerHeld || m_nativeCommitPending || m_isPanning || overviewActive()) return;
+    auto window = m_focusedWindow ? findWindow(m_focusedWindow.get()) : nullptr;
+    if (!window) window = m_lastFocusedWindow.lock();
+    if (!window || !window->virtualCoordinatesInitialized || !findWindow(window->ref())) return;
+    Display& display = displayForWindow(window->ref());
+    centerWindow(window);
+    updateWindows(display.id());
 }
 
 void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
@@ -464,7 +501,7 @@ void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
         return;
     }
     if (!window || window->isHidden || window->needsGeometryRestore || window->positionNeedsVerification ||
-        window->rejectedPosition || m_isPanning) return;
+        window->rejectedPosition || m_isPanning || window->positionAnimation) return;
     if (CACurrentMediaTime() - window->lastProgrammaticMoveTime < 0.25) return;
 
     for (auto& display : m_displays) {
@@ -488,6 +525,7 @@ void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
 }
 
 void WindowManager::addNativeCandidate(const std::shared_ptr<ClientWindow>& window) {
+    if (window) window->positionAnimation.reset();
     if (std::find(m_nativeCandidates.begin(), m_nativeCandidates.end(), window) == m_nativeCandidates.end()) {
         m_nativeCandidates.push_back(window);
     }

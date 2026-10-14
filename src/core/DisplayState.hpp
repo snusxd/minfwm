@@ -18,6 +18,8 @@ public:
     [[nodiscard]] Rect viewport() const noexcept;
     [[nodiscard]] float scale() const noexcept { return m_scale; }
     [[nodiscard]] bool overviewActive() const noexcept { return m_return.has_value() || m_scale != 1 || m_targetScale != 1; }
+    bool animateCameraTo(Point target) noexcept;
+    void cancelCameraAnimation() noexcept;
     bool setScaleAt(float scale, Point physicalAnchor) noexcept;
     bool requestZoom(float scrollDelta, Point physicalAnchor) noexcept;
     void advanceZoom(double elapsedSeconds) noexcept;
@@ -49,6 +51,12 @@ private:
         double elapsed = 0;
     };
     std::optional<ReturnTransition> m_return;
+    struct CameraTransition {
+        Point from;
+        Point target;
+        double elapsed = 0;
+    };
+    std::optional<CameraTransition> m_cameraTransition;
     std::map<int, Point> m_bookmarks;
 };
 

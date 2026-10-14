@@ -51,6 +51,12 @@ public:
     bool layerAttempted = false;
     bool virtualCoordinatesInitialized = false;
     bool centerOnAdoption = false;
+    struct PositionAnimation {
+        core::Point from;
+        core::Point target;
+        double startTime = 0;
+    };
+    std::optional<PositionAnimation> positionAnimation;
     bool preferNativePosition = false;
     bool nativePresentationChecked = false;
     bool pinned = false;

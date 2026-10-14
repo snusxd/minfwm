@@ -36,38 +36,10 @@ bool AXObserver::start() {
     m_unhideObserver = [center addObserverForName:NSWorkspaceDidUnhideApplicationNotification object:nil
         queue:NSOperationQueue.mainQueue usingBlock:applicationVisibilityChanged];
     m_activateObserver = [center addObserverForName:NSWorkspaceDidActivateApplicationNotification object:nil
-        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* note) {
+        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*) {
             if (!m_started) return;
             m_refreshPending = true;
             m_nextReconcileTime = 0;
-
-            NSRunningApplication* activatedApp = note.userInfo[NSWorkspaceApplicationKey];
-            if (!activatedApp) return;
-            auto appObserver = m_appObservers.find(activatedApp.processIdentifier);
-            if (appObserver == m_appObservers.end()) return;
-
-            AppObserver& app = appObserver->second;
-            AXUIElementRef focused = app.lastFocusedWindow.get();
-            const bool cachedWindowIsRegistered = focused && std::any_of(
-                app.windows.begin(), app.windows.end(), [focused](const auto& window) {
-                    return window && CFEqual(window.get(), focused);
-                });
-            if (!cachedWindowIsRegistered) {
-                app.lastFocusedWindow.reset();
-                CFRef<CFTypeRef> focusedValue;
-                if (AXUIElementCopyAttributeValue(app.element.get(), kAXFocusedWindowAttribute,
-                                                  focusedValue.put()) == kAXErrorSuccess &&
-                    focusedValue && CFGetTypeID(focusedValue.get()) == AXUIElementGetTypeID()) {
-                    focused = static_cast<AXUIElementRef>(focusedValue.get());
-                    app.lastFocusedWindow = CFRef<AXUIElementRef>::retain(focused);
-                } else {
-                    focused = nullptr;
-                }
-            }
-            if (focused) {
-                (void)observeWindow(app, focused, false);
-                WindowManager::instance().centerCameraOnWindow(focused);
-            }
         }];
 
     m_launchObserver = [center addObserverForName:NSWorkspaceDidLaunchApplicationNotification
@@ -270,9 +242,6 @@ void AXObserver::axCallback(AXObserverRef observer, AXUIElementRef element, CFSt
         wm.updateWindows();
     } else if (CFStringCompare(notification, kAXUIElementDestroyedNotification, 0) == kCFCompareEqualTo) {
         wm.removeWindow(element);
-        if (app.lastFocusedWindow && CFEqual(app.lastFocusedWindow.get(), element)) {
-            app.lastFocusedWindow.reset();
-        }
         std::erase_if(app.windows, [element](const auto& window) { return CFEqual(window.get(), element); });
     } else if (CFStringCompare(notification, kAXWindowMovedNotification, 0) == kCFCompareEqualTo ||
                CFStringCompare(notification, kAXWindowResizedNotification, 0) == kCFCompareEqualTo) {
@@ -282,9 +251,7 @@ void AXObserver::axCallback(AXObserverRef observer, AXUIElementRef element, CFSt
         if (AXUIElementCopyAttributeValue(app.element.get(), kAXFocusedWindowAttribute, focusedValue.put()) == kAXErrorSuccess &&
             focusedValue && CFGetTypeID(focusedValue.get()) == AXUIElementGetTypeID()) {
             const auto focused = static_cast<AXUIElementRef>(focusedValue.get());
-            app.lastFocusedWindow = CFRef<AXUIElementRef>::retain(focused);
             (void)self->observeWindow(app, focused, false);
-            wm.centerCameraOnWindow(focused);
         }
     }
 }

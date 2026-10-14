@@ -1,0 +1,26 @@
+{
+  "assistance": "ai",
+  "base": "64d26701700ff17b3200b773c490899a04cf938b",
+  "id": "94325e30be464a0f9c79b266eabe62fd",
+  "paths": [
+    "config/minfwm.toml.example",
+    "docs/wiki/Configuration.md",
+    "docs/wiki/Getting-Started.md",
+    "src/core/DisplayState.cpp",
+    "src/core/DisplayState.hpp",
+    "src/daemon/AXObserver.hpp",
+    "src/daemon/AXObserver.mm",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/IPCServer.mm",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/WindowPool.hpp"
+  ],
+  "schema_version": 1,
+  "task": "TASK-DOCK-FOCUS-CENTERING",
+  "tools": [
+    "codex"
+  ]
+}
