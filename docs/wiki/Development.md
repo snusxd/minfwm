@@ -27,4 +27,4 @@ ctest --test-dir build -R yabai
 
 Accessibility, WindowServer, event tap, and live SA behavior require manual
 checks on macOS and are not established by CI. See
-[macOS acceptance](Acceptance-macos.md).
+[macOS acceptance](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance).

@@ -28,4 +28,4 @@ path; an atomic handoff remains limited to the isolated fixture. This feature is
 experimental: desktop movement, one-frame flashes, popups/dialogs, multi-display
 behavior, and third-party native dragging have outstanding manual checks.
 
-Use [[Acceptance-macos|the current macOS acceptance checklist]].
+Use [the current macOS acceptance checklist](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance).

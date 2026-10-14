@@ -6,14 +6,14 @@ Native macOS Spaces are not implemented.
 
 ## Pages
 
-- [[Getting-Started|Getting started]]: build, permissions, and daemon control.
-- [[Configuration|Configuration]]: TOML options and defaults.
-- [[Architecture|Architecture]]: core/adapter boundary and IPC.
-- [[Yabai-Integration|Yabai integration]]: optional extension setup and limits.
-- [[Development|Development]]: project layout and focused checks.
-- [[Acceptance-macos|macOS acceptance]]: manual-only checks and current status.
-- [[AI-Workflow|AI workflow]]: concise repository workflow reference.
-- [[Publishing|Publishing]]: automatic GitHub Wiki sync setup.
+- [Getting started](https://github.com/snusxd/minfwm/wiki/Getting-Started): build, permissions, and daemon control.
+- [Configuration](https://github.com/snusxd/minfwm/wiki/Configuration): TOML options and defaults.
+- [Architecture](https://github.com/snusxd/minfwm/wiki/Architecture): core/adapter boundary and IPC.
+- [Yabai integration](https://github.com/snusxd/minfwm/wiki/Yabai-Integration): optional extension setup and limits.
+- [Development](https://github.com/snusxd/minfwm/wiki/Development): project layout and focused checks.
+- [macOS acceptance](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance): manual-only checks and current status.
+- [AI workflow](https://github.com/snusxd/minfwm/wiki/AI-Workflow): concise repository workflow reference.
+- [Publishing](https://github.com/snusxd/minfwm/wiki/Publishing): automatic GitHub Wiki sync setup.
 
 ## Backend and limitations
 

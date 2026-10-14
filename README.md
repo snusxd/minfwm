@@ -51,4 +51,4 @@ See the [project Wiki](https://github.com/snusxd/minfwm/wiki) for the complete
 [configuration reference](https://github.com/snusxd/minfwm/wiki/Configuration),
 [architecture](https://github.com/snusxd/minfwm/wiki/Architecture),
 [development guide](https://github.com/snusxd/minfwm/wiki/Development), and
-[macOS acceptance checks](https://github.com/snusxd/minfwm/wiki/Acceptance-macos).
+[macOS acceptance checks](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance).

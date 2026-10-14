@@ -1,0 +1,16 @@
+{
+  "assistance": "ai",
+  "base": "1c3a33f85e4dddc5d3efbb40ac4558da2833e335",
+  "id": "125119f139fd4289b630a5afd9ec2c2b",
+  "paths": [
+    "README.md",
+    "docs/wiki/Development.md",
+    "docs/wiki/Home.md",
+    "docs/wiki/Yabai-Integration.md"
+  ],
+  "schema_version": 1,
+  "task": "minfwm-commit-dirty-tree",
+  "tools": [
+    "codex"
+  ]
+}
