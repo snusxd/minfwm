@@ -3,11 +3,35 @@
 ![minfwm preview](docs/images/preview.png)
 
 `minfwm` is an infinite 2D window canvas for macOS 14 and newer. It places
-windows on a virtual desktop that spans connected displays. The default backend
-uses macOS Accessibility APIs and does not require SIP changes; a compatible
-Yabai Scripting Addition is optional.
+windows on a virtual desktop that spans connected displays. It requires the
+Yabai Scripting Addition to present windows above the menu bar.
 
-## Build and start
+> [!IMPORTANT]
+> Install the compatible Yabai Scripting Addition separately. Setup requires disabling SIP; see the [Yabai integration guide](https://github.com/snusxd/minfwm/wiki/Yabai-Integration).
+
+## Installation and usage
+
+Install the latest stable release from the
+[Homebrew tap](https://github.com/snusxd/homebrew-minfwm):
+
+```sh
+brew install snusxd/minfwm/minfwm
+```
+
+Grant `minfwmd` Accessibility permission in System Settings, then enable the
+per-user LaunchAgent:
+
+```sh
+minfwm enable
+minfwm status
+minfwm camera move --x 100 --y 0
+```
+
+Use `minfwm start`, `stop`, or `restart` to control the daemon. `minfwm reload`
+applies configuration changes; `minfwm disable` stops the daemon and removes
+login startup.
+
+## Build from source
 
 ```sh
 cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
@@ -15,20 +39,9 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Grant `minfwmd` Accessibility permission in System Settings. For a foreground
-run, start `./build/minfwmd` in one terminal. In another terminal, control it
-with `minfwm`:
-
-```sh
-./build/minfwm enable
-./build/minfwm status
-./build/minfwm camera move --x 100 --y 0
-```
-
-`enable` installs and starts the per-user LaunchAgent. Other lifecycle commands
-are `start`, `stop`, `restart`, `disable`, and `reload`. Keep `minfwmd` beside
-`minfwm` when using the LaunchAgent. The daemon socket is
-`$TMPDIR/minfwm.sock`, owned by the current user with mode `0600`.
+For a foreground run, start `./build/minfwmd`. Keep `minfwmd` beside `minfwm`
+when using the LaunchAgent. The daemon socket is `$TMPDIR/minfwm.sock`, owned by
+the current user with mode `0600`.
 
 ## Features and documentation
 

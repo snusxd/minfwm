@@ -52,7 +52,7 @@ BackendResult WindowRenderer::releaseToNative(ClientWindow& window, core::Rect p
     // Transfer the currently presented position to the native frame before
     // dropping any Yabai transform, so pinning does not jump to the old frame.
     BackendResult moved{BackendCode::failed};
-    if (m_optional.usesTransforms()) moved = m_optional.moveNative(window.ref(), window.wid(), x, y);
+    if (m_yabai.usesTransforms()) moved = m_yabai.moveNative(window.ref(), window.wid(), x, y);
     if (!moved.succeeded()) {
         (void)resetTransform(window);
         moved = m_ax.move(window.ref(), window.wid(), x, y);
@@ -75,7 +75,7 @@ BackendResult WindowRenderer::releaseToNative(ClientWindow& window, core::Rect p
 }
 
 BackendResult WindowRenderer::setPinnedLayer(ClientWindow& window, bool alwaysOnTop) {
-    BackendResult result = m_optional.setPinnedLayer(window.ref(), window.wid(), alwaysOnTop);
+    BackendResult result = m_yabai.setPinnedLayer(window.ref(), window.wid(), alwaysOnTop);
     if (!result.succeeded()) result = m_ax.setPinnedLayer(window.ref(), window.wid(), alwaysOnTop);
     if (result.succeeded()) {
         window.isLayerSet = alwaysOnTop;
@@ -106,25 +106,25 @@ bool WindowRenderer::acceptNativeGeometry(ClientWindow& window, core::Rect physi
 }
 
 BackendResult WindowRenderer::move(ClientWindow& window, int x, int y) {
-    if (window.preferNativePosition && m_optional.usesTransforms()) {
-        const bool hadTransform = m_optional.hasTransform(window.wid());
-        const auto native = m_optional.moveNative(window.ref(), window.wid(), x, y);
-        if (hadTransform && !m_optional.hasTransform(window.wid()) &&
-            !(native.succeeded() && m_optional.nativeMovePreservesLayer())) {
+    if (window.preferNativePosition && m_yabai.usesTransforms()) {
+        const bool hadTransform = m_yabai.hasTransform(window.wid());
+        const auto native = m_yabai.moveNative(window.ref(), window.wid(), x, y);
+        if (hadTransform && !m_yabai.hasTransform(window.wid()) &&
+            !(native.succeeded() && m_yabai.nativeMovePreservesLayer())) {
             window.isLayerSet = false;
             window.layerAttempted = false;
         }
         if (native.succeeded()) return native;
     }
-    const BackendResult result = m_optional.move(window.ref(), window.wid(), x, y);
+    const BackendResult result = m_yabai.move(window.ref(), window.wid(), x, y);
     if (result.succeeded()) return result;
     (void)resetTransform(window);
     return m_ax.move(window.ref(), window.wid(), x, y);
 }
 
 BackendResult WindowRenderer::resetTransform(ClientWindow& window) {
-    const BackendResult result = m_optional.resetTransform(window.wid());
-    if (result.succeeded() && m_optional.usesTransforms()) {
+    const BackendResult result = m_yabai.resetTransform(window.wid());
+    if (result.succeeded() && m_yabai.usesTransforms()) {
         // The payload restores the captured level along with the transform.
         window.isLayerSet = window.pinnedLevelSet;
         window.layerAttempted = false;
@@ -135,13 +135,13 @@ BackendResult WindowRenderer::resetTransform(ClientWindow& window) {
 }
 
 BackendResult WindowRenderer::setLayer(ClientWindow& window, int layer) {
-    const BackendResult result = m_optional.setLayer(window.ref(), window.wid(), layer);
+    const BackendResult result = m_yabai.setLayer(window.ref(), window.wid(), layer);
     return result.succeeded() ? result : m_ax.setLayer(window.ref(), window.wid(), layer);
 }
 
 BackendResult WindowRenderer::restoreLayer(ClientWindow& window) {
     const BackendResult result = window.pinnedLevelSet
-        ? m_optional.setPinnedLayer(window.ref(), window.wid(), false)
+        ? m_yabai.setPinnedLayer(window.ref(), window.wid(), false)
         : setLayer(window, kCGNormalWindowLevelKey);
     if (result.succeeded()) {
         window.pinnedLevelSet = false;
@@ -246,7 +246,7 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
 
 BackendResult WindowRenderer::renderOverview(ClientWindow& window, core::Rect physical, float scale, double now) {
     int x = 0, y = 0;
-    if (!m_optional.supportsOverview()) return {BackendCode::unsupported};
+    if (!m_yabai.supportsOverview()) return {BackendCode::unsupported};
     if (!window.originalPhysicalRect || !pixelPosition(physical, x, y) ||
         !std::isfinite(scale) || scale < 0.2f || scale > 1) return {BackendCode::failed};
     window.applicationSuspended = false;
@@ -270,7 +270,7 @@ BackendResult WindowRenderer::renderOverview(ClientWindow& window, core::Rect ph
     }
     // Scale presentation only. AX resize would relayout the application and
     // cannot provide an overview of its existing content.
-    const auto result = m_optional.presentOverview(window.ref(), window.wid(), x, y, scale);
+    const auto result = m_yabai.presentOverview(window.ref(), window.wid(), x, y, scale);
     if (!result.succeeded()) {
         invalidatePosition(window);
         return result;
@@ -298,8 +298,8 @@ BackendResult WindowRenderer::hide(ClientWindow& window, core::Rect physical,
     const bool outside = physical.right() <= displayBounds.x || physical.x >= displayBounds.right() ||
         physical.bottom() <= displayBounds.y || physical.y >= displayBounds.bottom();
     int translatedX = 0, translatedY = 0;
-    if (m_optional.usesTransforms() && outside && pixelPosition(physical, translatedX, translatedY)) {
-        const BackendResult translated = m_optional.move(window.ref(), window.wid(), translatedX, translatedY);
+    if (m_yabai.usesTransforms() && outside && pixelPosition(physical, translatedX, translatedY)) {
+        const BackendResult translated = m_yabai.move(window.ref(), window.wid(), translatedX, translatedY);
         if (translated.succeeded()) {
             window.isHidden = true;
             window.lastRenderedScale = 1;

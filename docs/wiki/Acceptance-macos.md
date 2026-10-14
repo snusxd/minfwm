@@ -5,14 +5,14 @@ are manual-only. Build/CTest success does not prove those interactions.
 
 ## Checks
 
-- Start without Yabai SA; grant and revoke Accessibility permission; verify
-  clear errors and orderly startup/shutdown.
+- Start with the required Yabai SA; grant and revoke Accessibility permission;
+  verify clear errors and orderly startup/shutdown.
 - Pan with Super drag; verify focus, pin/unpin, native dragging, and camera
   bookmarks.
 - Check a secondary display with a negative origin and independent cameras.
 - Verify window visibility, native geometry, and restoration after normal exit.
-- With compatible Yabai SA, check translation, overview zoom, selection, Escape,
-  application frame correction, fallback, and process-exit recovery.
+- Check translation, overview zoom, selection, Escape, application frame
+  correction, and process-exit recovery.
 - Check popups, sheets/dialogs, multiple displays, dragging during and after
   translation, and behavior when Yabai or the daemon restarts.
 

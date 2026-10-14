@@ -5,7 +5,7 @@
 - `src/core/` contains platform-independent C++20 geometry, cameras, display
   state, and visibility policy.
 - `src/daemon/` adapts Accessibility, Core Graphics events, AppKit, run loops,
-  configuration, lifecycle, IPC, and the optional Yabai backend.
+  configuration, lifecycle, IPC, and the required Yabai backend.
 - `src/cli/` implements `minfwm`; `src/common/Protocol.hpp` owns the wire format.
 
 Display bounds use one physical coordinate system and may have negative
@@ -21,11 +21,10 @@ windows according to the configured policy. Shutdown restores captured native
 position and size, unhides windows hidden by the daemon, and clears owned
 presentation transforms when possible.
 
-Native positioning is used in the usable screen area. A compatible optional
-extension can translate rendered windows outside it while preserving native
-input geometry. Position readback detects application frame corrections; an
-unapplied operation falls back to Accessibility and persistently constrained
-positions are rejected.
+Native positioning is used in the usable screen area. The required extension
+translates rendered windows outside it while preserving native input geometry.
+Position readback detects application frame corrections; persistently
+constrained positions are rejected.
 
 ## IPC
 
@@ -37,6 +36,6 @@ returns a nonzero status.
 
 ## Decisions
 
-The default backend must work without SIP changes; Yabai remains an optional,
-handshake-checked optimization. Core geometry stays independent of Apple APIs.
-See source history for prior design discussions.
+The daemon requires a compatible Yabai Scripting Addition handshake with
+transform and pinned-level support. Core geometry stays independent of Apple
+APIs. See source history for prior design discussions.

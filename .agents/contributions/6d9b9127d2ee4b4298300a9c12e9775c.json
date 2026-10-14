@@ -1,0 +1,30 @@
+{
+  "assistance": "ai",
+  "base": "a493e02d344795d8dc1d5c18b6546a4b4ec384a3",
+  "id": "6d9b9127d2ee4b4298300a9c12e9775c",
+  "paths": [
+    "AGENTS.md",
+    "FEATURES.md",
+    "GEMINI.md",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/wiki/Acceptance-macos.md",
+    "docs/wiki/Architecture.md",
+    "docs/wiki/Development.md",
+    "docs/wiki/Getting-Started.md",
+    "docs/wiki/Home.md",
+    "docs/wiki/Yabai-Integration.md",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/WindowPool.hpp",
+    "src/daemon/WindowPool.mm",
+    "src/daemon/WindowRenderer.hpp",
+    "src/daemon/WindowRenderer.mm",
+    "src/daemon/main.mm"
+  ],
+  "schema_version": 1,
+  "task": "remove-yabai-free-mode",
+  "tools": [
+    "codex"
+  ]
+}

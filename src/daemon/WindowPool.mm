@@ -12,7 +12,7 @@ namespace {
 
 using PrivateWindowIdResolver = AXError (*)(AXUIElementRef, std::uint32_t*);
 
-std::uint32_t resolveOptionalWindowId(AXUIElementRef windowRef) noexcept {
+std::uint32_t resolveYabaiWindowId(AXUIElementRef windowRef) noexcept {
     if (!windowRef) return 0;
 
     static const PrivateWindowIdResolver resolver = reinterpret_cast<PrivateWindowIdResolver>(
@@ -104,8 +104,8 @@ bool ClientWindow::captureInitialGeometry() {
 WindowPool::WindowPool(WindowIdResolver windowIdResolver)
     : m_windowIdResolver(windowIdResolver ? windowIdResolver : &WindowPool::defaultWindowIdResolver) {}
 
-WindowPool::WindowIdResolver WindowPool::optionalWindowIdResolver() noexcept {
-    return &resolveOptionalWindowId;
+WindowPool::WindowIdResolver WindowPool::yabaiWindowIdResolver() noexcept {
+    return &resolveYabaiWindowId;
 }
 
 std::shared_ptr<ClientWindow> WindowPool::addWindow(AXUIElementRef windowRef) {

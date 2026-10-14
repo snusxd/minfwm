@@ -16,7 +16,7 @@ ctest --test-dir build --output-on-failure
 ./build/minfwm reload
 ./build/minfwm camera move --x 100 --y 0
 ```
-- `minfwmd` requires Accessibility permission. Yabai SA is optional; the AX backend must work without SIP changes.
+- `minfwmd` requires Accessibility permission and a compatible Yabai SA with transform and pinned-level support. SIP must be disabled.
 - The Unix socket is created as `$TMPDIR/minfwm.sock` with user ownership and mode `0600`.
 
 ## File-Scoped Commands
@@ -41,7 +41,7 @@ ctest --test-dir build --output-on-failure
 
 ## Security and Configuration
 - Preserve atomic config reload: invalid TOML keeps the last valid snapshot.
-- Treat Yabai SA as an optional, handshake-checked optimization; failed move/layer/ACK operations must reach AX fallback.
+- Abort startup when the required Yabai SA handshake or capabilities are missing.
 - Do not commit credentials, machine-specific paths, SIP changes, or live socket files.
 
 ## Active AI Workflow

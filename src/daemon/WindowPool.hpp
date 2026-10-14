@@ -76,8 +76,8 @@ public:
 
     explicit WindowPool(WindowIdResolver windowIdResolver = nullptr);
 
-    // Uses the private AX-to-WID lookup only for the optional Yabai backend.
-    static WindowIdResolver optionalWindowIdResolver() noexcept;
+    // Uses the private AX-to-WID lookup required by the Yabai backend.
+    static WindowIdResolver yabaiWindowIdResolver() noexcept;
 
     WindowPool(const WindowPool&) = delete;
     WindowPool& operator=(const WindowPool&) = delete;

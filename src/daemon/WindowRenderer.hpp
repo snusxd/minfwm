@@ -12,8 +12,8 @@ namespace minfwm {
 // hide/show and restoration path as the daemon, without live AX windows.
 class WindowRenderer final {
 public:
-    WindowRenderer(WindowBackend& ax, WindowBackend& optional, WindowPositionCheck check = isWindowAtPosition)
-        : m_ax(ax), m_optional(optional), m_checkPosition(std::move(check)) {}
+    WindowRenderer(WindowBackend& ax, WindowBackend& yabai, WindowPositionCheck check = isWindowAtPosition)
+        : m_ax(ax), m_yabai(yabai), m_checkPosition(std::move(check)) {}
 
     BackendResult render(ClientWindow& window, core::Rect physical, double now);
     BackendResult renderOverview(ClientWindow& window, core::Rect physical, float scale, double now);
@@ -31,7 +31,7 @@ private:
     BackendResult resetTransform(ClientWindow& window);
 
     WindowBackend& m_ax;
-    WindowBackend& m_optional;
+    WindowBackend& m_yabai;
     WindowPositionCheck m_checkPosition;
 };
 

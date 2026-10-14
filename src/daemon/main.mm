@@ -20,6 +20,10 @@ void requestStop(int) {
 
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
+        if (argc > 1) {
+            std::cerr << "minfwmd: does not accept arguments" << std::endl;
+            return 2;
+        }
         std::cout << "minfwmd: Starting macOS Infinite Window Manager daemon..." << std::endl;
         
         // Prevent crash on socket errors
@@ -46,8 +50,8 @@ int main(int argc, const char * argv[]) {
         }
 
         auto& wm = minfwm::WindowManager::instance();
-        if (!wm.initialize(true)) {
-            std::cerr << "minfwmd: failed to initialize display state" << std::endl;
+        if (!wm.initialize()) {
+            std::cerr << "minfwmd: required Yabai Scripting Addition is unavailable; see the installation guide" << std::endl;
             server.stop();
             return 1;
         }

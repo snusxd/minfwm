@@ -1,9 +1,9 @@
 # Yabai integration
 
-Yabai's Scripting Addition (SA) is optional. The daemon checks the SA version
-and capability handshake; unavailable, incompatible, or failed operations use
-Accessibility fallback. Stock SA supports ordinary movement and layering but
-cannot guarantee placement above the menu bar.
+Yabai's Scripting Addition (SA) is required. The daemon checks its version and
+capability handshake and refuses to start unless transform and pinned-level
+support are available. The stock SA cannot guarantee placement above the menu
+bar; use the compatible extension built below.
 
 ## Experimental extension
 
@@ -15,8 +15,9 @@ python3 tools/build_yabai_sa.py
 sudo ./build/yabai-minfwm/bin/yabai --load-sa
 ```
 
-Stop `minfwmd` before loading. This replaces the installed Yabai SA and may
-restart Dock; it does not change SIP. To revert, stop minfwmd, uninstall using
+Disable System Integrity Protection before setup. Stop `minfwmd` before
+loading. This replaces the installed Yabai SA and may restart Dock. To revert,
+stop minfwmd, uninstall using
 the original Yabai `--uninstall-sa`, then load the original `--load-sa`. An SA
 unload may leave transforms in WindowServer, so confirm normal native dragging
 before restarting the daemon.

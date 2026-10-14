@@ -5,8 +5,8 @@
 The daemon targets macOS 14+ with C++20 and CMake. Accessibility permission is
 required. Window operations use public `AXUIElement` and `AXObserver` APIs;
 `CGEventTap`, `NSWorkspace`, and `CFRunLoop` provide input and lifecycle events.
-Yabai Scripting Addition is optional and is enabled only after a compatible
-handshake. SIP changes are not required for the baseline.
+Yabai Scripting Addition is required and must pass a compatible capability
+handshake. System Integrity Protection must be disabled.
 
 The canvas is an emulated virtual workspace: each display has a camera and
 windows retain virtual coordinates. `src/core/` converts virtual geometry to a
@@ -45,7 +45,7 @@ socket lives at `$TMPDIR/minfwm.sock`, is user-owned, and is mode `0600`.
 Reload parses a candidate snapshot first and keeps the last valid snapshot on
 failure. Run the CMake build and CTest suite before integration. Use the manual
 matrix in `docs/wiki/Acceptance-macos.md` for Accessibility, panning, focus,
-secondary displays, orderly shutdown, and optional SA behavior.
+secondary displays, orderly shutdown, and required SA behavior.
 
 ## AI workflow entry
 

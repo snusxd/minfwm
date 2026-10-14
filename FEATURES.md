@@ -18,6 +18,7 @@
   when the daemon exits.
 - Start, stop, restart, enable or disable login startup, and reload configuration
   from the CLI; invalid configuration leaves the last valid settings active.
-- Use a compatible Yabai Scripting Addition for experimental presentation
-  transforms and overview zoom; the [acceptance checklist](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance)
+- Require a compatible Yabai Scripting Addition for presentation transforms;
+  overview zoom depends on its advertised capabilities. The
+  [acceptance checklist](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance)
   tracks remaining manual checks.

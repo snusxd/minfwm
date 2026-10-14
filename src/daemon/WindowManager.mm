@@ -44,6 +44,11 @@ bool WindowManager::initialize(bool allowAdministratorLoad) {
     ConfigManager::instance().load();
     m_displays.clear();
     const bool yabaiAvailable = m_yabaiBackend.initialize(allowAdministratorLoad);
+    if (!yabaiAvailable || !m_yabaiBackend.usesTransforms() || !m_yabaiBackend.supportsPinnedLevels()) {
+        std::cerr << "WindowManager: required Yabai Scripting Addition transform and pinned-level capabilities are unavailable"
+                  << std::endl;
+        return false;
+    }
 
     for (NSScreen* screen in [NSScreen screens]) {
         NSDictionary* description = [screen deviceDescription];
@@ -64,7 +69,7 @@ bool WindowManager::initialize(bool allowAdministratorLoad) {
             topOrigin + static_cast<float>(NSMaxY(frame) - NSMaxY(usable)),
             static_cast<float>(usable.size.width), static_cast<float>(usable.size.height)};
         m_displays.push_back(std::make_unique<Display>(
-            id, bounds, yabaiAvailable ? WindowPool::optionalWindowIdResolver() : nullptr, usableBounds));
+            id, bounds, WindowPool::yabaiWindowIdResolver(), usableBounds));
         std::cout << "WindowManager: Found display " << id << " ["
                   << frame.size.width << "x" << frame.size.height << "]" << std::endl;
     }
@@ -74,15 +79,9 @@ bool WindowManager::initialize(bool allowAdministratorLoad) {
         return false;
     }
 
-    if (yabaiAvailable) {
-        std::cout << "WindowManager: Yabai SA backend enabled" << std::endl;
-        std::cout << "WindowManager: absolute transforms "
-                  << (m_yabaiBackend.usesTransforms() ? "enabled" : "unavailable") << std::endl;
-        std::cout << "WindowManager: pinned always-on-top "
-                  << (m_yabaiBackend.supportsPinnedLevels() ? "enabled" : "unavailable") << std::endl;
-    } else {
-        std::cout << "WindowManager: Yabai SA unavailable; using AX fallback" << std::endl;
-    }
+    std::cout << "WindowManager: required Yabai SA backend enabled" << std::endl;
+    std::cout << "WindowManager: absolute transforms enabled" << std::endl;
+    std::cout << "WindowManager: pinned always-on-top enabled" << std::endl;
     m_initialized = true;
     return true;
 }

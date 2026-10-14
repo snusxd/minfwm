@@ -9,7 +9,7 @@ Native macOS Spaces are not implemented.
 - [Getting started](https://github.com/snusxd/minfwm/wiki/Getting-Started): build, permissions, and daemon control.
 - [Configuration](https://github.com/snusxd/minfwm/wiki/Configuration): TOML options and defaults.
 - [Architecture](https://github.com/snusxd/minfwm/wiki/Architecture): core/adapter boundary and IPC.
-- [Yabai integration](https://github.com/snusxd/minfwm/wiki/Yabai-Integration): optional extension setup and limits.
+- [Yabai integration](https://github.com/snusxd/minfwm/wiki/Yabai-Integration): required extension setup and limits.
 - [Development](https://github.com/snusxd/minfwm/wiki/Development): project layout and focused checks.
 - [macOS acceptance](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance): manual-only checks and current status.
 - [AI workflow](https://github.com/snusxd/minfwm/wiki/AI-Workflow): concise repository workflow reference.
@@ -17,11 +17,9 @@ Native macOS Spaces are not implemented.
 
 ## Backend and limitations
 
-The Accessibility backend is the baseline and needs no SIP changes. Yabai's
-Scripting Addition is optional and version-sensitive. It can provide movement,
-layering, and presentation transforms when its handshake advertises compatible
-capabilities. Applications can correct window frames after a move; failed
-readback falls back to Accessibility and constrained placements are rejected.
+The Yabai Scripting Addition is required. Its compatible transform and pinned
+level capabilities allow windows to appear above the menu bar. Applications
+can correct window frames after a move; constrained placements are rejected.
 
 The experimental transform extension supports offscreen and above-menu-bar
 placement while retaining an application's native frame. Native dragging,

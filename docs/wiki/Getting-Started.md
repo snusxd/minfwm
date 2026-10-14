@@ -4,7 +4,8 @@
 
 - macOS 14 or newer, AppleClang, C++20, and CMake 3.20 or newer.
 - Accessibility permission for `minfwmd`.
-- Yabai is optional; the baseline does not require SIP changes.
+- Disabled System Integrity Protection (SIP).
+- The compatible [Yabai Scripting Addition](https://github.com/snusxd/minfwm/wiki/Yabai-Integration) built and loaded separately; the Homebrew formula does not install it.
 
 ## Build and run
 
