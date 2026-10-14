@@ -9,6 +9,7 @@ namespace minfwm {
 struct ConfigSnapshot {
     bool enableWindowShadows = false;
     bool invertZoomScrollDirection = false;
+    bool rewindOnFocus = true;
     std::string zoomedEscCenter = "screen";
     std::string multiDisplayMode = "isolated";
     float overscanBufferPx = 500.0f;

@@ -300,6 +300,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (!event) return event;
 
     auto& wm = WindowManager::instance();
+    const bool rewindOnFocus = ConfigManager::instance().snapshot().rewindOnFocus;
     const bool usesSuperKey = type == kCGEventScrollWheel || type == kCGEventLeftMouseDown ||
         type == kCGEventLeftMouseUp || type == kCGEventLeftMouseDragged || type == kCGEventMouseMoved || type == kCGEventFlagsChanged ||
         type == kCGEventKeyDown;
@@ -332,7 +333,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
                 momentum == kCGMomentumScrollPhaseEnd || (phase == 0 && momentum == 0)) interceptor->m_zoomScrollCaptured = false;
             return nullptr;
         }
-        if (wm.overviewActive()) return nullptr;
+        if (wm.overviewActive() && rewindOnFocus) return nullptr;
     }
     if (type == kCGEventKeyUp || type == kCGEventKeyDown) {
         const auto code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
@@ -341,7 +342,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
                 if (type == kCGEventKeyUp) interceptor->m_overviewKeys.reset(code);
                 return nullptr;
             }
-            if (wm.overviewActive()) {
+            if (wm.overviewActive() && rewindOnFocus) {
                 if (type == kCGEventKeyDown) {
                     interceptor->m_overviewKeys.set(code);
                     if (code == 53) wm.exitOverview(pointer, false);
@@ -364,7 +365,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         const bool secondaryButton = type == kCGEventRightMouseDown || type == kCGEventRightMouseUp ||
             type == kCGEventRightMouseDragged || type == kCGEventOtherMouseDown ||
             type == kCGEventOtherMouseUp || type == kCGEventOtherMouseDragged;
-        if (wm.overviewActive() && (overviewClick || secondaryButton)) {
+        if (wm.overviewActive() && rewindOnFocus && (overviewClick || secondaryButton)) {
             if (mouseDown) {
                 interceptor->m_overviewButtons |= mask;
                 if (type == kCGEventLeftMouseDown) wm.exitOverview(pointer, true);
@@ -411,7 +412,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
                 display->camera().move(update.delta.x / display->state().scale(), update.delta.y / display->state().scale());
             }
         }
-        if (update.consume || (wm.overviewActive() && type != kCGEventFlagsChanged)) return nullptr;
+        if (update.consume || (wm.overviewActive() && rewindOnFocus && type != kCGEventFlagsChanged)) return nullptr;
     }
 
     if (type == kCGEventMouseMoved) {

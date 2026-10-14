@@ -1,5 +1,6 @@
 #import "AXObserver.hpp"
 #import "WindowManager.hpp"
+#import "ConfigManager.hpp"
 #import <iostream>
 #include <algorithm>
 #import <QuartzCore/QuartzCore.h>
@@ -217,7 +218,7 @@ bool AXObserver::focusActivatedApplication(pid_t pid) {
     auto& wm = WindowManager::instance();
     const auto window = wm.findWindow(focused);
     if (!window || !window->virtualCoordinatesInitialized) return false;
-    wm.centerCameraOnWindow(focused);
+    if (ConfigManager::instance().snapshot().rewindOnFocus) wm.centerCameraOnWindow(focused);
     return true;
 }
 

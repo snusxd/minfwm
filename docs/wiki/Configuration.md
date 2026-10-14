@@ -13,6 +13,7 @@ spawn-behavior = "center"
 
 [zoom]
 invert-zoom-scroll-direction = false
+rewind-on-focus = true
 zoomed-esc-center = "screen"
 
 [display]
@@ -33,6 +34,7 @@ bookmarks-goto = ["Super", "Shift"]
 | `whitelist` | `["Terminal", "Music"]` | Applications whose windows remain available. |
 | `spawn-behavior` | `"center"` | Placement policy for newly observed windows. |
 | `invert-zoom-scroll-direction` | `false` | Reverse vertical-scroll zoom direction. |
+| `rewind-on-focus` | `true` | Automatically center the camera on a window when its application gains focus. When `false`, windows remain interactive while zoomed and app focus does not recenter the camera. |
 | `zoomed-esc-center` | `"screen"` | Escape anchor: `screen`, `mouse`, or `focus`. |
 | `multi-display-mode` | `"isolated"` | Camera coordination policy for displays. |
 | `keybinds.super` | `["Cmd", "Alt"]` | `Super` modifier chord for pan, zoom, and pin. Supported values: `Cmd`, `Alt`, `Shift`, `Ctrl`. |
@@ -48,6 +50,9 @@ Bookmark bindings configure modifiers only; the pressed digit selects bookmark
 and `Super+Shift+1..9` returns to them. Bookmark modifier arrays accept unique
 `Super`, `Cmd`, `Alt`, `Shift`, and `Ctrl` values.
 
-Click selection always centers the selected window; `zoomed-esc-center` only
-controls Escape. Changing settings takes effect after `./build/minfwm reload`.
+With `rewind-on-focus = true`, clicking a window while zoomed exits overview and
+centers the selected window. With it disabled, clicks and other input pass
+through to windows while the camera stays zoomed. `zoomed-esc-center` controls
+the Escape anchor when rewind-on-focus is enabled. Changing settings takes
+effect after `./build/minfwm reload`.
 The full example is in `config/minfwm.toml.example` in the source repository.

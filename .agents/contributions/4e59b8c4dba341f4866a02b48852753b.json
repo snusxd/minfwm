@@ -1,0 +1,19 @@
+{
+  "assistance": "ai",
+  "base": "b45b521d6624a86c578aa42ffdb214945fadc864",
+  "id": "4e59b8c4dba341f4866a02b48852753b",
+  "paths": [
+    "config/minfwm.toml.example",
+    "docs/wiki/Configuration.md",
+    "src/daemon/AXObserver.mm",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/WindowRenderer.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-ZOOM-REWIND-ON-FOCUS",
+  "tools": [
+    "codex"
+  ]
+}

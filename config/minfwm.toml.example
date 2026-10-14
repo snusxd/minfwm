@@ -6,6 +6,7 @@
 # whitelist = ["Terminal", "Music"]
 # spawn-behavior = "center"
 # invert-zoom-scroll-direction = false
+# rewind-on-focus = true
 # zoomed-esc-center = "screen"
 # multi-display-mode = "isolated"
 # pins.always-on-top = true
@@ -19,6 +20,8 @@ spawn-behavior = "center"
 [zoom]
 # Reverse Super wheel zoom without changing ordinary application scrolling.
 invert-zoom-scroll-direction = false
+# Return the camera to a focused application after it is activated.
+rewind-on-focus = true
 # Escape anchor while zoomed: "screen", "mouse", or "focus".
 zoomed-esc-center = "screen"
 

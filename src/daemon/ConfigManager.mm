@@ -248,7 +248,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     if (!error.empty()) return false;
 
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
-    if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center"}, error)) return false;
+    if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center", "rewind-on-focus"}, error)) return false;
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
                                        {"super", "center-camera-to-focus", "center-focus-to-camera",
@@ -257,6 +257,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
 
     if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
         !readBool(root, zoom, "invert-zoom-scroll-direction", candidate.invertZoomScrollDirection, error) ||
+        !readBool(root, zoom, "rewind-on-focus", candidate.rewindOnFocus, error) ||
         !readString(root, zoom, "zoomed-esc-center", candidate.zoomedEscCenter, error) ||
         !readString(root, display, "multi-display-mode", candidate.multiDisplayMode, error) ||
         !readOverscan(root, window, candidate.overscanBufferPx, error) ||

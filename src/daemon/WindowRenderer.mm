@@ -96,6 +96,9 @@ bool WindowRenderer::acceptNativeGeometry(ClientWindow& window, core::Rect physi
     window.virtualCoordinatesInitialized = true;
     window.lastRenderedX = x;
     window.lastRenderedY = y;
+    // A native drag can clear the WindowServer presentation transform. Force
+    // the next overview frame to reapply its scale at the newly accepted spot.
+    window.lastRenderedScale = 1;
     window.positionNeedsVerification = false;
     window.positionFallbackAttempted = false;
     window.rejectedPosition.reset();
