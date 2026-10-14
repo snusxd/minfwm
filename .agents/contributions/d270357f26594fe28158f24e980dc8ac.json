@@ -1,0 +1,13 @@
+{
+  "assistance": "ai",
+  "base": "cb474d61cbc56d322889cc6c3be970b11d2d0cea",
+  "id": "d270357f26594fe28158f24e980dc8ac",
+  "paths": [
+    "src/cli/main.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-CMD-TAB-CENTERING",
+  "tools": [
+    "codex"
+  ]
+}
