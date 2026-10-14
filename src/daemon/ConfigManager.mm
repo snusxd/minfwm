@@ -283,8 +283,30 @@ unsigned bookmarkModifierMask(const std::vector<std::string>& modifiers,
     return mask;
 }
 
+bool readAnimationSpeed(const TomlTable* table, float& out, std::string& error) {
+    if (!table) return true;
+    const TomlNode* node = table->get("speed");
+    if (!node) return true;
+
+    double value = 0.0;
+    if (const auto floating = node->value<double>()) {
+        value = *floating;
+    } else if (const auto integer = node->value<std::int64_t>()) {
+        value = static_cast<double>(*integer);
+    } else {
+        error = "animations.speed must be a finite number from 0.1 to 10";
+        return false;
+    }
+    if (!std::isfinite(value) || value < 0.1 || value > 10.0) {
+        error = "animations.speed must be a finite number from 0.1 to 10";
+        return false;
+    }
+    out = static_cast<float>(value);
+    return true;
+}
+
 bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
-    if (!rejectUnknownKeys(root, {"window", "zoom", "camera", "display", "keybinds", "pins"},
+    if (!rejectUnknownKeys(root, {"window", "zoom", "camera", "display", "keybinds", "pins", "animations"},
                            {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
                             "center-on-cmd-tab", "mouse-movement-multiplier", "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior",
                             "always-on-top"}, error)) return false;
@@ -295,6 +317,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     const TomlTable* display = tableAt(root, "display", error);
     const TomlTable* keybinds = tableAt(root, "keybinds", error);
     const TomlTable* pins = tableAt(root, "pins", error);
+    const TomlTable* animations = tableAt(root, "animations", error);
     if (!error.empty()) return false;
 
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
@@ -307,6 +330,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
                                        {"super", "center-camera-to-focus", "center-focus-to-camera",
                                         "drag-everywhere", "bookmarks-add", "bookmarks-goto"}, error)) return false;
     if (pins && !rejectUnknownKeys(*pins, "pins", {"always-on-top"}, error)) return false;
+    if (animations && !rejectUnknownKeys(*animations, "animations", {"enable", "speed"}, error)) return false;
 
     if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
         !readBool(root, zoom, "invert-zoom-scroll-direction", candidate.invertZoomScrollDirection, error) ||
@@ -322,6 +346,8 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readWhitelist(root, window, candidate.whitelist, error) ||
         !readString(root, window, "spawn-behavior", candidate.spawnBehavior, error) ||
         !readBool(root, pins, "always-on-top", candidate.pinsAlwaysOnTop, error) ||
+        !readBool(root, animations, "enable", candidate.animationsEnabled, error) ||
+        !readAnimationSpeed(animations, candidate.animationSpeed, error) ||
         !readSuperKey(keybinds, candidate.superModifiers, error) ||
         !readShortcut(keybinds, "center-camera-to-focus", candidate.centerCameraToFocus, error) ||
         !readShortcut(keybinds, "center-focus-to-camera", candidate.centerFocusToCamera, error) ||

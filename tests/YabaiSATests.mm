@@ -351,8 +351,9 @@ void testAbsoluteTransforms() {
         minfwm::ClientWindow window(nullptr, 42);
         window.originalPhysicalRect = minfwm::core::Rect{100, 100, 640, 480};
         window.layerAttempted = true;
-        expect(renderer.render(window, {100, -200, 640, 480}, 1).succeeded() && ax.moveCalls == 1,
-               "failed transform is reset before AX fallback");
+        expect(!renderer.render(window, {100, -200, 640, 480}, 1).succeeded() &&
+               ax.moveCalls == 0 && !sa.hasTransform(42),
+               "failed above-bar transform is rejected without an AX move to a clamped position");
     }
 }
 

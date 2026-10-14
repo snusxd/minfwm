@@ -11,8 +11,12 @@
 # zoomed-esc-center = "screen"
 # camera.mouse-movement-multiplier = 1.0
 # camera.trackpad-movement-multiplier = 1.0
+# camera.trackpad-invert-x = false
+# camera.trackpad-invert-y = false
 # multi-display-mode = "isolated"
 # pins.always-on-top = true
+# animations.enable = true
+# animations.speed = 1.0
 
 [window]
 enable-window-shadows = false
@@ -29,10 +33,10 @@ rewind-on-focus = true
 zoomed-esc-center = "screen"
 
 [camera]
-# Scale camera panning relative to cursor movement. 2.0 is twice as fast; 0.5 is half speed.
-mouse-movement-multiplier = 1.0
 # Center the camera on the active app's focused window after Cmd+Tab.
 center-on-cmd-tab = true
+# Scale camera panning relative to cursor movement. 2.0 is twice as fast; 0.5 is half speed.
+mouse-movement-multiplier = 1.0
 # Scale camera panning while moving three fingers on the trackpad.
 trackpad-movement-multiplier = 1.0
 # Reverse the corresponding trackpad pan axes when needed.
@@ -44,6 +48,12 @@ multi-display-mode = "isolated"
 
 [pins]
 always-on-top = true
+
+[animations]
+# Enable or disable camera, zoom, and window movement animations.
+enable = true
+# Animation speed multiplier: 2.0 is twice as fast; 0.5 is half speed (range 0.1–10).
+speed = 1.0
 
 [keybinds]
 # Modifier names: "Cmd", "Alt", "Shift", "Ctrl". Defaults to ["Cmd", "Alt"].

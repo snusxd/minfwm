@@ -25,6 +25,8 @@ public:
                        std::optional<core::Point> parkingPosition = std::nullopt);
     BackendResult restore(ClientWindow& window, double now);
     bool acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state);
+    bool acceptApplicationGeometry(ClientWindow& window, core::Rect physical,
+                                   const core::DisplayState& state, bool transformed);
 
 private:
     BackendResult move(ClientWindow& window, int x, int y);

@@ -59,6 +59,7 @@ public:
     };
     std::optional<PositionAnimation> positionAnimation;
     bool preferNativePosition = false;
+    bool nativeHandoffAttempted = false;
     bool nativePresentationChecked = false;
     bool pinned = false;
     std::optional<bool> pinnedAlwaysOnTop;

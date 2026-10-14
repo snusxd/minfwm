@@ -430,13 +430,13 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (!event) return event;
 
     auto& wm = WindowManager::instance();
+    const auto dragEverywhereModifiers = ConfigManager::instance().snapshot().dragEverywhereModifiers;
     const bool rewindOnFocus = ConfigManager::instance().snapshot().rewindOnFocus;
     const bool usesSuperKey = type == kCGEventScrollWheel || type == kCGEventLeftMouseDown ||
         type == kCGEventLeftMouseUp || type == kCGEventLeftMouseDragged || type == kCGEventMouseMoved || type == kCGEventFlagsChanged ||
         type == kCGEventKeyDown;
     const std::vector<std::string> superModifiers = usesSuperKey ?
         ConfigManager::instance().snapshot().superModifiers : std::vector<std::string>{};
-    const auto dragEverywhereModifiers = ConfigManager::instance().snapshot().dragEverywhereModifiers;
     const CGEventFlags currentFlags = CGEventGetFlags(event);
     const bool zoomModifiers = usesSuperKey && superHeld(currentFlags, superModifiers);
     const CGPoint location = CGEventGetLocation(event);
@@ -524,6 +524,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
             return nullptr;
         }
     }
+
     if (mouseDown || mouseUp || mouseDrag) {
         const auto button = CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber);
         const uint64_t mask = button >= 0 && button < 64 ? uint64_t{1} << button : 0;

@@ -567,7 +567,8 @@ void WindowManager::updateWindows(int64_t displayId) {
     for (auto& display : m_displays) {
         if (displayId && display->id() != displayId) continue;
         double& previousFrame = m_zoomFrameTimes[display->id()];
-        display->state().advanceZoom(previousFrame ? now - previousFrame : 0);
+        display->state().advanceZoom(previousFrame ? now - previousFrame : 0,
+                                     config.animationSpeed, config.animationsEnabled);
         previousFrame = now;
         const core::DisplayState& state = display->state();
         bool overviewFailed = false;
@@ -589,7 +590,7 @@ void WindowManager::updateWindows(int64_t displayId) {
             }
             adoptWindow(*display, window);
             if (!window->virtualCoordinatesInitialized) continue;
-            advanceWindowAnimation(*window, now);
+            advanceWindowAnimation(*window, now, config.animationSpeed, config.animationsEnabled);
             const core::Rect physical = state.virtualToPhysical(window->virtualRect);
             const core::Rect displayBounds = state.geometry().bounds;
             const bool fullyOutsideDisplay = physical.right() <= displayBounds.x ||
@@ -629,9 +630,9 @@ void WindowManager::updateWindows(int64_t displayId) {
                 }
                 continue;
             }
-            window->preferNativePosition = core::frameFitsDisplay(physical, displayBounds) &&
-                core::canUseNativePosition(physical, display->usableBounds());
             const bool focused = m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get());
+            window->preferNativePosition = !beingDragged && core::shouldPreferNativePosition(
+                physical, displayBounds, display->usableBounds());
             const bool protectedWindow = focused || isWhitelisted(*window);
             const bool shouldRender = beingDragged || protectedWindow ||
                 visibility.shouldRender(window->virtualRect, state.viewport(), focused);
@@ -659,8 +660,8 @@ void WindowManager::updateWindows(int64_t displayId) {
                     (void)m_renderer.hide(*window, physical, bounds, now, parkingPosition);
                     continue;
                 }
-                window->preferNativePosition = core::frameFitsDisplay(physical, bounds) &&
-                    core::canUseNativePosition(physical, display->usableBounds());
+                window->preferNativePosition = core::shouldPreferNativePosition(
+                    physical, bounds, display->usableBounds());
                 (void)m_renderer.render(*window, physical, now);
             }
         }
@@ -687,10 +688,17 @@ void WindowManager::centerWindow(std::shared_ptr<ClientWindow> window) {
         CACurrentMediaTime()};
 }
 
-void WindowManager::advanceWindowAnimation(ClientWindow& window, double now) {
+void WindowManager::advanceWindowAnimation(ClientWindow& window, double now, float speed, bool enabled) {
     if (!window.positionAnimation) return;
-    constexpr double duration = 0.36;
     auto& transition = *window.positionAnimation;
+    if (!enabled) {
+        window.virtualRect.x = transition.target.x;
+        window.virtualRect.y = transition.target.y;
+        window.lastProgrammaticMoveTime = now;
+        window.positionAnimation.reset();
+        return;
+    }
+    const double duration = 0.36 / std::clamp(static_cast<double>(speed), 0.1, 10.0);
     const double t = std::clamp((now - transition.startTime) / duration, 0.0, 1.0);
     const double progress = t * t * t * (10 + t * (-15 + t * 6));
     window.virtualRect.x = static_cast<float>(
@@ -789,7 +797,8 @@ void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
             physical.w = static_cast<float>(size.width);
             physical.h = static_cast<float>(size.height);
         }
-        (void)m_renderer.acceptNativeGeometry(*window, physical, display->state());
+        (void)m_renderer.acceptApplicationGeometry(*window, physical, display->state(),
+                                                   m_yabaiBackend.hasTransform(window->wid()));
         return;
     }
 }
@@ -946,7 +955,10 @@ bool WindowManager::beginDragEverywhere(core::Point pointer) {
     m_draggedWindowDisplayId = displayForWindow(m_draggedWindow->ref()).id();
     m_dragEverywhereMoved = false;
     const core::Rect physical = displayForWindow(m_draggedWindow->ref()).state().virtualToPhysical(m_draggedWindow->virtualRect);
-    m_dragPointerOffset = {pointer.x - physical.x, pointer.y - physical.y};
+    CGPoint visualOrigin{physical.x, physical.y};
+    (void)readWindowPosition(m_draggedWindow->ref(), m_draggedWindow->wid(), visualOrigin);
+    m_dragPointerOffset = {pointer.x - static_cast<float>(visualOrigin.x),
+                           pointer.y - static_cast<float>(visualOrigin.y)};
     m_draggedWindow->positionAnimation.reset();
     return true;
 }

@@ -1,0 +1,30 @@
+{
+  "assistance": "ai",
+  "base": "2fdfeb46a8eb41bded9183b06a08dafadb4f1006",
+  "id": "99c2df04391f416885358b44599ae955",
+  "paths": [
+    "config/minfwm.toml.example",
+    "docs/wiki/Acceptance-macos.md",
+    "docs/wiki/Configuration.md",
+    "src/cli/main.mm",
+    "src/core/DisplayState.cpp",
+    "src/core/DisplayState.hpp",
+    "src/core/WindowOwnership.hpp",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/WindowPool.hpp",
+    "src/daemon/WindowRenderer.hpp",
+    "src/daemon/WindowRenderer.mm",
+    "tests/GeometryTests.cpp",
+    "tests/WindowRendererTests.mm",
+    "tests/YabaiSATests.mm"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}

@@ -47,8 +47,23 @@ bool DisplayState::requestZoom(float delta, Point anchor) noexcept {
     return true;
 }
 
-void DisplayState::advanceZoom(double elapsed) noexcept {
+void DisplayState::advanceZoom(double elapsed, float animationSpeed, bool animationsEnabled) noexcept {
+    if (!animationsEnabled) {
+        if (m_return) {
+            m_camera.setPosition(m_return->targetCamera.x, m_return->targetCamera.y);
+            m_scale = 1;
+            m_targetScale = 1;
+            m_return.reset();
+        } else if (m_cameraTransition) {
+            m_camera.setPosition(m_cameraTransition->target.x, m_cameraTransition->target.y);
+            m_cameraTransition.reset();
+        }
+        if (m_scale != m_targetScale) (void)setScaleAt(m_targetScale, m_zoomAnchor);
+        return;
+    }
     if (!std::isfinite(elapsed) || elapsed <= 0) return;
+    if (!std::isfinite(animationSpeed) || animationSpeed <= 0) animationSpeed = 1;
+    elapsed *= animationSpeed;
     if (m_return) {
         constexpr double duration = 0.36;
         auto& transition = *m_return;

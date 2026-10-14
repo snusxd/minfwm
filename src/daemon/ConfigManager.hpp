@@ -11,6 +11,8 @@ struct ConfigSnapshot {
     bool invertZoomScrollDirection = false;
     bool rewindOnFocus = true;
     bool centerOnCmdTab = true;
+    bool animationsEnabled = true;
+    float animationSpeed = 1.0f;
     std::string zoomedEscCenter = "screen";
     std::string multiDisplayMode = "isolated";
     float mouseMovementMultiplier = 1.0f;

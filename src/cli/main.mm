@@ -86,7 +86,7 @@ int main(int argc, const char * argv[]) {
 
         const auto command = parsed.command->command;
         if (command == minfwm::ParsedCommandLine::Command::STATUS) {
-            std::cout << "minfwmd: " << minfwm::daemonStatus() << '\n';
+            std::cout << "minfwm daemon: " << minfwm::daemonStatus() << '\n';
             return 0;
         }
         if (command == minfwm::ParsedCommandLine::Command::VERSION) {

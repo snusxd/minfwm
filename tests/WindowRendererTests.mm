@@ -233,6 +233,50 @@ void testApplicationCorrectsPositionLater() {
     expect(!renderer.render(window, {100, -120, 640, 480}, 4.3).succeeded(), "failed AX fallback rejects late-clamped target");
 }
 
+void testLateCorrectionAboveMenuBarKeepsTransform() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    bool matches = true;
+    ClientWindow window(nullptr, 43);
+    initializeWindow(window);
+    window.layerAttempted = true;
+    WindowRenderer renderer(ax, sa, [&](AXUIElementRef, uint32_t, int, int) { return matches; });
+    expect(renderer.render(window, {100, -120, 640, 480}, 1).succeeded(),
+           "above-bar window is initially presented with a transform");
+    matches = false;
+    expect(renderer.render(window, {100, -120, 640, 480}, 1.3).succeeded(),
+           "late correction retries the presentation transform once");
+    expect(sa.calls == std::vector<std::string>{"move", "move"} && ax.calls.empty(),
+           "late correction above the menu bar never resets the transform or moves through AX");
+    expect(!renderer.render(window, {100, -120, 640, 480}, 1.6).succeeded(),
+           "a second late correction rejects the target without a movement loop");
+    expect(sa.calls == std::vector<std::string>{"move", "move"} && ax.calls.empty(),
+           "rejected above-bar target remains transformed without AX flicker");
+}
+
+void testFailedTransformNeverFallsBackToAXOutsideNativeBounds() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    sa.moveCode = BackendCode::failed;
+    ClientWindow window(nullptr, 44);
+    initializeWindow(window);
+    WindowRenderer renderer(ax, sa);
+    expect(!renderer.render(window, {100, -120, 640, 480}, 1).succeeded(),
+           "a failed above-bar transform reports a failed presentation");
+    expect(ax.calls.empty(), "failed above-bar transform does not ask AX to clamp the native frame");
+    expect(std::isnan(window.lastRenderedX) && !window.rejectedPosition,
+           "failed transformed target remains eligible for retry after backoff");
+    sa.moveCode = BackendCode::ok;
+    const auto callsBeforeBackoff = sa.calls;
+    expect(!renderer.render(window, {100, -120, 640, 480}, 1.1).succeeded() &&
+           sa.calls == callsBeforeBackoff,
+           "transient SA failure is not retried during the short backoff");
+    expect(renderer.render(window, {100, -120, 640, 480}, 1.3).succeeded() &&
+           sa.calls.size() >= 2 && sa.calls[0] == "move" && sa.calls[1] == "move" &&
+           std::find(ax.calls.begin(), ax.calls.end(), "move") == ax.calls.end(),
+           "same target recovers after transient SA failure without AX clamping");
+}
+
 void testTransformLifecycle() {
     RecordingBackend ax, sa;
     sa.transforms = true;
@@ -381,6 +425,31 @@ void testNativeDropSurvivesNextPan() {
            "invalid native observation leaves canvas position intact");
 }
 
+void testApplicationNotificationCannotAdoptCameraTransform() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    ClientWindow window(nullptr, 78);
+    initializeWindow(window);
+    core::DisplayState state({1, {0, 0, 1920, 1080}});
+    WindowRenderer renderer(ax, sa);
+    const auto initial = window.virtualRect;
+    const core::Rect staleVisualFrame{1200, 100, 700, 500};
+    expect(renderer.acceptApplicationGeometry(window, staleVisualFrame, state, true),
+           "application resize notification can still update window dimensions");
+    expect(window.virtualRect.x == initial.x && window.virtualRect.y == initial.y,
+           "AX notification while transformed cannot turn camera movement into a canvas move");
+    expect(window.virtualRect.w == 700 && window.virtualRect.h == 500,
+           "real application resize is preserved while the presentation is transformed");
+    expect(!renderer.acceptApplicationGeometry(window, {1200, 100, NAN, 500}, state, true) &&
+           window.virtualRect.w == 700,
+           "invalid transformed resize cannot corrupt canvas geometry");
+    state.camera().setPosition(50, -20);
+    expect(renderer.acceptApplicationGeometry(window, {300, 200, 700, 500}, state, false),
+           "untransformed application movement is accepted within its existing canvas");
+    expect(window.virtualRect.x == 350 && window.virtualRect.y == 180,
+           "untransformed application geometry uses the owner display camera");
+}
+
 void testVisibleFrameReturnsToNativeGeometry() {
     RecordingBackend ax, sa;
     sa.transforms = true;
@@ -401,6 +470,34 @@ void testVisibleFrameReturnsToNativeGeometry() {
     renderer.render(window, {500, 200, 640, 480}, 3);
     expect(sa.calls.size() >= 2 && sa.calls[0] == "native" && sa.calls[1] == "move",
            "failed native handoff retains transform fallback");
+}
+
+void testNativeHandoffAfterDragWithoutCoordinateChange() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    ClientWindow window(nullptr, 79);
+    initializeWindow(window);
+    window.layerAttempted = true;
+    WindowRenderer renderer(ax, sa, [](AXUIElementRef, uint32_t, int, int) { return true; });
+    expect(renderer.render(window, {300, 200, 640, 480}, 1).succeeded() && sa.transformed,
+           "drag presentation initially uses a transform");
+    sa.calls.clear();
+    window.preferNativePosition = true;
+    expect(renderer.render(window, {300, 200, 640, 480}, 2).succeeded(),
+           "ending a drag can hand off to native geometry at the same position");
+    expect(!sa.calls.empty() && sa.calls.front() == "native" && !sa.transformed,
+           "same-coordinate handoff restores native hover hit testing");
+
+    window.preferNativePosition = false;
+    renderer.render(window, {300, 200, 640, 480}, 3);
+    sa.nativeCode = BackendCode::failed;
+    window.preferNativePosition = true;
+    sa.calls.clear();
+    renderer.render(window, {300, 200, 640, 480}, 4);
+    const auto failedHandoffCalls = sa.calls;
+    renderer.render(window, {300, 200, 640, 480}, 4.1);
+    expect(sa.calls == failedHandoffCalls,
+           "failed same-coordinate native handoff is not retried every frame");
 }
 }
 
@@ -453,11 +550,15 @@ int main() {
     testRestoreFailures();
     testUnverifiedMoveIsRetried();
     testApplicationCorrectsPositionLater();
+    testLateCorrectionAboveMenuBarKeepsTransform();
+    testFailedTransformNeverFallsBackToAXOutsideNativeBounds();
     testTransformLifecycle();
     testRejectedMovementDoesNotLoop();
     testPixelCacheAndOffscreenTranslation();
     testFailedParkingDoesNotLoop();
     testNativeDropSurvivesNextPan();
+    testApplicationNotificationCannotAdoptCameraTransform();
     testVisibleFrameReturnsToNativeGeometry();
+    testNativeHandoffAfterDragWithoutCoordinateChange();
     return failures == 0 ? 0 : 1;
 }

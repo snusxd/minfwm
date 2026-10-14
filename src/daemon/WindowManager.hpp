@@ -73,7 +73,8 @@ public:
     void updateWindows(int64_t displayId = 0);
     void adoptWindow(Display& display, const std::shared_ptr<ClientWindow>& window);
     void centerWindow(std::shared_ptr<ClientWindow> window);
-    void advanceWindowAnimation(ClientWindow& window, double now);
+    void advanceWindowAnimation(ClientWindow& window, double now, float speed = 1.0f,
+                                bool enabled = true);
     bool toggleFocusedWindowPin();
     void centerCameraToFocusedWindow();
     void centerFocusedWindowToCamera();

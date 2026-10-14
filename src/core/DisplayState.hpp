@@ -23,7 +23,8 @@ public:
     void cancelCameraAnimation() noexcept;
     bool setScaleAt(float scale, Point physicalAnchor) noexcept;
     bool requestZoom(float scrollDelta, Point physicalAnchor) noexcept;
-    void advanceZoom(double elapsedSeconds) noexcept;
+    void advanceZoom(double elapsedSeconds, float animationSpeed = 1.0f,
+                     bool animationsEnabled = true) noexcept;
     void resetZoom(Point physicalAnchor) noexcept;
     bool beginReturn(std::optional<Point> targetCamera = {}, std::optional<Point> physicalAnchor = {}) noexcept;
     [[nodiscard]] bool returning() const noexcept { return m_return.has_value(); }

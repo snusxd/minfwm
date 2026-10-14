@@ -36,6 +36,7 @@ BackendResult WindowRenderer::suspend(ClientWindow& window, double now) {
     window.lastProgrammaticMoveTime = now;
     window.applicationSuspended = true;
     window.nativePresentationChecked = false;
+    window.nativeHandoffAttempted = false;
     return result;
 }
 
@@ -105,7 +106,22 @@ bool WindowRenderer::acceptNativeGeometry(ClientWindow& window, core::Rect physi
     window.positionRetryTime = 0;
     window.hideRetryTime = 0;
     window.lastProgrammaticMoveTime = 0;
+    window.nativeHandoffAttempted = false;
     return true;
+}
+
+bool WindowRenderer::acceptApplicationGeometry(ClientWindow& window, core::Rect physical,
+                                               const core::DisplayState& state, bool transformed) {
+    if (transformed) {
+        // AX movement notifications can arrive after a camera transform. Their
+        // screen position is a presentation coordinate, not a user move.
+        if (!std::isfinite(physical.w) || !std::isfinite(physical.h) ||
+            physical.w <= 0 || physical.h <= 0) return false;
+        window.virtualRect.w = physical.w;
+        window.virtualRect.h = physical.h;
+        return true;
+    }
+    return acceptNativeGeometry(window, physical, state);
 }
 
 BackendResult WindowRenderer::move(ClientWindow& window, int x, int y) {
@@ -121,6 +137,7 @@ BackendResult WindowRenderer::move(ClientWindow& window, int x, int y) {
     }
     const BackendResult result = m_yabai.move(window.ref(), window.wid(), x, y);
     if (result.succeeded()) return result;
+    if (m_yabai.usesTransforms() && !window.preferNativePosition) return result;
     (void)resetTransform(window);
     return m_ax.move(window.ref(), window.wid(), x, y);
 }
@@ -169,19 +186,28 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
         if (window.rejectedPosition->x == x && window.rejectedPosition->y == y) return {BackendCode::failed};
         window.rejectedPosition.reset();
     }
+    if (!window.preferNativePosition) window.nativeHandoffAttempted = false;
+    const bool needsNativeHandoff = window.preferNativePosition && m_yabai.usesTransforms() &&
+        m_yabai.hasTransform(window.wid()) && !window.nativeHandoffAttempted;
     const bool geometryDirty = window.isHidden || window.needsGeometryRestore ||
-        window.lastRenderedX != x || window.lastRenderedY != y;
+        window.lastRenderedX != x || window.lastRenderedY != y || needsNativeHandoff;
     if (!geometryDirty && window.positionNeedsVerification && now >= window.positionVerificationTime) {
         const bool matched = m_checkPosition && m_checkPosition(window.ref(), window.wid(), x, y);
         if (matched) {
             window.positionNeedsVerification = false;
         } else {
             // AppKit may correct the position after the synchronous SA readback.
-            // Attempt AX once, then stop fighting an application that constrains
-            // the frame. A new camera target allows movement again.
-            (void)resetTransform(window);
-            const bool recovered = !window.positionFallbackAttempted &&
-                m_ax.move(window.ref(), window.wid(), x, y).succeeded();
+            // AX cannot place a frame above the menu bar or across a display
+            // edge. Retry the transform there without exposing the native frame.
+            bool recovered = false;
+            if (!window.positionFallbackAttempted) {
+                if (m_yabai.usesTransforms() && !window.preferNativePosition) {
+                    recovered = m_yabai.move(window.ref(), window.wid(), x, y).succeeded();
+                } else {
+                    (void)resetTransform(window);
+                    recovered = m_ax.move(window.ref(), window.wid(), x, y).succeeded();
+                }
+            }
             window.positionFallbackAttempted = true;
             if (!recovered) {
                 window.positionNeedsVerification = false;
@@ -200,6 +226,7 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
 
     window.lastProgrammaticMoveTime = now;
     if (geometryDirty) {
+        if (window.preferNativePosition && m_yabai.usesTransforms()) window.nativeHandoffAttempted = true;
         if (window.isAXHidden) {
             const BackendResult shown = m_ax.setHidden(window.ref(), window.wid(), false);
             if (!shown.succeeded()) return shown;
@@ -223,7 +250,8 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
             // Do not reuse the previously cached position on the next render.
             invalidatePosition(window);
             window.positionNeedsVerification = false;
-            if (!window.needsGeometryRestore) {
+            if (!window.needsGeometryRestore &&
+                !(m_yabai.usesTransforms() && !window.preferNativePosition)) {
                 window.rejectedPosition = core::Point{static_cast<float>(x), static_cast<float>(y)};
             }
             window.positionRetryTime = now + 0.25;

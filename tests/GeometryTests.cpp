@@ -33,6 +33,7 @@ int main() {
     using minfwm::core::Rect;
     using minfwm::core::VisibilityPolicy;
     using minfwm::core::shouldTransferWindow;
+    using minfwm::core::shouldPreferNativePosition;
     using minfwm::core::frameFitsDisplay;
     using minfwm::core::nearestDisplay;
 
@@ -110,6 +111,18 @@ int main() {
            "a window ending at its owner display edge can use native positioning");
     expect(!frameFitsDisplay({1281, 100, 640, 480}, {0, 0, 1920, 1080}),
            "a window entering the adjacent monitor cannot switch to native positioning");
+    expect(!shouldPreferNativePosition({1281, 100, 640, 480}, {0, 0, 1920, 1080},
+                                      {0, 0, 1920, 1040}),
+           "unfocused windows use presentation transforms when native positioning is unsuitable");
+    expect(!shouldPreferNativePosition({100, -15, 640, 480}, {0, -30, 1920, 1080},
+                                      {0, 0, 1920, 1040}),
+           "focused windows above the menu bar keep their presentation transform");
+    expect(shouldPreferNativePosition({100, 100, 640, 480}, {0, -30, 1920, 1080},
+                                     {0, 0, 1920, 1040}),
+           "focused windows in usable bounds can use native positioning for input hit testing");
+    expect(!shouldPreferNativePosition({-1900, -315, 640, 480}, {-1920, -330, 1920, 1080},
+                                      {-1920, -300, 1920, 1040}),
+           "focused windows on a negative-origin display also respect its menu bar");
     const DisplayGeometry adjacentDisplays[] = {{1, {0, 0, 1920, 1080}}, {2, {1920, 0, 1920, 1080}}};
     const Rect partlyDragged{1500, 100, 640, 480};
     expect(nearestDisplay(adjacentDisplays, {1950, 200}) == 2 &&
@@ -122,6 +135,14 @@ int main() {
     const Point projectedOrigin = leftCanvas.virtualToPhysical(draggedOrigin);
     expectNear(projectedOrigin.x + grabOffset.x, dragPointer.x,
                "absolute pointer drag keeps the grabbed point under the cursor across displays");
+    const Point actualVisualOrigin{1450, 100};
+    const Point pointerOnWindow{1490, 130};
+    const Point actualGrabOffset{pointerOnWindow.x - actualVisualOrigin.x,
+                                 pointerOnWindow.y - actualVisualOrigin.y};
+    const Point unchangedDrag = leftCanvas.physicalToVirtual(
+        Point{pointerOnWindow.x - actualGrabOffset.x, pointerOnWindow.y - actualGrabOffset.y});
+    expectNear(leftCanvas.virtualToPhysical(unchangedDrag).x, actualVisualOrigin.x,
+               "drag starts from the observed window frame without an initial cursor jump");
 
     display.saveBookmark(3);
     display.camera().setPosition(0.0f, 0.0f);

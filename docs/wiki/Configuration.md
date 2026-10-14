@@ -26,6 +26,10 @@ trackpad-invert-y = false
 [display]
 multi-display-mode = "isolated"
 
+[animations]
+enable = true
+speed = 1.0
+
 [keybinds]
 super = ["Cmd", "Alt"]
 center-camera-to-focus = ["Super", "F"]
@@ -49,6 +53,8 @@ bookmarks-goto = ["Super", "Shift"]
 | `camera.trackpad-movement-multiplier` | `1.0` | Scale camera movement while panning with three fingers on the trackpad. Must be finite and non-negative. |
 | `camera.trackpad-invert-x` | `false` | Reverse horizontal camera movement for three-finger trackpad panning. |
 | `camera.trackpad-invert-y` | `false` | Reverse vertical camera movement for three-finger trackpad panning. |
+| `animations.enable` | `true` | Enable camera, zoom, and window movement animations. |
+| `animations.speed` | `1.0` | Animation speed multiplier: `2.0` is twice as fast and `0.5` is half speed. Must be between `0.1` and `10`. |
 | `multi-display-mode` | `"isolated"` | Camera coordination policy for displays. |
 | `keybinds.super` | `["Cmd", "Alt"]` | `Super` modifier chord for pan, zoom, and pin. Supported values: `Cmd`, `Alt`, `Shift`, `Ctrl`. |
 | `keybinds.center-camera-to-focus` | `["Super", "F"]` | Move the camera to center the focused window. |

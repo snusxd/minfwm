@@ -22,4 +22,11 @@ namespace minfwm::core {
         frame.right() <= bounds.right() && frame.bottom() <= bounds.bottom();
 }
 
+[[nodiscard]] inline bool shouldPreferNativePosition(Rect frame, Rect displayBounds,
+                                                     Rect usableBounds) noexcept {
+    // AppKit can clamp native frames at the menu bar or a display edge. Focus
+    // cannot override those limits; such positions need a presentation transform.
+    return frameFitsDisplay(frame, displayBounds) && canUseNativePosition(frame, usableBounds);
+}
+
 } // namespace minfwm::core

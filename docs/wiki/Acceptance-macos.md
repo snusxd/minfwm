@@ -10,6 +10,11 @@ are manual-only. Build/CTest success does not prove those interactions.
 - Pan with Super drag; verify focus, pin/unpin, native dragging, and camera
   bookmarks.
 - Check a secondary display with a negative origin and independent cameras.
+- With two displays in isolated mode, pan a focused window above the menu bar
+  and across the edge of its owning display. Verify it does not flicker, clamp,
+  or appear in the other display's camera; only a title-bar drag or drag
+  everywhere should change ownership. After releasing drag everywhere at an
+  unchanged position, verify hover follows the visible window.
 - Connect a display while the daemon is running; verify it gets an independent
   camera, new windows are assigned to it, and native window drags transfer
   ownership between display canvases. Pan a camera until windows pass beyond its
