@@ -40,15 +40,16 @@ socket lives at `$TMPDIR/minfwm.sock`, is user-owned, and is mode `0600`.
 
 ## Configuration and validation
 
-`~/.config/minfwm/minfwm.toml` supports only the keys documented in `README.md`.
+`~/.config/minfwm/minfwm.toml` supports only the keys documented in
+`docs/wiki/Configuration.md`.
 Reload parses a candidate snapshot first and keeps the last valid snapshot on
 failure. Run the CMake build and CTest suite before integration. Use the manual
-matrix in `docs/acceptance-macos.md` for Accessibility, panning, focus,
+matrix in `docs/wiki/Acceptance-macos.md` for Accessibility, panning, focus,
 secondary displays, orderly shutdown, and optional SA behavior.
 
 ## AI workflow entry
 
-Read `AGENTS.md`, then `docs/ai/state.md` and `docs/ai/runbook.md`.
+Read `AGENTS.md` and `docs/wiki/AI-Workflow.md`.
 Antigravity registers `python3 tools/ai_bootstrap.py --tool antigravity`;
 Gemini CLI registers `--tool gemini`. Do not label the harness as another AI.
 Delegate independent tasks to fresh workers and request independent review.

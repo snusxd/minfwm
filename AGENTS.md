@@ -4,7 +4,7 @@
 - `src/core/` contains pure C++20 geometry, camera, display-state, and visibility policy code.
 - `src/daemon/` contains the Objective-C++ `minfwmd` adapter: AX observers, event tap, backends, config, lifecycle, and IPC server.
 - `src/cli/` contains `minfwmc`; `src/common/Protocol.hpp` owns the versioned wire contract.
-- `tests/` contains dependency-free C++/Objective-C++ CTest targets. `docs/` contains ADRs, research, and the acceptance matrix.
+- `tests/` contains dependency-free C++/Objective-C++ CTest targets. `docs/wiki/` contains project documentation.
 - `.agents/skills/` is a pinned, selected AAS subset. Do not add the full catalog.
 
 ## Build, Test, and Development Commands
@@ -33,7 +33,7 @@ ctest --test-dir build --output-on-failure
 
 ## Testing Guidelines
 - Add a focused CTest before changing a wire or pure-core contract. Test malformed frames, partial I/O, invalid config, negative display origins, lifecycle idempotence, and SA packet bytes.
-- Accessibility, WindowServer, CGEventTap, and live SA checks are manual-only; record them using `docs/acceptance-macos.md`.
+- Accessibility, WindowServer, CGEventTap, and live SA checks are manual-only; record them using `docs/wiki/Acceptance-macos.md`.
 
 ## Commits and Pull Requests
 - Use Conventional Commit subjects: `type: short English summary` (`fix: reject malformed IPC frame`).
@@ -45,9 +45,9 @@ ctest --test-dir build --output-on-failure
 - Do not commit credentials, machine-specific paths, SIP changes, or live socket files.
 
 ## Active AI Workflow
-- Start a new chat with `docs/ai/state.md`; open `docs/ai/context-map.md` only when the task touches an unfamiliar subsystem. Read research reports only when relevant.
+- Start a new chat with `docs/wiki/AI-Workflow.md`; open `.agents/skills` guidance only when relevant to the task.
 - Bootstrap once per new checkout/tool with `python3 tools/ai_bootstrap.py --tool codex` (use the actual tool ID). Do not repeat bootstrap or profile/task validation every chat unless setup changed or a tool error needs diagnosis. Never silently overwrite an existing hook manager.
-- `docs/ai/runbook.md` contains operational commands. `CLAUDE.md` is the existing symlink to this file; preserve it.
+- `CLAUDE.md` is the existing symlink to this file; preserve it. Task cards and workflow metadata remain under `docs/ai/` and `.agents/`.
 - Keep routine changes fast: one fresh worker when isolation helps, a short prompt with goal/acceptance/owned paths/relevant skill, coordinator integration, and the smallest affected check. Do not add planner, researcher, reviewer or tester agents by default.
 - Use task cards and the seven-stage runtime only for multi-step, risky or parallel work. Independent review is risk-triggered or periodic, not a per-change gate. Run full CTest at integration checkpoints and before releases, not after every small edit. Required live macOS evidence still blocks claims that depend on it.
 - Concurrent code writers use separate worktrees. Shared contracts, CMake, instructions and integration state have one writer. Do not stage another task's changes.

@@ -1,0 +1,50 @@
+name: Publish Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/wiki/**'
+      - '.github/workflows/wiki.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Sync Markdown pages to the repository Wiki
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$WIKI_TOKEN" ]]; then
+            echo "Add the WIKI_TOKEN Actions secret with write access to the repository Wiki."
+            exit 1
+          fi
+
+          wiki_dir="$RUNNER_TEMP/wiki"
+          wiki_url="https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          git clone "$wiki_url" "$wiki_dir"
+          find "$wiki_dir" -maxdepth 1 -type f -name '*.md' -delete
+          cp docs/wiki/*.md "$wiki_dir/"
+
+          git -C "$wiki_dir" config user.name "github-actions[bot]"
+          git -C "$wiki_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$wiki_dir" add -- '*.md'
+          if git -C "$wiki_dir" diff --cached --quiet; then
+            echo "Wiki is already up to date."
+            exit 0
+          fi
+          git -C "$wiki_dir" commit -m "docs: sync repository Wiki"
+          git -C "$wiki_dir" push

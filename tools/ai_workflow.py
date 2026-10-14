@@ -350,7 +350,7 @@ def packet(rt, args):
     task = rt.task(args.task)
     rt.validate()
     result = {key: task[key] for key in ('id', 'revision', 'title', 'stage', 'base_sha', 'plan', 'spec', 'dependencies', 'owned_paths', 'read_set', 'skills', 'manual', 'execution')}
-    result.update(role=args.role, instructions=['AGENTS.md', 'docs/ai/task-runtime.md'],
+    result.update(role=args.role, instructions=['AGENTS.md', 'docs/wiki/AI-Workflow.md'],
                   dispatch='Coordinator must spawn a fresh host subagent and record its actual ID with claim; this CLI does not spawn agents.',
                   access='read-only' if args.role == 'reviewer' else 'owned paths only',
                   rules=['Read the referenced plan and applicable scoped AGENTS.md files.', 'Return a proposal with evidence; only the coordinator changes stage.', 'Reviewer is read-only and must differ from the worker.'])
