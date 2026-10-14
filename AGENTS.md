@@ -3,7 +3,7 @@
 ## Project Structure
 - `src/core/` contains pure C++20 geometry, camera, display-state, and visibility policy code.
 - `src/daemon/` contains the Objective-C++ `minfwmd` adapter: AX observers, event tap, backends, config, lifecycle, and IPC server.
-- `src/cli/` contains `minfwmc`; `src/common/Protocol.hpp` owns the versioned wire contract.
+- `src/cli/` contains `minfwm` and its legacy `minfwmc` alias; `src/common/Protocol.hpp` owns the versioned wire contract.
 - `tests/` contains dependency-free C++/Objective-C++ CTest targets. `docs/wiki/` contains project documentation.
 - `.agents/skills/` is a pinned, selected AAS subset. Do not add the full catalog.
 
@@ -13,8 +13,8 @@ cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ./build/minfwmd
-./build/minfwmc reload
-./build/minfwmc camera move --x 100 --y 0
+./build/minfwm reload
+./build/minfwm camera move --x 100 --y 0
 ```
 - `minfwmd` requires Accessibility permission. Yabai SA is optional; the AX backend must work without SIP changes.
 - The Unix socket is created as `$TMPDIR/minfwm.sock` with user ownership and mode `0600`.

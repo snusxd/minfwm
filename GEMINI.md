@@ -29,8 +29,8 @@ origins. Native macOS Spaces are intentionally not implemented in phase one.
 Use:
 
 ```bash
-./build/minfwmc reload
-./build/minfwmc camera move --x 100 --y 0
+./build/minfwm reload
+./build/minfwm camera move --x 100 --y 0
 ```
 
 The `MFWM` version-1 frame has a little-endian command and payload length capped

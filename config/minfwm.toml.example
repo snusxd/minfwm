@@ -1,4 +1,4 @@
-# Copy to ~/.config/minfwm/minfwm.toml and run minfwmc reload.
+# Copy to ~/.config/minfwm/minfwm.toml and run minfwm reload.
 
 # Defaults used when an option is omitted:
 # enable-window-shadows = false

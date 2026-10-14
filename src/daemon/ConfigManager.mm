@@ -142,20 +142,23 @@ bool readWhitelist(const TomlTable& root, const TomlTable* table,
 }
 
 bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
-    if (!rejectUnknownKeys(root, {"window", "zoom", "display", "keybinds"},
+    if (!rejectUnknownKeys(root, {"window", "zoom", "display", "keybinds", "pins"},
                            {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
-                            "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
+                            "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior",
+                            "always-on-top"}, error)) return false;
 
     const TomlTable* window = tableAt(root, "window", error);
     const TomlTable* zoom = tableAt(root, "zoom", error);
     const TomlTable* display = tableAt(root, "display", error);
     const TomlTable* keybinds = tableAt(root, "keybinds", error);
+    const TomlTable* pins = tableAt(root, "pins", error);
     if (!error.empty()) return false;
 
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
     if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center"}, error)) return false;
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds", {}, error)) return false;
+    if (pins && !rejectUnknownKeys(*pins, "pins", {"always-on-top"}, error)) return false;
 
     if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
         !readBool(root, zoom, "invert-zoom-scroll-direction", candidate.invertZoomScrollDirection, error) ||
@@ -163,7 +166,8 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readString(root, display, "multi-display-mode", candidate.multiDisplayMode, error) ||
         !readOverscan(root, window, candidate.overscanBufferPx, error) ||
         !readWhitelist(root, window, candidate.whitelist, error) ||
-        !readString(root, window, "spawn-behavior", candidate.spawnBehavior, error)) {
+        !readString(root, window, "spawn-behavior", candidate.spawnBehavior, error) ||
+        !readBool(root, pins, "always-on-top", candidate.pinsAlwaysOnTop, error)) {
         return false;
     }
 

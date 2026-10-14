@@ -1,0 +1,17 @@
+{
+  "assistance": "ai",
+  "base": "04d42cf1c6c8f67d56d13d490c9b813a12acb014",
+  "id": "2ebdeb0cde614d0894b7eb251ade43f5",
+  "paths": [
+    "AGENTS.md",
+    "GEMINI.md",
+    "README.md",
+    "config/minfwm.toml.example",
+    "src/daemon/ConfigManager.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-REPO-CLEANUP",
+  "tools": [
+    "codex"
+  ]
+}
