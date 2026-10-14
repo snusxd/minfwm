@@ -6,6 +6,9 @@
 #include "../core/PanGesture.hpp"
 #include <bitset>
 
+@class NSPanel;
+@class NSImageView;
+
 namespace minfwm {
 
 class InputInterceptor {
@@ -19,6 +22,7 @@ public:
 private:
     static CGEventRef eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
     static CGEventRef scrollTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
+    void updateCursor(bool superHeld, bool dragging, CGPoint pointer);
     
     CFRef<CFMachPortRef> m_eventTap;
     CFRef<CFRunLoopSourceRef> m_runLoopSource;
@@ -28,6 +32,12 @@ private:
     uint64_t m_overviewButtons = 0;
     std::bitset<256> m_overviewKeys;
     bool m_zoomScrollCaptured = false;
+    NSPanel* m_cursorOverlay = nil;
+    NSImageView* m_cursorImageView = nil;
+    bool m_backgroundCursorHidingEnabled = false;
+    bool m_systemCursorHidden = false;
+    bool m_cursorUnavailableForHold = false;
+    bool m_closedHandCursorActive = false;
 };
 
 } // namespace minfwm

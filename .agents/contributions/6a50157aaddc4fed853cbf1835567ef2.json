@@ -1,0 +1,14 @@
+{
+  "assistance": "ai",
+  "base": "86800b5464c03f781535a240148c7e2a59fee0ba",
+  "id": "6a50157aaddc4fed853cbf1835567ef2",
+  "paths": [
+    "src/daemon/InputInterceptor.hpp",
+    "src/daemon/InputInterceptor.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-CURSOR-HAND",
+  "tools": [
+    "codex"
+  ]
+}

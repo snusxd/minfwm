@@ -1,9 +1,11 @@
 #import "InputInterceptor.hpp"
 #import "WindowManager.hpp"
 #import "ConfigManager.hpp"
+#import <AppKit/AppKit.h>
 #import <iostream>
 #include <cmath>
 #include <algorithm>
+#include <dlfcn.h>
 
 namespace {
 
@@ -29,6 +31,21 @@ bool hasUnconfiguredPinModifier(CGEventFlags flags, const std::vector<std::strin
             std::find(modifiers.begin(), modifiers.end(), "Ctrl") == modifiers.end());
 }
 
+bool setCursorHidingInBackground(bool enabled) {
+    using ConnectionId = int32_t;
+    using MainConnectionIdFunction = ConnectionId (*)();
+    using SetConnectionPropertyFunction = int32_t (*)(ConnectionId, ConnectionId, CFStringRef, CFTypeRef);
+
+    auto mainConnection = reinterpret_cast<MainConnectionIdFunction>(dlsym(RTLD_DEFAULT, "CGSMainConnectionID"));
+    auto setProperty = reinterpret_cast<SetConnectionPropertyFunction>(
+        dlsym(RTLD_DEFAULT, "CGSSetConnectionProperty"));
+    if (!mainConnection || !setProperty) return false;
+
+    const ConnectionId connection = mainConnection();
+    return setProperty(connection, connection, CFSTR("SetsCursorInBackground"),
+                       enabled ? kCFBooleanTrue : kCFBooleanFalse) == 0;
+}
+
 } // namespace
 
 namespace minfwm {
@@ -42,19 +59,22 @@ InputInterceptor::~InputInterceptor() {
 bool InputInterceptor::start() {
     if (m_eventTap) return true;
     std::cout << "InputInterceptor: Starting..." << std::endl;
+    NSApplication* application = [NSApplication sharedApplication];
+    [application setActivationPolicy:NSApplicationActivationPolicyAccessory];
 
     // We now listen to Down, Up, and Drag to fully own the gesture
-    CGEventMask eventMask = (1 << kCGEventLeftMouseDown) | 
-                            (1 << kCGEventLeftMouseUp) | 
-                            (1 << kCGEventLeftMouseDragged) | 
-                            (1 << kCGEventFlagsChanged) | 
+    CGEventMask eventMask = (1 << kCGEventMouseMoved) |
+                            (1 << kCGEventLeftMouseDown) |
+                            (1 << kCGEventLeftMouseUp) |
+                            (1 << kCGEventLeftMouseDragged) |
+                            (1 << kCGEventFlagsChanged) |
                             (1 << kCGEventKeyDown) |
                             (1 << kCGEventKeyUp) |
                             (1 << kCGEventRightMouseDown) | (1 << kCGEventRightMouseUp) |
                             (1 << kCGEventRightMouseDragged) |
                             (1 << kCGEventOtherMouseDown) | (1 << kCGEventOtherMouseUp) |
                             (1 << kCGEventOtherMouseDragged);
-                            
+
     m_eventTap = CFRef<CFMachPortRef>::adopt(CGEventTapCreate(
         kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, eventMask, eventTapCallback, this));
 
@@ -96,6 +116,13 @@ bool InputInterceptor::start() {
 
 void InputInterceptor::stop() {
     m_panGesture.reset();
+    updateCursor(false, false, CGPointZero);
+    if (m_cursorOverlay) {
+        [m_cursorOverlay close];
+        [m_cursorOverlay release];
+        m_cursorOverlay = nil;
+        m_cursorImageView = nil;
+    }
     m_overviewButtons = 0;
     m_overviewKeys.reset();
     m_zoomScrollCaptured = false;
@@ -118,6 +145,98 @@ void InputInterceptor::stop() {
     }
 }
 
+void InputInterceptor::updateCursor(bool superHeld, bool dragging, CGPoint pointer) {
+    if (!superHeld) {
+        if (m_cursorOverlay) [m_cursorOverlay orderOut:nil];
+        if (m_systemCursorHidden) {
+            CGDisplayShowCursor(kCGDirectMainDisplay);
+            m_systemCursorHidden = false;
+        }
+        if (m_backgroundCursorHidingEnabled) {
+            (void)setCursorHidingInBackground(false);
+            m_backgroundCursorHidingEnabled = false;
+        }
+        m_cursorUnavailableForHold = false;
+        m_closedHandCursorActive = false;
+        return;
+    }
+    if (m_cursorUnavailableForHold) return;
+
+    if (!m_cursorOverlay) {
+        m_cursorOverlay = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 32, 32)
+            styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+        [m_cursorOverlay setOpaque:NO];
+        [m_cursorOverlay setBackgroundColor:[NSColor clearColor]];
+        [m_cursorOverlay setHasShadow:NO];
+        [m_cursorOverlay setIgnoresMouseEvents:YES];
+        [m_cursorOverlay setHidesOnDeactivate:NO];
+        [m_cursorOverlay setReleasedWhenClosed:NO];
+        [m_cursorOverlay setLevel:CGWindowLevelForKey(kCGPopUpMenuWindowLevelKey)];
+        [m_cursorOverlay setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces |
+            NSWindowCollectionBehaviorFullScreenAuxiliary];
+
+        m_cursorImageView = [[NSImageView alloc] initWithFrame:NSMakeRect(0, 0, 32, 32)];
+        [m_cursorImageView setImageScaling:NSImageScaleNone];
+        [m_cursorOverlay setContentView:m_cursorImageView];
+        [m_cursorImageView release];
+
+    }
+
+    if (!m_systemCursorHidden) {
+        if (!setCursorHidingInBackground(true)) {
+            std::cerr << "InputInterceptor: background cursor hiding unavailable; hand cursor overlay disabled" << std::endl;
+            m_cursorUnavailableForHold = true;
+            return;
+        }
+        m_backgroundCursorHidingEnabled = true;
+        const CGError hideResult = CGDisplayHideCursor(kCGDirectMainDisplay);
+        if (hideResult != kCGErrorSuccess) {
+            std::cerr << "InputInterceptor: failed to hide system cursor (error " << hideResult << ")" << std::endl;
+            (void)setCursorHidingInBackground(false);
+            m_backgroundCursorHidingEnabled = false;
+            m_cursorUnavailableForHold = true;
+            return;
+        }
+        m_systemCursorHidden = true;
+    }
+
+    if (dragging != m_closedHandCursorActive || ![m_cursorImageView image]) {
+        NSCursor* cursor = dragging ? [NSCursor closedHandCursor] : [NSCursor openHandCursor];
+        NSImage* image = [cursor image];
+        [m_cursorImageView setImage:image];
+        const NSSize imageSize = [image size];
+        if (imageSize.width > 0 && imageSize.height > 0) {
+            [m_cursorOverlay setContentSize:imageSize];
+            [m_cursorImageView setFrame:NSMakeRect(0, 0, imageSize.width, imageSize.height)];
+        }
+        m_closedHandCursorActive = dragging;
+    }
+
+    NSScreen* mainScreen = nil;
+    const CGDirectDisplayID mainDisplay = CGMainDisplayID();
+    for (NSScreen* screen in [NSScreen screens]) {
+        NSNumber* displayNumber = [[screen deviceDescription] objectForKey:@"NSScreenNumber"];
+        if (displayNumber && [displayNumber unsignedIntValue] == mainDisplay) {
+            mainScreen = screen;
+            break;
+        }
+    }
+    if (!mainScreen) mainScreen = [NSScreen mainScreen];
+
+    const CGRect quartzMainBounds = CGDisplayBounds(mainDisplay);
+    const NSRect cocoaMainFrame = [mainScreen frame];
+    const NSPoint cocoaPointer = NSMakePoint(
+        cocoaMainFrame.origin.x + pointer.x - quartzMainBounds.origin.x,
+        NSMaxY(cocoaMainFrame) - (pointer.y - quartzMainBounds.origin.y));
+    NSCursor* cursor = m_closedHandCursorActive ? [NSCursor closedHandCursor] : [NSCursor openHandCursor];
+    const NSPoint hotSpot = [cursor hotSpot];
+    const NSSize imageSize = [[cursor image] size];
+    [m_cursorOverlay setFrameOrigin:NSMakePoint(
+        cocoaPointer.x - hotSpot.x,
+        cocoaPointer.y - imageSize.height + hotSpot.y)];
+    [m_cursorOverlay orderFrontRegardless];
+}
+
 CGEventRef InputInterceptor::scrollTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon) {
     auto* interceptor = static_cast<InputInterceptor*>(refcon);
     if (!interceptor) return event;
@@ -135,6 +254,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     if (!interceptor) return event;
     if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
         interceptor->m_panGesture.reset();
+        interceptor->updateCursor(false, false, CGPointZero);
         WindowManager::instance().setPanning(false);
         WindowManager::instance().endNativeInteraction();
         const CGPoint pointer = event ? CGEventGetLocation(event) : CGPointZero;
@@ -149,7 +269,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
 
     auto& wm = WindowManager::instance();
     const bool usesSuperKey = type == kCGEventScrollWheel || type == kCGEventLeftMouseDown ||
-        type == kCGEventLeftMouseUp || type == kCGEventLeftMouseDragged || type == kCGEventFlagsChanged ||
+        type == kCGEventLeftMouseUp || type == kCGEventLeftMouseDragged || type == kCGEventMouseMoved || type == kCGEventFlagsChanged ||
         type == kCGEventKeyDown;
     const std::vector<std::string> superModifiers = usesSuperKey ?
         ConfigManager::instance().snapshot().superModifiers : std::vector<std::string>{};
@@ -249,12 +369,21 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
             wm.endNativeInteraction();
         }
         wm.setPanning(interceptor->m_panGesture.isPanning());
+        const bool draggingCursor = type == kCGEventLeftMouseDragged ? interceptor->m_panGesture.isPanning() :
+            (type != kCGEventLeftMouseDown && type != kCGEventLeftMouseUp &&
+             interceptor->m_closedHandCursorActive && interceptor->m_panGesture.isPanning());
+        interceptor->updateCursor(modifiersHeld, draggingCursor, location);
         if (!wm.overviewReturning() && update.displayId && (update.delta.x != 0 || update.delta.y != 0)) {
             if (Display* display = wm.displayById(*update.displayId)) {
                 display->camera().move(update.delta.x / display->state().scale(), update.delta.y / display->state().scale());
             }
         }
         if (update.consume || (wm.overviewActive() && type != kCGEventFlagsChanged)) return nullptr;
+    }
+
+    if (type == kCGEventMouseMoved) {
+        interceptor->updateCursor(zoomModifiers,
+            interceptor->m_closedHandCursorActive && interceptor->m_panGesture.isPanning(), location);
     }
 
     if (type == kCGEventKeyDown) {
