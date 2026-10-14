@@ -1,5 +1,14 @@
 # Copy to ~/.config/minfwm/minfwm.toml and run minfwmc reload.
 
+# Defaults used when an option is omitted:
+# enable-window-shadows = false
+# overscan-buffer-px = 500
+# whitelist = ["Terminal", "Music"]
+# spawn-behavior = "center"
+# invert-zoom-scroll-direction = false
+# zoomed-esc-center = "screen"
+# multi-display-mode = "isolated"
+
 [window]
 enable-window-shadows = false
 overscan-buffer-px = 500
@@ -14,3 +23,8 @@ zoomed-esc-center = "screen"
 
 [display]
 multi-display-mode = "isolated"
+
+[keybinds]
+# Cmd+Option + left-drag pans; Cmd+Option + vertical-scroll zooms.
+# Cmd+1..9 loads a bookmark; Cmd+Shift+1..9 saves it.
+# Escape exits overview. These bindings are documented here, not configurable yet.

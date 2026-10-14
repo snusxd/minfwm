@@ -138,18 +138,20 @@ bool readWhitelist(const TomlTable& root, const TomlTable* table,
 }
 
 bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
-    if (!rejectUnknownKeys(root, {"window", "zoom", "display"},
+    if (!rejectUnknownKeys(root, {"window", "zoom", "display", "keybinds"},
                            {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
                             "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
 
     const TomlTable* window = tableAt(root, "window", error);
     const TomlTable* zoom = tableAt(root, "zoom", error);
     const TomlTable* display = tableAt(root, "display", error);
+    const TomlTable* keybinds = tableAt(root, "keybinds", error);
     if (!error.empty()) return false;
 
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
     if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "zoomed-esc-center"}, error)) return false;
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode"}, error)) return false;
+    if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds", {}, error)) return false;
 
     if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
         !readBool(root, zoom, "invert-zoom-scroll-direction", candidate.invertZoomScrollDirection, error) ||

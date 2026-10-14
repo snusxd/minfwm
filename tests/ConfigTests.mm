@@ -86,6 +86,10 @@ int main() {
            "empty whitelist entry is rejected");
     expect(!minfwm::ConfigManager::parseText("[zoom\ninvert-zoom-scroll-direction = true", parsed, error),
            "malformed TOML is rejected");
+    expect(minfwm::ConfigManager::parseText("[keybinds]\n", parsed, error),
+           "document-only keybind category is accepted empty");
+    expect(!minfwm::ConfigManager::parseText("[keybinds]\npan = \"cmd+option\"\n", parsed, error),
+           "undocumented configurable keybinds are rejected");
 
     return failures == 0 ? 0 : 1;
 }
