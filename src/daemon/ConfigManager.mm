@@ -66,6 +66,10 @@ bool readBool(const TomlTable& root, const TomlTable* table, std::string_view ke
     const TomlNode* node = get(root, table, key, error);
     if (!error.empty()) return false;
     if (!node) return true;
+    if (!node->is_boolean()) {
+        error = std::string(key) + " must be a boolean";
+        return false;
+    }
     const auto value = node->value<bool>();
     if (!value) {
         error = std::string(key) + " must be a boolean";
