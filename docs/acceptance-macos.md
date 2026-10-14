@@ -629,3 +629,10 @@ all three visible application windows had matching native/visible baseline
 transforms afterward. This does not validate exact original-frame restoration.
 Evidence: `build/window-lifecycle-after-stop.log`. Subjective third-party zoom
 and continued reopen behavior are pending the next human check.
+
+The user subsequently confirmed PASS for the requested desktop check: overview
+works on already-open windows, old windows move with the camera without manual
+reopening, and zoom continues to work after closing and reopening a window.
+This accepts the lifecycle/startup recovery changes in `70bfbf5` and `3c69900`.
+The daemon remains running with compatible handoff. Atomic handoff and the
+previously reported final-frame flash are not accepted by this confirmation.
