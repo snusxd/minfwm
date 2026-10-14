@@ -36,7 +36,7 @@ const char* errorCodeName(minfwm::ErrorCode error) {
 }
 
 void printUsage() {
-    std::cerr << "Usage: minfwm [start|stop|restart|reload|enable|disable|status|version [--dev]] | camera move --x <value> --y <value>\n";
+    std::cerr << "Usage: minfwm [start|stop|restart|dev-update|reload|enable|disable|status|version [--dev]] | camera move --x <value> --y <value>\n";
 }
 
 std::string latestLocalCommit() {
@@ -83,6 +83,25 @@ int main(int argc, const char * argv[]) {
             std::cout << "minfwm "
                       << (parsed.command->devVersion ? latestLocalCommit() : MINFWM_BUILD_VERSION)
                       << '\n';
+            return 0;
+        }
+        if (command == minfwm::ParsedCommandLine::Command::DEV_UPDATE) {
+            minfwm::IPCClient client;
+            const auto result = client.sendMessage(minfwm::makeSaveLayoutRequest());
+            if (!result.transportSucceeded) {
+                std::cerr << "minfwm: could not save daemon layout: " << result.error << '\n';
+                return 1;
+            }
+            if (result.response.status != minfwm::ResponseStatus::OK) {
+                std::cerr << "minfwm: daemon could not save layout ("
+                          << errorCodeName(result.response.error) << ")\n";
+                return 1;
+            }
+            std::string error;
+            if (!minfwm::controlDaemon("restart", error)) {
+                std::cerr << "minfwm: layout saved, but daemon restart failed: " << error << '\n';
+                return 1;
+            }
             return 0;
         }
         if (command == minfwm::ParsedCommandLine::Command::START ||

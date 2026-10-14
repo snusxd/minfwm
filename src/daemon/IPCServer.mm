@@ -294,6 +294,48 @@ ErrorCode IPCServer::dispatchRequest(const Request& request) {
             }
             return state->result;
         }
+        case Command::SAVE_LAYOUT: {
+            auto state = std::make_shared<MainQueueState>();
+            dispatch_async(dispatch_get_main_queue(), ^{
+                bool cancelled = false;
+                {
+                    std::lock_guard lock(state->mutex);
+                    cancelled = state->cancelled;
+                }
+                if (!cancelled) {
+                    try {
+                        std::cout << "IPCServer: Received SAVE_LAYOUT" << std::endl;
+                        std::string error;
+                        if (!WindowManager::instance().saveLayoutSnapshot(error)) {
+                            std::cerr << "IPCServer: could not save layout: " << error << std::endl;
+                            std::lock_guard lock(state->mutex);
+                            state->result = ErrorCode::INTERNAL;
+                        }
+                    } catch (...) {
+                        std::lock_guard lock(state->mutex);
+                        state->result = ErrorCode::INTERNAL;
+                    }
+                }
+                {
+                    std::lock_guard lock(state->mutex);
+                    state->complete = true;
+                }
+                state->condition.notify_one();
+            });
+
+            std::unique_lock lock(state->mutex);
+            while (!state->complete) {
+                if (state->condition.wait_for(lock, std::chrono::milliseconds(10),
+                                              [&] { return state->complete; })) {
+                    break;
+                }
+                if (!m_running.load()) {
+                    state->cancelled = true;
+                    return ErrorCode::INTERNAL;
+                }
+            }
+            return state->result;
+        }
         case Command::CAMERA_MOVE: {
             float x = 0.0F;
             float y = 0.0F;

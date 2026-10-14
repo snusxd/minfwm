@@ -85,6 +85,15 @@ CommandLineParseResult parseCommandLine(int argc, const char* const* argv) {
         return CommandLineParseResult{parsed, {}};
     }
 
+    if (command == "dev-update") {
+        if (argc != 2) {
+            return invalidArguments("dev-update does not accept arguments");
+        }
+        ParsedCommandLine parsed;
+        parsed.command = ParsedCommandLine::Command::DEV_UPDATE;
+        return CommandLineParseResult{parsed, {}};
+    }
+
     if (command == "start" || command == "stop" || command == "restart" ||
         command == "enable" || command == "disable") {
         if (argc != 2) {

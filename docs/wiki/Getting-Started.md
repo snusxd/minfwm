@@ -29,12 +29,15 @@ Useful commands:
 ./build/minfwm start
 ./build/minfwm stop
 ./build/minfwm restart
+./build/minfwm dev-update
 ./build/minfwm disable
 ./build/minfwm reload
 ./build/minfwm camera move --x 100 --y 0
 ```
 
 `start`, `stop`, and `restart` control the current user's LaunchAgent.
+`dev-update` saves the current virtual window layout and camera, then restarts
+the daemon next to the invoked CLI binary.
 `disable` prevents login startup and stops it. The daemon socket is
 `$TMPDIR/minfwm.sock`, owned by the current user with mode `0600`.
 

@@ -10,6 +10,8 @@
 #include <stdexcept>
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
+#include <sys/stat.h>
 
 namespace minfwm {
 
@@ -33,6 +35,19 @@ bool readAXSize(AXUIElementRef element, CGSize& size) {
     return value && CFGetTypeID(value.get()) == AXValueGetTypeID() &&
            AXValueGetType(static_cast<AXValueRef>(value.get())) == kAXValueTypeCGSize &&
            AXValueGetValue(static_cast<AXValueRef>(value.get()), kAXValueTypeCGSize, &size);
+}
+
+NSString* layoutSnapshotPath() {
+    NSString* support = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
+    NSString* directory = [support stringByAppendingPathComponent:@"minfwm"];
+    return [directory stringByAppendingPathComponent:@"layout.plist"];
+}
+
+bool numberValue(NSDictionary* dictionary, NSString* key, double& value) {
+    id candidate = dictionary[key];
+    if (![candidate isKindOfClass:[NSNumber class]]) return false;
+    value = [candidate doubleValue];
+    return std::isfinite(value);
 }
 
 } // namespace
@@ -79,6 +94,8 @@ bool WindowManager::initialize(bool allowAdministratorLoad) {
         return false;
     }
 
+    restoreLayoutSnapshot();
+
     std::cout << "WindowManager: required Yabai SA backend enabled" << std::endl;
     std::cout << "WindowManager: absolute transforms enabled" << std::endl;
     std::cout << "WindowManager: pinned always-on-top enabled" << std::endl;
@@ -98,6 +115,140 @@ Display* WindowManager::displayById(int64_t id) {
         if (display->id() == id) return display.get();
     }
     return nullptr;
+}
+
+bool WindowManager::saveLayoutSnapshot(std::string& error) {
+    if (!m_initialized) {
+        error = "window manager is not initialized";
+        return false;
+    }
+    if (m_nativeCommitPending) commitNativeInteraction();
+
+    NSMutableArray* displays = [NSMutableArray arrayWithCapacity:m_displays.size()];
+    NSMutableArray* windows = [NSMutableArray array];
+    for (const auto& display : m_displays) {
+        const core::Point camera = display->camera().position();
+        if (!std::isfinite(camera.x) || !std::isfinite(camera.y)) continue;
+        [displays addObject:@{@"id": @(display->id()), @"x": @(camera.x), @"y": @(camera.y)}];
+        for (const auto& window : display->windowPool().windows()) {
+            if (!window || !window->virtualCoordinatesInitialized || window->pid() <= 0 || window->wid() == 0) continue;
+            const core::Rect rect = window->virtualRect;
+            if (!std::isfinite(rect.x) || !std::isfinite(rect.y) ||
+                !std::isfinite(rect.w) || !std::isfinite(rect.h) || rect.w <= 0 || rect.h <= 0) continue;
+            [windows addObject:@{@"display": @(display->id()), @"pid": @(window->pid()),
+                                 @"wid": @(window->wid()), @"x": @(rect.x), @"y": @(rect.y),
+                                 @"w": @(rect.w), @"h": @(rect.h)}];
+        }
+    }
+
+    NSDictionary* snapshot = @{@"version": @1, @"created": @([NSDate date].timeIntervalSince1970),
+                               @"displays": displays, @"windows": windows};
+    NSError* fileError = nil;
+    NSString* path = layoutSnapshotPath();
+    NSString* directory = [path stringByDeletingLastPathComponent];
+    if (![[NSFileManager defaultManager] createDirectoryAtPath:directory
+                                   withIntermediateDirectories:YES
+                                                    attributes:@{NSFilePosixPermissions: @0700}
+                                                         error:&fileError]) {
+        const char* message = fileError.localizedDescription.UTF8String;
+        error = message ? message : "could not create the layout snapshot directory";
+        return false;
+    }
+    if (::chmod(directory.fileSystemRepresentation, S_IRWXU) != 0) {
+        error = "could not secure the layout snapshot directory permissions";
+        return false;
+    }
+
+    NSData* data = [NSPropertyListSerialization dataWithPropertyList:snapshot
+                                                               format:NSPropertyListBinaryFormat_v1_0
+                                                              options:0
+                                                                error:&fileError];
+    if (!data || ![data writeToFile:path options:NSDataWritingAtomic error:&fileError]) {
+        const char* message = fileError.localizedDescription.UTF8String;
+        error = message ? message : "could not write the layout snapshot";
+        return false;
+    }
+    if (::chmod(path.fileSystemRepresentation, S_IRUSR | S_IWUSR) != 0) {
+        error = "could not secure the layout snapshot file permissions";
+        return false;
+    }
+    return true;
+}
+
+void WindowManager::restoreLayoutSnapshot() {
+    NSString* path = layoutSnapshotPath();
+    NSData* data = [NSData dataWithContentsOfFile:path];
+    if (!data) return;
+
+    id propertyList = [NSPropertyListSerialization propertyListWithData:data
+                                                                 options:NSPropertyListImmutable
+                                                                  format:nil
+                                                                   error:nil];
+    if (![propertyList isKindOfClass:[NSDictionary class]]) {
+        std::cerr << "WindowManager: ignoring invalid layout snapshot" << std::endl;
+        (void)[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+        return;
+    }
+
+    NSDictionary* snapshot = (NSDictionary*)propertyList;
+    double version = 0;
+    double created = 0;
+    if (!numberValue(snapshot, @"version", version) || version != 1 ||
+        !numberValue(snapshot, @"created", created) ||
+        std::abs([NSDate date].timeIntervalSince1970 - created) > 300.0) {
+        std::cerr << "WindowManager: ignoring expired or unsupported layout snapshot" << std::endl;
+        (void)[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+        return;
+    }
+
+    id displayValues = snapshot[@"displays"];
+    if ([displayValues isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray*)displayValues) {
+            if (![value isKindOfClass:[NSDictionary class]]) continue;
+            NSDictionary* saved = (NSDictionary*)value;
+            double displayId = 0, x = 0, y = 0;
+            if (!numberValue(saved, @"id", displayId) || !numberValue(saved, @"x", x) ||
+                !numberValue(saved, @"y", y) || displayId < 0 ||
+                displayId >= std::ldexp(1.0, 63) || std::floor(displayId) != displayId ||
+                std::abs(x) > std::numeric_limits<float>::max() ||
+                std::abs(y) > std::numeric_limits<float>::max()) continue;
+            if (Display* display = displayById(static_cast<int64_t>(displayId))) {
+                (void)display->camera().setPosition(static_cast<float>(x), static_cast<float>(y));
+            }
+        }
+    }
+
+    id windowValues = snapshot[@"windows"];
+    if ([windowValues isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray*)windowValues) {
+            if (![value isKindOfClass:[NSDictionary class]]) continue;
+            NSDictionary* saved = (NSDictionary*)value;
+            double displayId = 0, pid = 0, wid = 0, x = 0, y = 0, w = 0, h = 0;
+            if (!numberValue(saved, @"display", displayId) || !numberValue(saved, @"pid", pid) ||
+                !numberValue(saved, @"wid", wid) || !numberValue(saved, @"x", x) ||
+                !numberValue(saved, @"y", y) || !numberValue(saved, @"w", w) ||
+                !numberValue(saved, @"h", h) || displayId < 0 || pid <= 0 || wid <= 0 ||
+                displayId >= std::ldexp(1.0, 63) || std::floor(displayId) != displayId ||
+                pid > std::numeric_limits<pid_t>::max() || wid > std::numeric_limits<uint32_t>::max() ||
+                std::floor(pid) != pid || std::floor(wid) != wid ||
+                w <= 0 || h <= 0 || std::abs(x) > std::numeric_limits<float>::max() ||
+                std::abs(y) > std::numeric_limits<float>::max() ||
+                w > std::numeric_limits<float>::max() || h > std::numeric_limits<float>::max()) continue;
+            const auto key = std::make_tuple(static_cast<int64_t>(displayId), static_cast<pid_t>(pid),
+                                             static_cast<uint32_t>(wid));
+            m_savedWindowLayouts[key] = SavedWindowLayout{
+                core::Rect{static_cast<float>(x), static_cast<float>(y),
+                           static_cast<float>(w), static_cast<float>(h)}};
+        }
+    }
+
+    (void)[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    std::cout << "WindowManager: restored layout snapshot for " << m_savedWindowLayouts.size()
+              << " windows" << std::endl;
+}
+
+void WindowManager::finishLayoutRestore() {
+    m_savedWindowLayouts.clear();
 }
 
 Display& WindowManager::displayForPoint(core::Point point) {
@@ -142,6 +293,7 @@ void WindowManager::shutdown() {
     m_applicationNames.clear();
     m_hiddenApplications.clear();
     m_onscreenWindows.reset();
+    m_savedWindowLayouts.clear();
     m_displays.clear();
     m_initialized = false;
 }
@@ -243,6 +395,13 @@ void WindowManager::adoptWindow(Display& display, const std::shared_ptr<ClientWi
     const auto origin = display.state().physicalToVirtual(core::Point{window->virtualRect.x, window->virtualRect.y});
     window->virtualRect.x = origin.x;
     window->virtualRect.y = origin.y;
+    if (window->pid() > 0 && window->wid() != 0) {
+        const auto key = std::make_tuple(display.id(), window->pid(), window->wid());
+        if (const auto saved = m_savedWindowLayouts.find(key); saved != m_savedWindowLayouts.end()) {
+            window->virtualRect = saved->second.rect;
+            m_savedWindowLayouts.erase(saved);
+        }
+    }
     window->virtualCoordinatesInitialized = true;
     if (window->centerOnAdoption) {
         if (!window->isAuxiliaryWindow) centerWindow(window);

@@ -77,6 +77,7 @@ bool AXObserver::start() {
         }
     }
     m_registrationSucceeded = !registrationFailed;
+    WindowManager::instance().finishLayoutRestore();
     WindowManager::instance().updateWindows();
     return m_registrationSucceeded;
 }

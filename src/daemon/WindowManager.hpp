@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <tuple>
 #include "Camera.hpp"
 #include "WindowPool.hpp"
 #include "../core/DisplayState.hpp"
@@ -53,6 +54,8 @@ public:
 
     bool initialize(bool allowAdministratorLoad = true);
     void shutdown();
+    bool saveLayoutSnapshot(std::string& error);
+    void finishLayoutRestore();
     
     // Get display for a window or camera
     Display& mainDisplay();
@@ -101,6 +104,7 @@ private:
     void addNativeCandidate(const std::shared_ptr<ClientWindow>& window);
     std::shared_ptr<ClientWindow> windowAtPoint(core::Point pointer) const;
     void applyOverviewExit();
+    void restoreLayoutSnapshot();
 
     std::vector<std::unique_ptr<Display>> m_displays;
     bool m_isPanning = false;
@@ -125,6 +129,10 @@ private:
     std::map<pid_t, std::string> m_applicationNames;
     std::set<pid_t> m_hiddenApplications;
     std::optional<std::unordered_set<uint32_t>> m_onscreenWindows;
+    struct SavedWindowLayout {
+        core::Rect rect;
+    };
+    std::map<std::tuple<int64_t, pid_t, uint32_t>, SavedWindowLayout> m_savedWindowLayouts;
     AXBackend m_axBackend;
     YabaiSABackend m_yabaiBackend;
     WindowRenderer m_renderer{m_axBackend, m_yabaiBackend};

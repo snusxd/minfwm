@@ -15,7 +15,8 @@ struct ParsedCommandLine {
         ENABLE,
         DISABLE,
         STATUS,
-        VERSION
+        VERSION,
+        DEV_UPDATE
     };
 
     Command command = Command::RELOAD;

@@ -1,0 +1,22 @@
+{
+  "assistance": "ai",
+  "base": "4333769bb022efc7639b55d06c4dc2c9a582d6a5",
+  "id": "9be48bc3ae754bf09065eec03698ba87",
+  "paths": [
+    "docs/wiki/Getting-Started.md",
+    "src/cli/CommandLine.cpp",
+    "src/cli/CommandLine.hpp",
+    "src/cli/main.mm",
+    "src/common/Protocol.hpp",
+    "src/daemon/AXObserver.mm",
+    "src/daemon/IPCServer.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "tests/IPCProtocolTests.cpp"
+  ],
+  "schema_version": 1,
+  "task": "TASK-DEV-UPDATE",
+  "tools": [
+    "codex"
+  ]
+}
