@@ -1,0 +1,15 @@
+{
+  "assistance": "ai",
+  "base": "79460afce68ca56ff2d89364af965a9adc78eac5",
+  "id": "743750e9fb014221bc169872d9046936",
+  "paths": [
+    "docs/Acceptance-macos.md",
+    "src/daemon/OverviewPreview.mm",
+    "tests/OverviewCaptureLifetimeTests.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-OVERVIEW-PREVIEW-SIZING",
+  "tools": [
+    "codex"
+  ]
+}

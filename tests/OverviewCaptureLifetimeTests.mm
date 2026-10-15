@@ -25,7 +25,10 @@
 @end
 
 static void (^pendingScreenshot)(CGImageRef, NSError*);
+static SCStreamConfiguration* lastCaptureConfiguration;
+static CGRect filterContentRect = CGRectMake(0, 0, 100, 100);
 @interface MinfwmFakeCaptureAPI : NSObject
+@property(readonly) CGRect contentRect;
 + (void)getShareableContentExcludingDesktopWindows:(BOOL)exclude
                               onScreenWindowsOnly:(BOOL)onScreen
                                 completionHandler:(void (^)(SCShareableContent*, NSError*))completion;
@@ -43,9 +46,11 @@ static void (^pendingScreenshot)(CGImageRef, NSError*);
 + (void)captureImageWithFilter:(SCContentFilter*)filter
                 configuration:(SCStreamConfiguration*)configuration
             completionHandler:(void (^)(CGImageRef, NSError*))completion {
+    lastCaptureConfiguration = configuration;
     pendingScreenshot = [completion copy];
 }
 - (instancetype)initWithDesktopIndependentWindow:(SCWindow*)window { return [super init]; }
+- (CGRect)contentRect { return filterContentRect; }
 @end
 
 namespace {
@@ -86,6 +91,30 @@ void canvasFrameTests() {
     auto partiallyBelow = minfwm::previewLayerFrame({100, 1050, 200, 80}, bounds);
     expect(partiallyAbove.origin.y == 1030 && partiallyBelow.origin.y == -50,
            "offscreen previews remain positioned for canvas clipping");
+}
+void captureSizingTests() {
+    // SCWindow.frame can describe an older scaled presentation. The capture
+    // filter defines the source content, which must fill the requested bitmap.
+    minfwm::ScreenshotProvider provider;
+    filterContentRect = CGRectMake(-500, 120, 900, 600);
+    provider.capture(42, 123, 512, [](auto) {});
+    expect(lastCaptureConfiguration.width == 512 && lastCaptureConfiguration.height == 341,
+           "capture dimensions use filter content rather than the scaled window frame");
+    expect(lastCaptureConfiguration.scalesToFit && lastCaptureConfiguration.preservesAspectRatio,
+           "smaller transformed window fills capture bounds with its aspect ratio intact");
+    pendingScreenshot(nullptr, nil);
+    pendingScreenshot = nil;
+    filterContentRect = CGRectMake(0, 0, 150, 300);
+    provider.capture(42, 123, 512, [](auto) {});
+    expect(lastCaptureConfiguration.width == 150 && lastCaptureConfiguration.height == 300,
+           "cached discovery respects current filter content and avoids unnecessary bitmap enlargement");
+    pendingScreenshot(nullptr, nil);
+    pendingScreenshot = nil;
+    filterContentRect = CGRectMake(0, 0, 100, std::numeric_limits<double>::quiet_NaN());
+    bool rejected = false;
+    provider.capture(42, 123, 512, [&](auto image) { rejected = !image; });
+    expect(rejected && pendingScreenshot == nil, "invalid filter content leaves the original live");
+    filterContentRect = CGRectMake(0, 0, 100, 100);
 }
 void drainMainUntil(bool& completed) {
     const double deadline = CACurrentMediaTime() + 2;
@@ -141,6 +170,8 @@ int main() {
         ReplacedMethod screenshot([SCScreenshotManager class],
             @selector(captureImageWithFilter:configuration:completionHandler:), true);
         ReplacedMethod filter([SCContentFilter class], @selector(initWithDesktopIndependentWindow:), false);
+        ReplacedMethod contentRect([SCContentFilter class], @selector(contentRect), false);
+        captureSizingTests();
         deferredCapture(false, false, false);
         deferredCapture(false, false, true);
         deferredCapture(true, false, false);

@@ -55,6 +55,7 @@ class ScreenshotProvider final : public OverviewPreview::CaptureProvider {
         double discoveredAt = -std::numeric_limits<double>::infinity();
         size_t generation = 0;
         double nextErrorLogAt = 0;
+        bool geometryLogged = false;
     };
     std::shared_ptr<Cache> m_cache = std::make_shared<Cache>();
     mutable double m_permissionCheckedAt = -std::numeric_limits<double>::infinity();
@@ -89,9 +90,13 @@ class ScreenshotProvider final : public OverviewPreview::CaptureProvider {
             completion({});
             return;
         }
-        const CGRect frame = selected.frame;
+        SCContentFilter* filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:selected];
+        // SCWindow.frame may contain a cached overview transform. Use the
+        // filter's capture content, in points, to determine the bitmap aspect.
+        const CGRect frame = filter.contentRect;
         const double longest = std::max(frame.size.width, frame.size.height);
-        if (!std::isfinite(longest) || longest <= 0 || frame.size.width <= 0 || frame.size.height <= 0) {
+        if (!std::isfinite(frame.size.width) || !std::isfinite(frame.size.height) ||
+            longest <= 0 || frame.size.width <= 0 || frame.size.height <= 0) {
             reportCaptureError(cache, wid, "invalid-source-frame", nil);
             completion({});
             return;
@@ -100,11 +105,23 @@ class ScreenshotProvider final : public OverviewPreview::CaptureProvider {
         SCStreamConfiguration* configuration = [[SCStreamConfiguration alloc] init];
         configuration.width = std::max<size_t>(1, static_cast<size_t>(std::floor(frame.size.width * factor)));
         configuration.height = std::max<size_t>(1, static_cast<size_t>(std::floor(frame.size.height * factor)));
+        // The source can shrink while the asynchronous capture is pending.
+        // Always fill the bitmap, including when that requires upscaling.
+        configuration.scalesToFit = YES;
+        configuration.preservesAspectRatio = YES;
         configuration.showsCursor = NO;
         configuration.ignoreShadowsSingleWindow = YES;
         configuration.captureResolution = SCCaptureResolutionNominal;
         if (@available(macOS 14.2, *)) configuration.includeChildWindows = NO;
-        SCContentFilter* filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:selected];
+        if (!cache->geometryLogged) {
+            cache->geometryLogged = true;
+            const CGRect presented = selected.frame;
+            std::cout << "OverviewPreview: capture-source WID=" << wid
+                      << " window=" << presented.size.width << "x" << presented.size.height
+                      << " content=" << frame.size.width << "x" << frame.size.height
+                      << " output=" << configuration.width << "x" << configuration.height
+                      << " scales-to-fit=true" << std::endl;
+        }
         const auto generation = cache->generation;
         [SCScreenshotManager captureImageWithFilter:filter configuration:configuration
                                  completionHandler:^(CGImageRef image, NSError* error) {
@@ -538,6 +555,8 @@ bool OverviewPreview::ready(const std::shared_ptr<ClientWindow>& window, double 
                     std::cout << "OverviewPreview: first-snapshot-ready WID=" << wid
                               << " width=" << CGImageGetWidth(image->get())
                               << " height=" << CGImageGetHeight(image->get())
+                              << " virtual-width=" << window->virtualRect.w
+                              << " virtual-height=" << window->virtualRect.h
                               << " bytes=" << bytes << std::endl;
                 }
             });
