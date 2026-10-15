@@ -42,6 +42,13 @@ bool contains(core::Rect rect, core::Point point) {
            point.y >= rect.top() && point.y < rect.bottom();
 }
 
+CGRect previewLayerFrame(core::Rect physical, core::Rect displayBounds) {
+    // Window/camera coordinates start at the top. The ordinary AppKit content
+    // view owns a bottom-left backing layer, including after layout/resize.
+    return CGRectMake(physical.x - displayBounds.x, displayBounds.bottom() - physical.bottom(),
+                      physical.w, physical.h);
+}
+
 class ScreenshotProvider final : public OverviewPreview::CaptureProvider {
     struct Cache {
         SCShareableContent* content = nil;
@@ -199,7 +206,8 @@ public:
                 NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorIgnoresCycle;
             canvas.panel.contentView.wantsLayer = YES;
             canvas.layer = canvas.panel.contentView.layer;
-            canvas.layer.geometryFlipped = YES;
+            // AppKit manages the backing layer's orientation. Convert window
+            // rectangles in previewLayerFrame rather than overriding it here.
             canvas.layer.masksToBounds = YES;
         }
         if (created || !sameRect(canvas.bounds, bounds)) {
@@ -237,8 +245,7 @@ public:
             [canvas.layer addSublayer:preview.layer];
         }
         if (created || !sameRect(preview.physical, physical)) {
-            preview.layer.frame = CGRectMake(physical.x - canvas.bounds.x, physical.y - canvas.bounds.y,
-                                             physical.w, physical.h);
+            preview.layer.frame = previewLayerFrame(physical, canvas.bounds);
             preview.physical = physical;
         }
         if (preview.contents != image->get()) {

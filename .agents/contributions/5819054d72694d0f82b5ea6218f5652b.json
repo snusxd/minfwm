@@ -1,0 +1,15 @@
+{
+  "assistance": "ai",
+  "base": "6c96c3eed22ad9a1cdbd1a54417b8a18fc3b56d2",
+  "id": "5819054d72694d0f82b5ea6218f5652b",
+  "paths": [
+    "docs/Acceptance-macos.md",
+    "src/daemon/OverviewPreview.mm",
+    "tests/OverviewCaptureLifetimeTests.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-OVERVIEW-Y-COORDINATES",
+  "tools": [
+    "codex"
+  ]
+}
