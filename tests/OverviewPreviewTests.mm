@@ -145,7 +145,8 @@ void policyTests() {
     expect(overviewPreviewActive(true, .54f, true, true, true), "active session remains in hysteresis band");
     expect(!overviewPreviewActive(true, .55f, true, true, true), "leave threshold is inclusive");
     expect(!overviewPreviewActive(true, .2f, false, true, true), "disabled configuration exits");
-    expect(!overviewPreviewActive(true, .2f, true, false, true), "disabled focus rewind exits");
+    expect(overviewPreviewActive(true, .2f, true, false, true), "disabled focus rewind preserves preview mode");
+    expect(overviewPreviewActive(false, .45f, true, false, true), "previews enter at the same threshold without focus rewind");
     expect(!overviewPreviewActive(true, .2f, true, true, false), "permission absent exits");
     expect(!overviewPreviewActive(true, std::numeric_limits<float>::quiet_NaN(), true, true, true), "NaN exits");
     expect(!overviewPreviewActive(true, -1.f, true, true, true), "negative zoom exits");
@@ -169,10 +170,10 @@ void permissionRequestTests() {
     const core::Rect bounds{0, 0, 100, 100};
     expect(!previews.beginDisplay(1, bounds, 1, false, true, 0, {}) &&
            capture->permissionRequests == 0, "disabled previews never request screen recording");
-    expect(!previews.beginDisplay(1, bounds, 1, true, false, 0, {}) &&
-           capture->permissionRequests == 0, "direct overview interaction never requests unused capture access");
     expect(!previews.beginDisplay(1, bounds, std::numeric_limits<float>::quiet_NaN(), true, true, 0, {}) &&
            capture->permissionRequests == 0, "invalid display input cannot trigger a permission prompt");
+    expect(!previews.beginDisplay(1, bounds, 1, true, false, 0, {}) &&
+           capture->permissionRequests == 1, "non-rewinding overview also requests missing capture permission");
     expect(!previews.beginDisplay(1, bounds, 1, true, true, 0, {}) &&
            capture->permissionRequests == 1, "startup at native scale requests missing access once");
     for (int frame = 1; frame <= 4; ++frame) {
@@ -183,7 +184,7 @@ void permissionRequestTests() {
     expect(capture->permissionRequests == 1 && capture->requests == 0 && presenter->shown == 0,
            "frames, multiple displays and session resets do not repeat a denied prompt or capture");
     capture->permission = true;
-    expect(previews.beginDisplay(1, bounds, .2f, true, true, 5, {}) && capture->permissionRequests == 1,
+    expect(previews.beginDisplay(1, bounds, .2f, true, false, 5, {}) && capture->permissionRequests == 1,
            "access granted in Settings is detected without another permission request");
 
     auto granted = std::make_shared<Capture>();

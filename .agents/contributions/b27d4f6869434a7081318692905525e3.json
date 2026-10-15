@@ -1,0 +1,23 @@
+{
+  "assistance": "ai",
+  "base": "e3a791e768bf1cf96c077fdbc1b8b38914f84b60",
+  "id": "b27d4f6869434a7081318692905525e3",
+  "paths": [
+    "docs/Acceptance-macos.md",
+    "docs/ai/handoffs/TASK-OVERVIEW-PREVIEWS.md",
+    "docs/ai/plans/overview-previews.md",
+    "docs/ai/tasks/TASK-OVERVIEW-NONREWIND.md",
+    "docs/wiki/Configuration.md",
+    "src/core/OverviewPreviewPolicy.hpp",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/OverviewPreview.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "tests/OverviewPreviewTests.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-OVERVIEW-NONREWIND",
+  "tools": [
+    "codex"
+  ]
+}

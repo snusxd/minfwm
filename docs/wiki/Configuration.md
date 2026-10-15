@@ -118,12 +118,19 @@ Snapping automatically eases large windows into place along display borders when
 | --- | --- | --- |
 | `invert-zoom-scroll-direction` | `false` | Invert zoom direction when scrolling with `Super` + scroll wheel. |
 | `track-invert-zoom-direction` | `false` | Invert four-finger trackpad pinch zoom direction independently. |
-| `rewind-on-focus` | `true` | When zoomed out, clicking a window exits overview and focuses that window. If `false`, clicks interact directly with the scaled window. |
+| `rewind-on-focus` | `true` | When zoomed out, clicking a window exits overview and focuses that window. If `false`, clicking a thumbnail restores and focuses its live window at the current zoom; subsequent clicks interact with it normally. This option does not disable previews. |
 | `overview-previews` | `true` | Show static preview thumbnails for distant windows in overview mode to improve performance. Requires Screen Recording permission. |
 | `zoomed-esc-center` | `"screen"` | Camera target when pressing `Escape` to exit overview: `"screen"`, `"mouse"`, or `"focus"`. |
 
 > [!TIP]
-> **Overview Previews**: When zooming far out, `minfwm` can display lightweight preview thumbnails for background windows instead of continuously rendering live windows. Active and pinned windows always stay live. With previews enabled and `rewind-on-focus = true`, the daemon requests missing Screen Recording permission once when it starts rendering displays. If access is denied, overview keeps all windows live. Enable previously denied access in System Settings → Privacy & Security → Screen Recording; macOS may require restarting the daemon after granting it.
+> **Overview Previews**: When zooming far out, `minfwm` can display lightweight preview thumbnails for background windows instead of continuously rendering live windows. Active and pinned windows always stay live. With previews enabled, the daemon requests missing Screen Recording permission once when it starts rendering displays, independently of `rewind-on-focus`. If access is denied, overview keeps all windows live. Enable previously denied access in System Settings → Privacy & Security → Screen Recording; macOS may require restarting the daemon after granting it.
+
+With `rewind-on-focus = false`, the first click on a thumbnail selects it and
+promotes its original to a live window without changing the camera or scale.
+That selection click is consumed, including its mouse-up, so it cannot activate
+a control or another application underneath the thumbnail. Further clicks and
+typing go to the selected live window; the previously focused window can become
+a thumbnail. With `rewind-on-focus = true`, selection retains the return to 100%.
 
 Overview diagnostics use the `OverviewPreview:` prefix in the daemon log
 (`~/Library/Logs/minfwm.log` when launched by `minfwm start` or `dev-update`).

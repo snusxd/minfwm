@@ -19,8 +19,9 @@ struct OverviewPreviewInteraction {
 }
 
 [[nodiscard]] inline bool overviewPreviewActive(bool active, float scale, bool enabled,
-                                                bool rewindOnFocus, bool permitted) noexcept {
-    if (!enabled || !rewindOnFocus || !permitted || !std::isfinite(scale) || scale <= 0 || scale >= 1) {
+                                                bool /*rewindOnFocus*/, bool permitted) noexcept {
+    // Focus rewind controls selection behavior, not thumbnail availability.
+    if (!enabled || !permitted || !std::isfinite(scale) || scale <= 0 || scale >= 1) {
         return false;
     }
     return active ? scale < .55f : scale <= .45f;

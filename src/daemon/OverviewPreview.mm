@@ -406,7 +406,7 @@ bool OverviewPreview::beginDisplay(int64_t displayId, core::Rect bounds, float s
     }
     state.latestNow = now;
     bool permitted = false;
-    if (enabled && rewindOnFocus && std::isfinite(scale) && scale > 0 && scale <= 1) {
+    if (enabled && std::isfinite(scale) && scale > 0 && scale <= 1) {
         permitted = state.provider->permitted();
         state.logPermission(permitted);
         if (!permitted && !state.permissionRequestAttempted) {
@@ -418,7 +418,7 @@ bool OverviewPreview::beginDisplay(int64_t displayId, core::Rect bounds, float s
         }
     }
     if (!core::overviewPreviewActive(active, scale, enabled, rewindOnFocus, permitted)) {
-        const char* reason = !enabled ? "live reason=disabled" : !rewindOnFocus ? "live reason=direct-interaction" :
+        const char* reason = !enabled ? "live reason=disabled" :
             !std::isfinite(scale) || scale <= 0 || scale > 1 ? "live reason=invalid-scale" :
             !permitted ? "live reason=permission-missing" : "live reason=zoom";
         state.logMode(displayId, reason, scale);

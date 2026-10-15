@@ -611,6 +611,10 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         const bool secondaryButton = type == kCGEventRightMouseDown || type == kCGEventRightMouseUp ||
             type == kCGEventRightMouseDragged || type == kCGEventOtherMouseDown ||
             type == kCGEventOtherMouseUp || type == kCGEventOtherMouseDragged;
+        if (!rewindOnFocus && overviewClick && wm.selectOverviewPreview(pointer)) {
+            interceptor->m_overviewButtons |= mask;
+            return nullptr;
+        }
         if (wm.overviewActive() && rewindOnFocus && (overviewClick || secondaryButton)) {
             if (mouseDown) {
                 interceptor->m_overviewButtons |= mask;

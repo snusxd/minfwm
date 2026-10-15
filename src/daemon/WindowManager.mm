@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <limits>
 #include <sys/stat.h>
+#include <unistd.h>
 
 namespace minfwm {
 
@@ -121,6 +122,7 @@ bool WindowManager::initialize(bool allowAdministratorLoad) {
 
 void WindowManager::refreshDisplays() {
     if (!m_initialized) return;
+    cancelOverviewSelection("displays-changed");
     // Drop canvases before adapting their physical coordinate systems. Parked
     // originals will resume through the ordinary rendering path below.
     m_overviewPreviews.reset();
@@ -349,6 +351,7 @@ bool WindowManager::isWindowOnIgnoredDisplay(AXUIElementRef window) const {
 }
 
 void WindowManager::shutdown() {
+    cancelOverviewSelection("shutdown");
     m_overviewPreviews.reset();
     if (!m_initialized) return;
 
@@ -648,6 +651,23 @@ void WindowManager::updateWindows(int64_t displayId) {
     }
 
     const ConfigSnapshot config = ConfigManager::instance().snapshot();
+    // A selection is one presentation attempt, never a focus retry loop. The
+    // request holds weak ownership so closed windows cannot survive in a queue.
+    auto selectionWindow = m_overviewSelection ? m_overviewSelection->window.lock() : nullptr;
+    Display* selectionDisplay = m_overviewSelection ? displayById(m_overviewSelection->displayId) : nullptr;
+    if (m_overviewSelection && (!selectionWindow || !selectionDisplay ||
+        !config.overviewPreviews || config.rewindOnFocus || overviewReturning() ||
+        !selectionDisplay->state().overviewActive() || isIgnoredDisplay(selectionDisplay->id()) ||
+        now >= m_overviewSelection->expires || !selectionWindow->ref() || selectionWindow->pinned ||
+        selectionWindow->isAXHidden || selectionWindow->applicationSuspended ||
+        !selectionWindow->virtualCoordinatesInitialized || m_hiddenApplications.contains(selectionWindow->pid()) ||
+        selectionDisplay->windowPool().findWindowByWID(m_overviewSelection->wid) != selectionWindow)) {
+        cancelOverviewSelection("unavailable");
+        selectionWindow.reset();
+    }
+    const bool processSelection = selectionWindow && (!displayId || displayId == selectionDisplay->id());
+    bool selectionPresented = false;
+    float selectionScale = 0;
     const core::VisibilityPolicy visibility(config.overscanBufferPx);
     const bool traceOverview = std::getenv("MINFWM_TRACE_OVERVIEW") != nullptr;
     std::size_t liveOverviewUpdates = 0;
@@ -698,6 +718,10 @@ void WindowManager::updateWindows(int64_t displayId) {
         const bool previewMode = m_overviewPreviews.beginDisplay(display->id(), state.geometry().bounds,
             state.scale(), config.overviewPreviews && screenForDisplay(display->id()),
             config.rewindOnFocus, now, m_overviewWindowOrders[display->id()]);
+        if (processSelection && display.get() == selectionDisplay && !previewMode) {
+            cancelOverviewSelection("previews-unavailable");
+            selectionWindow.reset();
+        }
         renderedOverview = renderedOverview || state.overviewActive();
         bool overviewFailed = false;
         for (const auto& window : display->windowPool().windows()) {
@@ -763,6 +787,7 @@ void WindowManager::updateWindows(int64_t displayId) {
                 if (!window->wid()) continue;
                 const bool focused = m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get());
                 const bool previewEligible = previewMode && m_focusedWindow && window != m_overviewFocus &&
+                    window != selectionWindow &&
                     core::overviewPreviewEligible({focused, isWhitelisted(*window), window->pinned,
                                                    beingDragged, window->isAuxiliaryWindow});
                 if (previewEligible && m_overviewPreviews.ready(window, now) &&
@@ -777,6 +802,15 @@ void WindowManager::updateWindows(int64_t displayId) {
                     window->lastRenderedY != std::round(physical.y) ||
                     window->lastRenderedScale != renderedScale) ++liveOverviewUpdates;
                 const auto overview = m_renderer.renderOverview(*window, physical, state.scale(), now);
+                if (window == selectionWindow) {
+                    selectionScale = state.scale();
+                    selectionPresented = overview.succeeded() && !window->isHidden && !window->isAXHidden &&
+                        !window->applicationSuspended;
+                    // Failed selection must not focus a parked original or
+                    // reset the camera. Ordinary presentation can recover on
+                    // a later frame, but this request has no automatic retry.
+                    if (!selectionPresented) continue;
+                }
                 if (!overview.succeeded()) {
                     std::cerr << "WindowManager: overview failed WID=" << window->wid()
                               << " PID=" << window->pid() << " scale=" << state.scale()
@@ -830,6 +864,35 @@ void WindowManager::updateWindows(int64_t displayId) {
             }
         }
         m_overviewPreviews.finishDisplay(display->id());
+    }
+    if (processSelection && m_overviewSelection) {
+        if (selectionPresented && selectionWindow && selectionDisplay->state().overviewActive() &&
+            !selectionDisplay->state().returning() && selectionDisplay->state().scale() == selectionScale &&
+            !selectionWindow->isHidden && !selectionWindow->isAXHidden &&
+            !selectionWindow->applicationSuspended && !m_hiddenApplications.contains(selectionWindow->pid())) {
+            CFRef<AXUIElementRef> application = CFRef<AXUIElementRef>::adopt(
+                AXUIElementCreateApplication(selectionWindow->pid()));
+            NSRunningApplication* runningApplication =
+                [NSRunningApplication runningApplicationWithProcessIdentifier:selectionWindow->pid()];
+            const bool applicationActivated = [runningApplication activateWithOptions:0];
+            const bool yabaiRequestSent = m_yabaiBackend.focusWindow(selectionWindow->wid()).succeeded();
+            const bool accessibilityRequestAccepted = focusBookmarkWindow(application.get(), selectionWindow->ref());
+            if (yabaiRequestSent || accessibilityRequestAccepted) {
+                m_focusedWindow = CFRef<AXUIElementRef>::retain(selectionWindow->ref());
+                m_lastFocusedWindow = selectionWindow;
+                m_focusRefreshTime = now + 0.25;
+                std::cout << "OverviewPreview: selection-focused WID=" << selectionWindow->wid()
+                          << " scale=" << selectionScale << " rewind=false scale-preserved=true"
+                          << " app-activated=" << applicationActivated
+                          << " yabai-sent=" << yabaiRequestSent
+                          << " ax-accepted=" << accessibilityRequestAccepted << std::endl;
+                m_overviewSelection.reset();
+            } else {
+                cancelOverviewSelection("focus-failed");
+            }
+        } else {
+            cancelOverviewSelection("presentation-failed");
+        }
     }
     if (m_overviewFocus && !overviewActive()) {
         const auto selected = std::exchange(m_overviewFocus, {});
@@ -1143,10 +1206,36 @@ bool WindowManager::overviewReturning() const {
 }
 
 void WindowManager::exitOverview(core::Point pointer, bool selectWindow) {
+    cancelOverviewSelection("overview-exit");
     if (overviewActive() && !overviewReturning()) m_overviewExit = OverviewExit{pointer, selectWindow};
 }
 
-std::shared_ptr<ClientWindow> WindowManager::windowAtPoint(core::Point pointer) const {
+bool WindowManager::selectOverviewPreview(core::Point pointer) {
+    if (!m_initialized || !overviewActive() || overviewReturning() || m_nativePointerHeld ||
+        isIgnoredDisplayAtPoint(pointer)) return false;
+    const auto config = ConfigManager::instance().snapshot();
+    if (config.rewindOnFocus || !config.overviewPreviews) return false;
+    auto selected = m_overviewPreviews.hitTest(pointer);
+    if (!selected || windowAtPoint(pointer, true) != selected) return false;
+    cancelOverviewSelection("superseded");
+    auto& display = displayForPoint(pointer);
+    m_overviewSelection = OverviewSelection{selected, display.id(), selected->wid(), CACurrentMediaTime() + 1};
+    // A just-finished native drag commits before this selection is rendered.
+    // Consume the selecting click, including its drag/up tail. Rendering and
+    // cross-process focus operations run only in updateWindows, never the tap.
+    return true;
+}
+
+void WindowManager::cancelOverviewSelection(const char* reason) {
+    if (!m_overviewSelection) return;
+    const auto* display = displayById(m_overviewSelection->displayId);
+    std::cout << "OverviewPreview: selection-cancelled WID=" << m_overviewSelection->wid
+              << " scale=" << (display ? display->state().scale() : 0)
+              << " reason=" << reason << std::endl;
+    m_overviewSelection.reset();
+}
+
+std::shared_ptr<ClientWindow> WindowManager::windowAtPoint(core::Point pointer, bool verifyPreview) const {
     auto windows = CFRef<CFArrayRef>::adopt(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
     for (CFIndex i = 0; windows && i < CFArrayGetCount(windows.get()); ++i) {
         auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows.get(), i));
@@ -1159,14 +1248,29 @@ std::shared_ptr<ClientWindow> WindowManager::windowAtPoint(core::Point pointer) 
             !CFNumberGetValue(number, kCGWindowIDCFNumberType, &wid) || !bounds ||
             CFGetTypeID(bounds) != CFDictionaryGetTypeID() || !CGRectMakeWithDictionaryRepresentation(bounds, &frame) ||
             !CGRectContainsPoint(frame, CGPointMake(pointer.x, pointer.y))) continue;
+        if (verifyPreview) {
+            auto alpha = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowAlpha));
+            float opacity = 1;
+            if (alpha && CFGetTypeID(alpha) == CFNumberGetTypeID() &&
+                CFNumberGetValue(alpha, kCFNumberFloatType, &opacity) && opacity <= 0) continue;
+        }
         if (m_overviewPreviews.ownsCanvasWindow(wid)) {
             if (auto preview = m_overviewPreviews.hitTest(pointer); preview &&
                 !m_hiddenApplications.contains(preview->pid()) && findWindow(preview->ref()) == preview) return preview;
             continue;
         }
+        if (verifyPreview) {
+            auto owner = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowOwnerPID));
+            pid_t pid = 0;
+            if (owner && CFGetTypeID(owner) == CFNumberGetTypeID() &&
+                CFNumberGetValue(owner, kCFNumberIntType, &pid) && pid == getpid()) continue;
+        }
         for (const auto& display : m_displays) {
             if (auto window = display->windowPool().findWindowByWID(wid)) return window;
         }
+        // A foreign unmanaged window above the canvas occludes its thumbnails.
+        // Preserve legacy hit testing for native and drag-everywhere callers.
+        if (verifyPreview) return {};
     }
     return {};
 }

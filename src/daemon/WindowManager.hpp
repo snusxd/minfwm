@@ -104,6 +104,7 @@ public:
     bool overviewActive() const;
     bool overviewReturning() const;
     void exitOverview(core::Point pointer, bool selectWindow);
+    bool selectOverviewPreview(core::Point pointer);
 
     // Helpers to find window across pools
     std::shared_ptr<ClientWindow> findWindow(AXUIElementRef element) const;
@@ -130,7 +131,8 @@ private:
                              core::Rect physical);
     bool releaseWindowToIgnoredDisplay(const std::shared_ptr<ClientWindow>& window,
                                        core::Rect physical);
-    std::shared_ptr<ClientWindow> windowAtPoint(core::Point pointer) const;
+    std::shared_ptr<ClientWindow> windowAtPoint(core::Point pointer, bool verifyPreview = false) const;
+    void cancelOverviewSelection(const char* reason);
     void applyOverviewExit();
     void restoreLayoutSnapshot();
 
@@ -158,6 +160,13 @@ private:
     std::optional<OverviewExit> m_overviewExit;
     std::map<int64_t, double> m_zoomFrameTimes;
     std::shared_ptr<ClientWindow> m_overviewFocus;
+    struct OverviewSelection {
+        std::weak_ptr<ClientWindow> window;
+        int64_t displayId;
+        uint32_t wid;
+        double expires;
+    };
+    std::optional<OverviewSelection> m_overviewSelection;
     std::weak_ptr<ClientWindow> m_lastFocusedWindow;
     std::weak_ptr<ClientWindow> m_pendingBookmarkFocus;
     int m_pendingBookmarkFocusIndex = 0;

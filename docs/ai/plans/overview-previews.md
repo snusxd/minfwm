@@ -12,7 +12,7 @@ dragged and auxiliary windows stay live. Applications remain running.
    nonactivating canvas per display. Preserve live presentation until capture
    and parking succeed. At the user's request, enabled previews request missing
    capture permission once per daemon run and preserve live fallback after denial.
-3. Integrate: add `zoom.overview-previews`, disable previews for direct overview
+3. Integrate: add `zoom.overview-previews`, preserve previews for direct overview
    interaction, keep model geometry when parking originals, select thumbnails
    through the same displayed scene, and release canvases on shutdown/reload.
 4. Review: independently inspect asynchronous ownership, error fallback,

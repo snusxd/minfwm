@@ -2,8 +2,9 @@
 
 The distant overview now uses frozen window thumbnails after capture and parking
 succeed. Focused, whitelisted, pinned, dragged, auxiliary and selected-return
-windows remain live. `zoom.overview-previews` controls the mode; direct overview
-interaction (`rewind-on-focus = false`) keeps windows live.
+windows remain live. `zoom.overview-previews` controls the mode independently of
+`rewind-on-focus`. Non-rewinding thumbnail selection restores and focuses the real
+window while preserving the current scale and camera.
 
 The mode enters at 45% and exits at 55%. ScreenCaptureKit captures one window at a
 time with at least 50 ms between launches. Source snapshots are at most 512 pixels
@@ -66,7 +67,7 @@ pending; this integration does not start or restart the daemon.
 ## Screen Recording permission request follow-up
 
 At the user's request, initial display rendering now calls
-`CGRequestScreenCaptureAccess()` once when previews and focus rewind are enabled
+`CGRequestScreenCaptureAccess()` once when previews are enabled
 and preflight reports missing access. Denial keeps windows live; frames, multiple
 displays, reloads and overview-session resets cannot repeat the request. Previously
 denied access must be enabled in System Settings, subject to macOS restart rules.
