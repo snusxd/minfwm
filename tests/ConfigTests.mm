@@ -24,6 +24,11 @@ std::string zoomConfig(const std::string& value) {
 int main() {
     minfwm::ConfigSnapshot parsed;
     std::string error;
+    expect(parsed.overviewPreviews, "distant overview previews default to enabled when capture is available");
+    expect(minfwm::ConfigManager::parseText("[zoom]\noverview-previews = false\n", parsed, error) &&
+           !parsed.overviewPreviews, "overview previews can be disabled");
+    expect(!minfwm::ConfigManager::parseText("[zoom]\noverview-previews = \"true\"\n", parsed, error) &&
+           !parsed.overviewPreviews, "invalid preview configuration preserves the previous snapshot");
     const bool valid = minfwm::ConfigManager::parseText(
         "# TOML tables group related options.\n"
         "[window]\n"

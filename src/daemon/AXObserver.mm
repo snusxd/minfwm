@@ -4,6 +4,7 @@
 #import <iostream>
 #include <algorithm>
 #include <unordered_set>
+#include <unistd.h>
 #import <QuartzCore/QuartzCore.h>
 
 namespace minfwm {
@@ -161,7 +162,8 @@ bool AXObserver::observeApplication(NSRunningApplication* app) {
     auto& wm = WindowManager::instance();
     if (!app) return false;
     pid_t pid = app.processIdentifier;
-    if (pid <= 0) return true;
+    // The daemon owns nonactivating overview canvases; never adopt its own UI.
+    if (pid <= 0 || pid == getpid()) return true;
     const char* name = app.localizedName.UTF8String;
     wm.setApplicationState(pid, name ? name : "", app.hidden);
     if (auto existing = m_appObservers.find(pid); existing != m_appObservers.end()) return refreshWindows(existing->second, false);

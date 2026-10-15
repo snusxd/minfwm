@@ -12,6 +12,7 @@
 #include "AXBackend.hpp"
 #include "YabaiSA.hpp"
 #include "WindowRenderer.hpp"
+#include "OverviewPreview.hpp"
 
 namespace minfwm {
 
@@ -105,7 +106,7 @@ public:
     void exitOverview(core::Point pointer, bool selectWindow);
 
     // Helpers to find window across pools
-    std::shared_ptr<ClientWindow> findWindow(AXUIElementRef element);
+    std::shared_ptr<ClientWindow> findWindow(AXUIElementRef element) const;
     void removeWindow(AXUIElementRef element);
     void removeWindowsForPid(pid_t pid);
     void setApplicationState(pid_t pid, std::string name, bool hidden);
@@ -163,6 +164,17 @@ private:
     std::map<pid_t, std::string> m_applicationNames;
     std::set<pid_t> m_hiddenApplications;
     std::optional<std::unordered_set<uint32_t>> m_onscreenWindows;
+    std::map<int64_t, std::vector<uint32_t>> m_overviewWindowOrders;
+    OverviewPreview m_overviewPreviews;
+    struct OverviewTrace {
+        double since = 0;
+        double totalSeconds = 0;
+        double maxSeconds = 0;
+        std::size_t frames = 0;
+        std::size_t liveUpdates = 0;
+        std::size_t previewFrames = 0;
+    };
+    OverviewTrace m_overviewTrace;
     struct SavedWindowLayout {
         core::Rect rect;
     };

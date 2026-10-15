@@ -1,0 +1,31 @@
+{
+  "assistance": "ai",
+  "base": "7764edd8ee2837b73e24855258450df729e539f1",
+  "id": "d4a293ce0260495d97a768018d741a83",
+  "paths": [
+    "CMakeLists.txt",
+    "docs/ai/handoffs/TASK-OVERVIEW-PREVIEWS.md",
+    "docs/ai/plans/overview-previews.md",
+    "docs/ai/tasks/TASK-OVERVIEW-PREVIEWS.md",
+    "docs/wiki/Acceptance-macos.md",
+    "docs/wiki/Configuration.md",
+    "src/core/OverviewPreviewPolicy.hpp",
+    "src/daemon/AXObserver.mm",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/OverviewPreview.hpp",
+    "src/daemon/OverviewPreview.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/WindowRenderer.hpp",
+    "src/daemon/WindowRenderer.mm",
+    "tests/ConfigTests.mm",
+    "tests/OverviewPreviewTests.mm",
+    "tests/WindowRendererTests.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-OVERVIEW-PREVIEWS",
+  "tools": [
+    "codex"
+  ]
+}
