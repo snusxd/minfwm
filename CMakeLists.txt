@@ -173,6 +173,12 @@ if(BUILD_TESTING)
     target_link_libraries(minfwm_overview_preview_tests PRIVATE minfwm_overview_preview)
     add_test(NAME minfwm_overview_preview_tests COMMAND minfwm_overview_preview_tests)
 
+    add_executable(minfwm_overview_capture_lifetime_tests tests/OverviewCaptureLifetimeTests.mm)
+    set_source_files_properties(tests/OverviewCaptureLifetimeTests.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+    target_link_libraries(minfwm_overview_capture_lifetime_tests PRIVATE minfwm_window_pool ${SCREEN_CAPTURE_KIT_FRAMEWORK})
+    add_test(NAME minfwm_overview_capture_lifetime_tests COMMAND minfwm_overview_capture_lifetime_tests)
+    set_tests_properties(minfwm_overview_capture_lifetime_tests PROPERTIES TIMEOUT 5)
+
     add_executable(minfwm_config_tests
         tests/ConfigTests.mm
         src/daemon/ConfigManager.mm

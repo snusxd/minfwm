@@ -64,7 +64,9 @@ class ScreenshotProvider final : public OverviewPreview::CaptureProvider {
                   << " fallback=live" << std::endl;
     }
 
-    static void captureWindow(const std::shared_ptr<Cache>& cache, SCShareableContent* content,
+    // Blocks preserve C++ reference parameters as references. Own this value so
+    // the asynchronous screenshot callback cannot outlive the caller's copy.
+    static void captureWindow(std::shared_ptr<Cache> cache, SCShareableContent* content,
                               uint32_t wid, pid_t pid, size_t longestEdge, Completion completion) {
         SCWindow* selected = nil;
         for (SCWindow* candidate in content.windows) {

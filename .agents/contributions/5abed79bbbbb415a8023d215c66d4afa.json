@@ -1,0 +1,16 @@
+{
+  "assistance": "ai",
+  "base": "8a3a94ef71fbc8601e530a60b43128ffc6cf0c6d",
+  "id": "5abed79bbbbb415a8023d215c66d4afa",
+  "paths": [
+    "CMakeLists.txt",
+    "docs/ai/tasks/TASK-OVERVIEW-CAPTURE-LIFETIME.md",
+    "src/daemon/OverviewPreview.mm",
+    "tests/OverviewCaptureLifetimeTests.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-OVERVIEW-CAPTURE-LIFETIME",
+  "tools": [
+    "codex"
+  ]
+}
