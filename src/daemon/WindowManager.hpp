@@ -84,6 +84,7 @@ public:
     void advanceWindowAnimation(ClientWindow& window, double now, float speed = 1.0f,
                                 bool enabled = true);
     bool toggleFocusedWindowPin();
+    bool toggleTemporaryFullscreen();
     bool panCamera(Display& display, core::Point delta);
     void finishCameraPan(Display& display, bool snap = true);
     void centerCameraToFocusedWindow();
@@ -93,6 +94,7 @@ public:
     void centerCameraOnWindow(AXUIElementRef element);
     void syncPhysicalToVirtual(AXUIElementRef element);
     void beginNativeInteraction(core::Point pointer);
+    bool beginClippedTitlebarDrag(core::Point pointer);
     void noteNativeDrag();
     void endNativeInteraction();
     void flushNativeInteractionForPan();
@@ -135,6 +137,8 @@ private:
     void cancelOverviewSelection(const char* reason);
     void applyOverviewExit();
     void restoreLayoutSnapshot();
+    bool restoreTemporaryFullscreen();
+    bool applyTemporaryFullscreen();
 
     std::vector<std::unique_ptr<Display>> m_displays;
     bool m_isPanning = false;
@@ -149,6 +153,8 @@ private:
     std::map<int64_t, core::Point> m_nativeCameras;
     std::vector<std::shared_ptr<ClientWindow>> m_nativeCandidates;
     std::map<const ClientWindow*, core::Rect> m_nativeStartFrames;
+    std::shared_ptr<ClientWindow> m_clippedTitlebarCandidate;
+    core::Point m_nativePointerStart{};
     std::shared_ptr<ClientWindow> m_draggedWindow;
     int64_t m_draggedWindowDisplayId = 0;
     bool m_dragEverywhereMoved = false;
@@ -156,6 +162,13 @@ private:
     core::Point m_dragPointerOffset{};
     struct ZoomRequest { int64_t displayId; core::Point anchor; float delta; };
     std::optional<ZoomRequest> m_zoomRequest;
+    struct TemporaryFullscreen {
+        std::shared_ptr<ClientWindow> window;
+        core::Rect originalRect;
+        double layerRefreshTime = 0;
+    };
+    std::optional<TemporaryFullscreen> m_temporaryFullscreen;
+    bool m_temporaryFullscreenRequested = false;
     struct OverviewExit { core::Point pointer; bool selectWindow; };
     std::optional<OverviewExit> m_overviewExit;
     std::map<int64_t, double> m_zoomFrameTimes;
@@ -184,6 +197,7 @@ private:
         std::size_t previewFrames = 0;
     };
     OverviewTrace m_overviewTrace;
+    std::vector<OnscreenWindowSnapshotEntry> m_windowHitTestSnapshot;
     struct SavedWindowLayout {
         core::Rect rect;
     };

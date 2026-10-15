@@ -6,6 +6,7 @@
 #include "../core/Visibility.hpp"
 #include "../core/WindowOwnership.hpp"
 #include "../core/OverviewPreviewPolicy.hpp"
+#include "../core/WindowDrag.hpp"
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #include <cmath>
@@ -384,12 +385,17 @@ void WindowManager::shutdown() {
     m_overviewExit.reset();
     m_overviewFocus.reset();
     m_lastFocusedWindow.reset();
+    m_pendingBookmarkFocus.reset();
+    m_pendingBookmarkFocusIndex = 0;
+    m_temporaryFullscreenRequested = false;
+    m_temporaryFullscreen.reset();
     m_zoomFrameTimes.clear();
     m_applicationNames.clear();
     m_hiddenApplications.clear();
     m_onscreenWindows.reset();
     m_overviewWindowOrders.clear();
     m_overviewTrace = {};
+    m_windowHitTestSnapshot.clear();
     m_savedWindowLayouts.clear();
     m_displays.clear();
     m_initialized = false;
@@ -437,6 +443,7 @@ std::shared_ptr<ClientWindow> WindowManager::findWindow(AXUIElementRef element) 
 }
 
 bool WindowManager::toggleFocusedWindowPin() {
+    if (m_temporaryFullscreen && !restoreTemporaryFullscreen()) return false;
     if (m_focusedWindow && isWindowOnIgnoredDisplay(m_focusedWindow.get())) return false;
     auto window = m_focusedWindow ? findWindow(m_focusedWindow.get()) : nullptr;
     if (!window) window = m_lastFocusedWindow.lock();
@@ -478,7 +485,71 @@ bool WindowManager::toggleFocusedWindowPin() {
 }
 
 bool WindowManager::panCamera(Display& display, core::Point delta) {
+    if (delta.x != 0 || delta.y != 0) m_temporaryFullscreenRequested = false;
+    if ((delta.x != 0 || delta.y != 0) && m_temporaryFullscreen && !restoreTemporaryFullscreen()) return false;
     return display.state().panCamera(delta);
+}
+
+bool WindowManager::toggleTemporaryFullscreen() {
+    // The event tap only queues intent; AX calls run in the frame loop.
+    m_temporaryFullscreenRequested = true;
+    m_focusRefreshTime = 0;
+    return true;
+}
+
+bool WindowManager::applyTemporaryFullscreen() {
+    if (m_focusedWindow && isWindowOnIgnoredDisplay(m_focusedWindow.get())) return false;
+    auto window = m_focusedWindow ? findWindow(m_focusedWindow.get()) : nullptr;
+    if (!window) window = m_lastFocusedWindow.lock();
+    if (!window || !window->virtualCoordinatesInitialized || !window->wid() || window->pinned ||
+        window->isHidden || window->isAXHidden || window->applicationSuspended ||
+        overviewActive() || !findWindow(window->ref())) return false;
+
+    if (m_temporaryFullscreen && m_temporaryFullscreen->window == window) {
+        return restoreTemporaryFullscreen();
+    }
+    if (m_temporaryFullscreen && !restoreTemporaryFullscreen()) return false;
+
+    Display& display = displayForWindow(window->ref());
+    display.state().cancelCameraAnimation();
+    const core::Rect originalRect = window->virtualRect;
+    const double now = CACurrentMediaTime();
+    const core::Rect physical = display.state().virtualToPhysical(originalRect);
+    if (!m_renderer.releaseToNative(*window, physical, now).succeeded() ||
+        !m_axBackend.maximize(window->ref()).succeeded()) {
+        std::cerr << "WindowManager: system Fill unavailable or failed WID=" << window->wid() << std::endl;
+        return false;
+    }
+    window->positionAnimation.reset();
+    window->frameAnimation.reset();
+    m_temporaryFullscreen = TemporaryFullscreen{window, originalRect};
+    if (!m_renderer.setPinnedLayer(*window, true).succeeded()) {
+        std::cerr << "WindowManager: temporary fullscreen layer will be retried WID=" << window->wid() << std::endl;
+    }
+    if (AXUIElementPerformAction(window->ref(), kAXRaiseAction) != kAXErrorSuccess) {
+        std::cerr << "WindowManager: could not raise maximized window WID=" << window->wid() << std::endl;
+    }
+    return true;
+}
+
+bool WindowManager::restoreTemporaryFullscreen() {
+    if (!m_temporaryFullscreen) return false;
+    const auto saved = *m_temporaryFullscreen;
+    if (!saved.window || !findWindow(saved.window->ref())) {
+        m_temporaryFullscreen.reset();
+        return false;
+    }
+    if (!m_renderer.setPinnedLayer(*saved.window, false).succeeded()) {
+        std::cerr << "WindowManager: could not restore maximized window layer WID=" << saved.window->wid() << std::endl;
+        return false;
+    }
+    saved.window->pinnedAlwaysOnTop.reset();
+    saved.window->layerAttempted = false;
+    saved.window->positionAnimation.reset();
+    saved.window->frameAnimation = ClientWindow::FrameAnimation{
+        saved.window->virtualRect, saved.originalRect, CACurrentMediaTime(), true};
+    m_temporaryFullscreen.reset();
+    return true;
 }
 
 void WindowManager::finishCameraPan(Display& display, bool snap) {
@@ -502,7 +573,10 @@ void WindowManager::finishCameraPan(Display& display, bool snap) {
 }
 
 void WindowManager::removeWindow(AXUIElementRef element) {
-    if (auto window = findWindow(element)) (void)m_yabaiBackend.resetTransform(window->wid());
+    if (auto window = findWindow(element)) {
+        if (m_temporaryFullscreen && m_temporaryFullscreen->window == window) m_temporaryFullscreen.reset();
+        (void)m_yabaiBackend.resetTransform(window->wid());
+    }
     for (auto& display : m_displays) display->windowPool().removeWindow(element);
 }
 
@@ -566,7 +640,13 @@ bool WindowManager::isWhitelisted(const ClientWindow& window) const {
 
 void WindowManager::refreshWindowSnapshot(double now) {
     m_windowRefreshTime = now + 0.25;
-    if (auto visible = readOnscreenWindowIds()) m_onscreenWindows = std::move(visible);
+    if (auto visible = readOnscreenWindowSnapshot()) {
+        std::unordered_set<uint32_t> ids;
+        ids.reserve(visible->size());
+        for (const auto& entry : *visible) ids.insert(entry.wid);
+        m_onscreenWindows = std::move(ids);
+        m_windowHitTestSnapshot = std::move(*visible);
+    }
     const auto liveIds = readSessionWindowIds();
     if (!liveIds) return; // A failed query is never evidence of destruction.
     for (auto& display : m_displays) {
@@ -650,6 +730,10 @@ void WindowManager::updateWindows(int64_t displayId) {
         }
     }
 
+    if (m_temporaryFullscreenRequested) {
+        m_temporaryFullscreenRequested = false;
+        (void)applyTemporaryFullscreen();
+    }
     const ConfigSnapshot config = ConfigManager::instance().snapshot();
     // A selection is one presentation attempt, never a focus retry loop. The
     // request holds weak ownership so closed windows cannot survive in a queue.
@@ -755,6 +839,28 @@ void WindowManager::updateWindows(int64_t displayId) {
             }
             adoptWindow(*display, window);
             if (!window->virtualCoordinatesInitialized) continue;
+            if (m_temporaryFullscreen && m_temporaryFullscreen->window == window) {
+                // Keep the real WindowServer level above managed and native windows.
+                // Reassert after native Fill or app activation changes window ordering.
+                if (now >= m_temporaryFullscreen->layerRefreshTime) {
+                    m_temporaryFullscreen->layerRefreshTime = now + 0.25;
+                    if (!m_renderer.setPinnedLayer(*window, true).succeeded()) {
+                        std::cerr << "WindowManager: could not maintain maximized window layer WID=" << window->wid() << std::endl;
+                    }
+                    if (AXUIElementPerformAction(window->ref(), kAXRaiseAction) != kAXErrorSuccess) {
+                        std::cerr << "WindowManager: could not raise maximized window WID=" << window->wid() << std::endl;
+                    }
+                }
+                // Native Fill owns the animation and frame until navigation restores it.
+                CGPoint position{};
+                CGSize size{};
+                if (readAXPoint(window->ref(), position) && readAXSize(window->ref(), size)) {
+                    (void)m_renderer.acceptNativeGeometry(*window,
+                        {static_cast<float>(position.x), static_cast<float>(position.y),
+                         static_cast<float>(size.width), static_cast<float>(size.height)}, state);
+                }
+                continue;
+            }
             advanceWindowAnimation(*window, now, config.animationSpeed, config.animationsEnabled);
             const core::Rect physical = state.virtualToPhysical(window->virtualRect);
             const core::Rect displayBounds = state.geometry().bounds;
@@ -965,6 +1071,33 @@ void WindowManager::centerWindow(std::shared_ptr<ClientWindow> window) {
 }
 
 void WindowManager::advanceWindowAnimation(ClientWindow& window, double now, float speed, bool enabled) {
+    if (window.frameAnimation) {
+        const auto transition = *window.frameAnimation;
+        const double duration = 0.36 / std::clamp(static_cast<double>(speed), 0.1, 10.0);
+        const double t = enabled ? std::clamp((now - transition.startTime) / duration, 0.0, 1.0) : 1.0;
+        const auto ease = [](double phase) {
+            phase = std::clamp(phase, 0.0, 1.0);
+            return phase * phase * phase * (10 + phase * (-15 + phase * 6));
+        };
+        const double horizontalProgress = ease(transition.verticalEdgesFirst ? t * 2 : t);
+        const double verticalProgress = ease(transition.verticalEdgesFirst ? t * 2 - 1 : t);
+        const auto interpolate = [](float from, float target, double progress) {
+            return static_cast<float>(from + (target - from) * progress);
+        };
+        // Vertical edges (left/right) settle before horizontal edges (top/bottom).
+        window.virtualRect = {interpolate(transition.from.x, transition.target.x, horizontalProgress),
+                              interpolate(transition.from.y, transition.target.y, verticalProgress),
+                              interpolate(transition.from.w, transition.target.w, horizontalProgress),
+                              interpolate(transition.from.h, transition.target.h, verticalProgress)};
+        // The ordinary renderer owns AX/SA failures and retries the final size.
+        window.needsGeometryRestore = true;
+        window.lastProgrammaticMoveTime = now;
+        if (t == 1) {
+            window.virtualRect = transition.target;
+            window.frameAnimation.reset();
+        }
+        return;
+    }
     if (!window.positionAnimation) return;
     auto& transition = *window.positionAnimation;
     if (!enabled) {
@@ -992,6 +1125,7 @@ void WindowManager::advanceWindowAnimation(ClientWindow& window, double now, flo
 void WindowManager::centerCameraOnWindow(AXUIElementRef element) {
     m_focusedWindow = CFRef<AXUIElementRef>::retain(element);
     const auto window = findWindow(element);
+    if (m_temporaryFullscreen && m_temporaryFullscreen->window == window) return;
     if (!overviewActive() && window && window->virtualCoordinatesInitialized && window->wid()) m_lastFocusedWindow = window;
     if (overviewActive() || m_nativePointerHeld || m_nativeCommitPending || m_isPanning || CACurrentMediaTime() < m_nativeCommitTime + 0.25) return;
     if (!window || !window->virtualCoordinatesInitialized) return;
@@ -1146,7 +1280,7 @@ void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
     }
     if (isWindowOnIgnoredDisplay(element) && !window) return;
     if (!window || window->isHidden || window->needsGeometryRestore || window->positionNeedsVerification ||
-        window->rejectedPosition || m_isPanning || window->positionAnimation) return;
+        window->rejectedPosition || m_isPanning || window->positionAnimation || window->frameAnimation) return;
     if (CACurrentMediaTime() - window->lastProgrammaticMoveTime < 0.25) return;
 
     for (auto& display : m_displays) {
@@ -1181,6 +1315,8 @@ bool WindowManager::requestOverviewZoom(core::Point pointer, float delta) {
     if (!m_initialized || !m_yabaiBackend.supportsOverview() || m_nativePointerHeld || overviewReturning() ||
         !std::isfinite(delta) || !std::isfinite(pointer.x) || !std::isfinite(pointer.y) ||
         isIgnoredDisplayAtPoint(pointer)) return false;
+    m_temporaryFullscreenRequested = false;
+    if (m_temporaryFullscreen && !restoreTemporaryFullscreen()) return false;
     if (ConfigManager::instance().snapshot().invertZoomScrollDirection) delta = -delta;
     const auto id = displayForPoint(pointer).id();
     if (m_zoomRequest && m_zoomRequest->displayId == id) delta += m_zoomRequest->delta;
@@ -1311,27 +1447,41 @@ void WindowManager::beginNativeInteraction(core::Point pointer) {
     }
     m_nativePointerHeld = true;
     m_nativeCommitPending = true;
-    // The visual hit-test identifies the window even when its AX move
-    // notifications are unavailable. No cross-process AX calls run in the tap.
-    auto windows = CFRef<CFArrayRef>::adopt(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
-    for (CFIndex index = 0; windows && index < CFArrayGetCount(windows.get()); ++index) {
-        auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows.get(), index));
-        if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID()) continue;
-        auto number = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowNumber));
-        auto bounds = static_cast<CFDictionaryRef>(CFDictionaryGetValue(info, kCGWindowBounds));
-        uint32_t wid = 0;
-        CGRect frame{};
-        if (!number || CFGetTypeID(number) != CFNumberGetTypeID() || !CFNumberGetValue(number, kCGWindowIDCFNumberType, &wid) ||
-            !bounds || CFGetTypeID(bounds) != CFDictionaryGetTypeID() || !CGRectMakeWithDictionaryRepresentation(bounds, &frame) ||
-            !CGRectContainsPoint(frame, CGPointMake(pointer.x, pointer.y))) continue;
+    m_nativePointerStart = pointer;
+    m_clippedTitlebarCandidate.reset();
+    // Use the recent top-to-bottom snapshot. WindowServer list queries here
+    // would block the event tap and make the initial grab feel delayed.
+    for (const auto& entry : m_windowHitTestSnapshot) {
+        const uint32_t wid = entry.wid;
         for (const auto& display : m_displays) {
             if (auto window = display->windowPool().findWindowByWID(wid)) {
-                m_nativeStartFrames[window.get()] = core::Rect{
-                    static_cast<float>(frame.origin.x), static_cast<float>(frame.origin.y),
-                    static_cast<float>(frame.size.width), static_cast<float>(frame.size.height)};
+                const core::Rect observedFrame{static_cast<float>(entry.frame.origin.x),
+                    static_cast<float>(entry.frame.origin.y), static_cast<float>(entry.frame.size.width),
+                    static_cast<float>(entry.frame.size.height)};
+                const core::Rect visualFrame = window->virtualCoordinatesInitialized
+                    ? display->state().virtualToPhysical(window->virtualRect) : observedFrame;
+                if (!visualFrame.intersects({pointer.x, pointer.y, 0.01f, 0.01f})) continue;
+                m_nativeStartFrames[window.get()] = visualFrame;
                 addNativeCandidate(window);
+                const core::Rect displayBounds = display->state().geometry().bounds;
+                // AppKit clamps native frames at display edges. For a titlebar
+                // press on a clipped presentation, switch to model-space drag
+                // once movement starts so the window can keep following the
+                // pointer beyond the physical screen bounds.
+                const bool clipped = !core::frameFitsDisplay(visualFrame, displayBounds);
+                const bool titlebarHit = pointer.y >= visualFrame.y && pointer.y < visualFrame.y + 32.0f &&
+                    pointer.x >= visualFrame.x + 64.0f && pointer.x < visualFrame.right() - 40.0f;
+                if (clipped && titlebarHit && window->virtualCoordinatesInitialized &&
+                    !window->pinned && !window->isHidden && !window->applicationSuspended &&
+                    !window->needsGeometryRestore) {
+                    m_clippedTitlebarCandidate = window;
+                }
                 if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
-                    std::cout << "INPUT down WID=" << wid << " visual=" << frame.origin.x << ',' << frame.origin.y
+                    const auto projected = display->state().virtualToPhysical(window->virtualRect);
+                    std::cout << "INPUT down WID=" << wid << " visual=" << visualFrame.x << ',' << visualFrame.y
+                              << " observed=" << observedFrame.x << ',' << observedFrame.y
+                              << " projected=" << projected.x << ',' << projected.y
+                              << " clipped-titlebar=" << (clipped && titlebarHit)
                               << " cached=" << window->lastRenderedX << ',' << window->lastRenderedY
                               << " virtual=" << window->virtualRect.x << ',' << window->virtualRect.y << std::endl;
                 }
@@ -1341,6 +1491,35 @@ void WindowManager::beginNativeInteraction(core::Point pointer) {
     }
 }
 
+bool WindowManager::beginClippedTitlebarDrag(core::Point pointer) {
+    if (!m_clippedTitlebarCandidate || !m_nativePointerHeld ||
+        !std::isfinite(pointer.x) || !std::isfinite(pointer.y)) return false;
+    constexpr float dragThreshold = 4.0f;
+    if (std::hypot(pointer.x - m_nativePointerStart.x, pointer.y - m_nativePointerStart.y) < dragThreshold) {
+        return false;
+    }
+
+    auto window = m_clippedTitlebarCandidate;
+    Display& display = displayForWindow(window->ref());
+    m_nativePointerHeld = false;
+    m_nativeCommitPending = false;
+    m_nativeWindowDragged = false;
+    m_nativeCameras.clear();
+    m_nativeCandidates.clear();
+    m_nativeStartFrames.clear();
+    m_clippedTitlebarCandidate.reset();
+
+    m_draggedWindow = std::move(window);
+    m_draggedWindowDisplayId = display.id();
+    m_dragEverywhereMoved = false;
+    m_dragStartVirtualRect = m_draggedWindow->virtualRect;
+    const core::Rect projectedFrame = display.state().virtualToPhysical(m_draggedWindow->virtualRect);
+    m_dragPointerOffset = core::dragPointerOffset(m_nativePointerStart, projectedFrame);
+    m_draggedWindow->positionAnimation.reset();
+    dragWindowTo(pointer);
+    return true;
+}
+
 void WindowManager::noteNativeDrag() {
     if (m_nativePointerHeld && !m_nativeStartFrames.empty()) m_nativeWindowDragged = true;
 }
@@ -1348,6 +1527,7 @@ void WindowManager::noteNativeDrag() {
 void WindowManager::endNativeInteraction() {
     if (!m_nativePointerHeld) return;
     m_nativePointerHeld = false;
+    m_clippedTitlebarCandidate.reset();
     // The event tap sees mouse-up before the application processes it.
     m_nativeCommitTime = CACurrentMediaTime() + 0.05;
 }
@@ -1358,6 +1538,7 @@ void WindowManager::flushNativeInteractionForPan() {
     m_nativeWindowDragged = false;
     m_nativeStartFrames.clear();
     m_nativeCandidates.clear();
+    m_clippedTitlebarCandidate.reset();
 }
 
 bool WindowManager::beginDragEverywhere(core::Point pointer) {
@@ -1385,8 +1566,7 @@ void WindowManager::dragWindowTo(core::Point pointer) {
     if (!m_draggedWindow || !std::isfinite(pointer.x) || !std::isfinite(pointer.y)) return;
     Display* display = displayById(m_draggedWindowDisplayId);
     if (!display) return;
-    const auto virtualPoint = display->state().physicalToVirtual(
-        core::Point{pointer.x - m_dragPointerOffset.x, pointer.y - m_dragPointerOffset.y});
+    const auto virtualPoint = core::draggedVirtualOrigin(display->state(), pointer, m_dragPointerOffset);
     if (!std::isfinite(virtualPoint.x) || !std::isfinite(virtualPoint.y)) return;
     if (virtualPoint.x != m_draggedWindow->virtualRect.x ||
         virtualPoint.y != m_draggedWindow->virtualRect.y) m_dragEverywhereMoved = true;
@@ -1436,6 +1616,7 @@ void WindowManager::cancelDragEverywhere() {
     m_draggedWindowDisplayId = 0;
     m_dragEverywhereMoved = false;
     m_dragStartVirtualRect.reset();
+    m_clippedTitlebarCandidate.reset();
 }
 
 void WindowManager::commitNativeInteraction() {

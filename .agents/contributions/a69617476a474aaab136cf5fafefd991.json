@@ -1,0 +1,29 @@
+{
+  "assistance": "ai",
+  "base": "cdf3a58c0eefd6d7a8f3b9e67d8a9bab400d7b21",
+  "id": "a69617476a474aaab136cf5fafefd991",
+  "paths": [
+    "src/core/WindowDrag.hpp",
+    "src/daemon/AXBackend.hpp",
+    "src/daemon/AXBackend.mm",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.hpp",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/WindowPool.hpp",
+    "src/daemon/WindowPosition.hpp",
+    "src/daemon/WindowPosition.mm",
+    "tests/ConfigTests.mm",
+    "tests/DaemonRunLoopTests.mm",
+    "tests/GeometryTests.cpp",
+    "tests/WindowPositionTests.mm",
+    "tests/WindowRendererTests.mm"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}

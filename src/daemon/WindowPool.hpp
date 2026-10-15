@@ -58,6 +58,13 @@ public:
         double startTime = 0;
     };
     std::optional<PositionAnimation> positionAnimation;
+    struct FrameAnimation {
+        core::Rect from;
+        core::Rect target;
+        double startTime = 0;
+        bool verticalEdgesFirst = false;
+    };
+    std::optional<FrameAnimation> frameAnimation;
     bool preferNativePosition = false;
     bool nativeHandoffAttempted = false;
     bool nativePresentationChecked = false;

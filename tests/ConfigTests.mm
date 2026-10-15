@@ -46,6 +46,12 @@ int main() {
     expect(parsed.snapHorizontalTuning == minfwm::core::SnapTuning::automatic &&
            parsed.snapVerticalTuning == minfwm::core::SnapTuning::automatic,
            "snap tuning defaults to automatic on both axes");
+    minfwm::ConfigSnapshot bookmarkConfig;
+    expect(bookmarkConfig.bookmarksSaveFocus, "bookmark focus saving defaults to enabled");
+    expect(minfwm::ConfigManager::parseText("[bookmarks]\nsave-focus = false\n", bookmarkConfig, error) &&
+           !bookmarkConfig.bookmarksSaveFocus, "bookmark focus saving can be disabled");
+    expect(!minfwm::ConfigManager::parseText("[bookmarks]\nsave-focus = \"false\"\n", bookmarkConfig, error) &&
+           !bookmarkConfig.bookmarksSaveFocus, "invalid bookmark focus option preserves the current snapshot");
     expect(parsed.overscanBufferPx == 250.5f, "finite numeric value is parsed");
     expect(parsed.whitelist.size() == 2, "string array is parsed");
     expect(minfwm::ConfigManager::parseText(
@@ -173,6 +179,17 @@ int main() {
            "malformed TOML is rejected");
     expect(minfwm::ConfigManager::parseText("[keybinds]\n", parsed, error),
            "document-only keybind category is accepted empty");
+    expect(parsed.temporarilyFullscreen == std::vector<std::string>({"Super", "Ctrl", "F"}),
+           "temporary fullscreen shortcut defaults to Super Ctrl F");
+    expect(minfwm::ConfigManager::parseText(
+               "[keybinds]\ntemporarily-fullscreen = [\"Super\", \"Shift\", \"M\"]\n", parsed, error) &&
+           parsed.temporarilyFullscreen == std::vector<std::string>({"Super", "Shift", "M"}),
+           "temporary fullscreen shortcut can be remapped");
+    const auto customShortcut = parsed.temporarilyFullscreen;
+    expect(!minfwm::ConfigManager::parseText(
+               "[keybinds]\ntemporarily-fullscreen = [\"Super\", \"Super\", \"M\"]\n", parsed, error) &&
+           parsed.temporarilyFullscreen == customShortcut,
+           "duplicate temporary fullscreen modifiers are rejected without mutating output");
     expect(!minfwm::ConfigManager::parseText("[keybinds]\npan = \"cmd+option\"\n", parsed, error),
            "undocumented configurable keybinds are rejected");
 

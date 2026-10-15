@@ -56,13 +56,13 @@ bool matchesModifierChord(CGEventFlags eventFlags, const std::vector<std::string
 }
 
 int64_t keyCodeForShortcut(const std::vector<std::string>& shortcut) {
-    if (shortcut.size() != 2 || shortcut[0] != "Super" || shortcut[1].size() != 1 ||
-        shortcut[1][0] < 'A' || shortcut[1][0] > 'Z') return -1;
+    if (shortcut.size() < 2 || shortcut.back().size() != 1 ||
+        shortcut.back()[0] < 'A' || shortcut.back()[0] > 'Z') return -1;
     static constexpr int64_t keyCodes[] = {
         0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46,
         45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7, 16, 6,
     };
-    return keyCodes[shortcut[1][0] - 'A'];
+    return keyCodes[shortcut.back()[0] - 'A'];
 }
 
 bool setCursorHidingInBackground(bool enabled) {
@@ -492,6 +492,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         WindowManager::instance().endNativeInteraction();
         WindowManager::instance().cancelDragEverywhere();
         interceptor->m_dragEverywhereActive = false;
+        interceptor->m_clippedTitlebarDragActive = false;
         interceptor->m_trackpadDragEverywhereActive = false;
         interceptor->m_trackpadDragPointer = {};
         const CGPoint pointer = event ? CGEventGetLocation(event) : CGPointZero;
@@ -661,9 +662,23 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
                 wm.beginNativeInteraction({static_cast<float>(point.x), static_cast<float>(point.y)});
             }
         } else if (type == kCGEventLeftMouseDragged) {
-            if (update.consume) wm.flushNativeInteractionForPan();
-            else wm.noteNativeDrag();
+            if (update.consume) {
+                wm.flushNativeInteractionForPan();
+            } else if (interceptor->m_clippedTitlebarDragActive) {
+                wm.dragWindowTo(pointer);
+                return nullptr;
+            } else if (wm.beginClippedTitlebarDrag(pointer)) {
+                interceptor->m_clippedTitlebarDragActive = true;
+                return nullptr;
+            } else {
+                wm.noteNativeDrag();
+            }
         } else if (type == kCGEventLeftMouseUp && !update.consume) {
+            if (interceptor->m_clippedTitlebarDragActive) {
+                wm.endDragEverywhere(pointer);
+                interceptor->m_clippedTitlebarDragActive = false;
+                return event;
+            }
             wm.endNativeInteraction();
         }
         wm.setPanning(interceptor->m_panGesture.isPanning());
@@ -693,6 +708,14 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         const bool exactSuperChord = superHeld(flags, superModifiers) &&
             !hasUnconfiguredPinModifier(flags, superModifiers);
         const bool repeating = CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat) != 0;
+
+        std::vector<std::string> temporaryFullscreenModifiers = config.temporarilyFullscreen;
+        const int64_t temporaryFullscreenKey = keyCodeForShortcut(temporaryFullscreenModifiers);
+        if (temporaryFullscreenModifiers.size() > 1) temporaryFullscreenModifiers.pop_back();
+        if (keycode == temporaryFullscreenKey && matchesModifierChord(flags, temporaryFullscreenModifiers, superModifiers)) {
+            if (!repeating) (void)wm.toggleTemporaryFullscreen();
+            return nullptr;
+        }
 
         if (exactSuperChord && !repeating && keycode == keyCodeForShortcut(config.centerCameraToFocus)) {
             wm.centerCameraToFocusedWindow();

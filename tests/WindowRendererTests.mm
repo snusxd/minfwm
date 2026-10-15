@@ -88,6 +88,24 @@ void initializeWindow(ClientWindow& window) {
     window.virtualCoordinatesInitialized = true;
 }
 
+void testTemporaryTopmostLayerLifecycle() {
+    RecordingBackend ax, sa;
+    sa.layerCode = BackendCode::ok;
+    ClientWindow window(nullptr, 84);
+    initializeWindow(window);
+    WindowRenderer renderer(ax, sa);
+    expect(renderer.setPinnedLayer(window, true).succeeded() && window.pinnedLevelSet &&
+           !window.pinned && sa.layer == kCGPopUpMenuWindowLevelKey,
+           "temporary maximization can raise the real window level without pinning canvas ownership");
+    sa.layerCode = BackendCode::failed;
+    expect(!renderer.setPinnedLayer(window, false).succeeded() && window.pinnedLevelSet,
+           "failed topmost removal retains state so it can be retried");
+    sa.layerCode = BackendCode::ok;
+    expect(renderer.setPinnedLayer(window, false).succeeded() && !window.pinnedLevelSet &&
+           !window.isLayerSet && sa.layer == kCGNormalWindowLevelKey,
+           "leaving temporary maximization removes the topmost level");
+}
+
 void testReleaseToIgnoredDisplay() {
     RecordingBackend ax, sa;
     sa.transforms = true;
@@ -645,6 +663,7 @@ void testManyPreviewFramesDoNotMoveOriginals() {
 int main() {
     testManyPreviewFramesDoNotMoveOriginals();
     testPreviewParkingAndRecovery();
+    testTemporaryTopmostLayerLifecycle();
     testReleaseToIgnoredDisplay();
     testOverviewPresentationAndReturn();
     testExternalApplicationSuspension();

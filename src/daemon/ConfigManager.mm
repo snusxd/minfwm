@@ -260,6 +260,40 @@ bool readShortcut(const TomlTable* table, std::string_view name,
     return true;
 }
 
+bool readKeybind(const TomlTable* table, std::string_view name,
+                 std::vector<std::string>& out, std::string& error) {
+    if (!table) return true;
+    const TomlNode* node = table->get(name);
+    if (!node) return true;
+    const toml::array* values = node->as_array();
+    if (!values || values->size() < 2) {
+        error = "keybinds." + std::string(name) + " must be [modifiers..., \"A-Z\"]";
+        return false;
+    }
+
+    std::vector<std::string> parsed;
+    parsed.reserve(values->size());
+    for (std::size_t i = 0; i + 1 < values->size(); ++i) {
+        const auto modifier = (*values)[i].value<std::string>();
+        if (!modifier || (*modifier != "Super" && *modifier != "Cmd" && *modifier != "Alt" &&
+                          *modifier != "Shift" && *modifier != "Ctrl") ||
+            std::find(parsed.begin(), parsed.end(), *modifier) != parsed.end()) {
+            error = "keybinds." + std::string(name) +
+                " must contain unique Super, Cmd, Alt, Shift, or Ctrl modifiers followed by A-Z";
+            return false;
+        }
+        parsed.push_back(*modifier);
+    }
+    const auto key = (*values)[values->size() - 1].value<std::string>();
+    if (!key || key->size() != 1 || (*key)[0] < 'A' || (*key)[0] > 'Z') {
+        error = "keybinds." + std::string(name) + " must end with an uppercase A-Z key";
+        return false;
+    }
+    parsed.push_back(*key);
+    out = std::move(parsed);
+    return true;
+}
+
 bool readBookmarkModifiers(const TomlTable* table, std::string_view name,
                            std::vector<std::string>& out, std::string& error) {
     if (!table) return true;
@@ -401,6 +435,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode", "ignored-displays"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
                                        {"super", "center-camera-to-focus", "center-focus-to-camera",
+                                        "temporarily-fullscreen",
                                         "drag-everywhere", "bookmarks-add", "bookmarks-goto"}, error)) return false;
     if (pins && !rejectUnknownKeys(*pins, "pins", {"always-on-top"}, error)) return false;
     if (animations && !rejectUnknownKeys(*animations, "animations", {"enable", "speed"}, error)) return false;
@@ -433,6 +468,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readSuperKey(keybinds, candidate.superModifiers, error) ||
         !readShortcut(keybinds, "center-camera-to-focus", candidate.centerCameraToFocus, error) ||
         !readShortcut(keybinds, "center-focus-to-camera", candidate.centerFocusToCamera, error) ||
+        !readKeybind(keybinds, "temporarily-fullscreen", candidate.temporarilyFullscreen, error) ||
         !readBookmarkModifiers(keybinds, "drag-everywhere", candidate.dragEverywhereModifiers, error) ||
         !readBookmarkModifiers(keybinds, "bookmarks-add", candidate.bookmarksAddModifiers, error) ||
         !readBookmarkModifiers(keybinds, "bookmarks-goto", candidate.bookmarksGotoModifiers, error)) {

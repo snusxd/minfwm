@@ -24,6 +24,27 @@ std::optional<std::unordered_set<uint32_t>> readWindowIds(CGWindowListOption opt
 std::optional<std::unordered_set<uint32_t>> readOnscreenWindowIds() {
     return readWindowIds(kCGWindowListOptionOnScreenOnly);
 }
+std::optional<std::vector<OnscreenWindowSnapshotEntry>> readOnscreenWindowSnapshot() {
+    auto windows = CFRef<CFArrayRef>::adopt(
+        CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
+    if (!windows) return {};
+    std::vector<OnscreenWindowSnapshotEntry> result;
+    result.reserve(static_cast<size_t>(CFArrayGetCount(windows.get())));
+    for (CFIndex i = 0; i < CFArrayGetCount(windows.get()); ++i) {
+        auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows.get(), i));
+        if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID()) continue;
+        auto number = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowNumber));
+        auto bounds = static_cast<CFDictionaryRef>(CFDictionaryGetValue(info, kCGWindowBounds));
+        uint32_t wid = 0;
+        CGRect frame{};
+        if (!number || CFGetTypeID(number) != CFNumberGetTypeID() ||
+            !CFNumberGetValue(number, kCGWindowIDCFNumberType, &wid) || !wid || !bounds ||
+            CFGetTypeID(bounds) != CFDictionaryGetTypeID() ||
+            !CGRectMakeWithDictionaryRepresentation(bounds, &frame)) continue;
+        result.push_back({wid, frame});
+    }
+    return result;
+}
 std::optional<std::unordered_set<uint32_t>> readSessionWindowIds() {
     return readWindowIds(kCGWindowListOptionAll);
 }

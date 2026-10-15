@@ -34,6 +34,7 @@ struct ConfigSnapshot {
     std::vector<std::string> superModifiers = {"Cmd", "Alt"};
     std::vector<std::string> centerCameraToFocus = {"Super", "F"};
     std::vector<std::string> centerFocusToCamera = {"Super", "S"};
+    std::vector<std::string> temporarilyFullscreen = {"Super", "Ctrl", "F"};
     std::vector<std::string> dragEverywhereModifiers = {"Super", "Ctrl"};
     std::vector<std::string> bookmarksAddModifiers = {"Super"};
     std::vector<std::string> bookmarksGotoModifiers = {"Super", "Shift"};

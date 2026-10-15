@@ -2,6 +2,7 @@
 #include "DisplayState.hpp"
 #include "Visibility.hpp"
 #include "WindowOwnership.hpp"
+#include "WindowDrag.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -39,6 +40,8 @@ int main() {
     using minfwm::core::nearestDisplay;
     using minfwm::core::snapViewportToNearFullscreenWindow;
     using minfwm::core::SnapTuning;
+    using minfwm::core::dragPointerOffset;
+    using minfwm::core::draggedVirtualOrigin;
 
     Camera camera;
     camera.move(-125.0f, 80.0f);
@@ -288,6 +291,31 @@ int main() {
         Point{pointerOnWindow.x - actualGrabOffset.x, pointerOnWindow.y - actualGrabOffset.y});
     expectNear(leftCanvas.virtualToPhysical(unchangedDrag).x, actualVisualOrigin.x,
                "drag starts from the observed window frame without an initial cursor jump");
+
+    DisplayState clippedDragDisplay({11, {0, 0, 1920, 1080}});
+    clippedDragDisplay.camera().setPosition(500, 200);
+    const Rect clippedModelFrame{450, 170, 640, 480};
+    const Rect projectedClippedFrame = clippedDragDisplay.virtualToPhysical(clippedModelFrame);
+    const Rect osClampedFrame{0, 0, 640, 480};
+    const Point clippedPress{24, 16};
+    expect(projectedClippedFrame.x < osClampedFrame.x,
+           "clipped drag fixture projects the model frame beyond the physical display");
+    const Point clampedOffset = dragPointerOffset(clippedPress, osClampedFrame);
+    const Point clampedStartOrigin = draggedVirtualOrigin(clippedDragDisplay, clippedPress, clampedOffset);
+    expect(clampedStartOrigin.x != clippedModelFrame.x,
+           "using the OS-clamped frame as grab offset reproduces the clipped-drag position jump");
+    const Point clippedOffset = dragPointerOffset(clippedPress, projectedClippedFrame);
+    const Point clippedStartOrigin = draggedVirtualOrigin(clippedDragDisplay, clippedPress, clippedOffset);
+    expectNear(clippedStartOrigin.x, clippedModelFrame.x,
+               "clipped titlebar drag starts from the model x without snapping to the OS-clamped frame");
+    expectNear(clippedStartOrigin.y, clippedModelFrame.y,
+               "clipped titlebar drag starts from the model y without snapping to the OS-clamped frame");
+    const Point clippedMovedOrigin = draggedVirtualOrigin(
+        clippedDragDisplay, {clippedPress.x + 37, clippedPress.y + 19}, clippedOffset);
+    expectNear(clippedMovedOrigin.x, clippedModelFrame.x + 37,
+               "clipped titlebar drag follows pointer delta on x at a shifted camera");
+    expectNear(clippedMovedOrigin.y, clippedModelFrame.y + 19,
+               "clipped titlebar drag follows pointer delta on y at a shifted camera");
 
     display.saveBookmark(3);
     display.camera().setPosition(0.0f, 0.0f);

@@ -32,6 +32,15 @@ int main() {
         selectedEntries = @[window(42, 100, 200), window(0, 0, 0), @{@"not-a-window": @1}];
         auto visible = minfwm::readOnscreenWindowIds();
         expect(visible && visible->size() == 1 && visible->contains(42), "onscreen snapshot ignores invalid IDs and malformed entries");
+        auto snapshot = minfwm::readOnscreenWindowSnapshot();
+        expect(snapshot && snapshot->size() == 1 && snapshot->front().wid == 42 &&
+               snapshot->front().frame.origin.x == 100 && snapshot->front().frame.origin.y == 200,
+               "onscreen hit-test snapshot keeps window bounds and front-to-back order");
+        selectedEntries = @[window(77, 10, 20), window(42, 100, 200),
+                            @{(id)kCGWindowNumber: @88, (id)kCGWindowBounds: @"malformed"}];
+        snapshot = minfwm::readOnscreenWindowSnapshot();
+        expect(snapshot && snapshot->size() == 2 && snapshot->at(0).wid == 77 && snapshot->at(1).wid == 42,
+               "onscreen hit-test snapshot preserves stacking order and skips malformed bounds");
         selectedEntries = @[];
         visible = minfwm::readOnscreenWindowIds();
         expect(visible && visible->empty(), "empty onscreen list is a valid absence of presented windows");
