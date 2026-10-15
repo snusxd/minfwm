@@ -1,0 +1,14 @@
+{
+  "assistance": "ai",
+  "base": "0929ac29e277d1f2a7b9684886d03ee2aa662b64",
+  "id": "1b6fd405fce04ea48e8cb688138ddb8c",
+  "paths": [
+    "docs/wiki/Configuration.md",
+    "docs/wiki/Getting-Started.md"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "antigravity"
+  ]
+}

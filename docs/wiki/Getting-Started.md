@@ -72,7 +72,7 @@ Control the `minfwm` daemon easily from your terminal:
 | `minfwm enable` | Register and start `minfwm` to launch automatically at login. |
 | `minfwm disable` | Stop `minfwm` and disable auto-start on login. |
 | `minfwm camera move --x <px> --y <px>` | Move the active camera by a specific pixel offset. |
-| `minfwm dev-update` | (Developers) Rebuilds the binary, preserves window positions, and restarts the daemon. |
+| `minfwm dev-update [--attach]` | (Developers) Rebuilds the binary, preserves window positions, restarts the daemon, and optionally attaches to logs. |
 
 ---
 
