@@ -9,11 +9,14 @@
 #include <csignal>
 #include <array>
 #include <chrono>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string_view>
 #include <thread>
+#include <sys/stat.h>
 
 int runDaemon();
 
@@ -34,6 +37,12 @@ int runDaemon();
 #endif
 
 namespace {
+
+volatile std::sig_atomic_t g_detachFromLogs = 0;
+
+void requestLogDetach(int) {
+    g_detachFromLogs = 1;
+}
 
 const char* errorCodeName(minfwm::ErrorCode error) {
     switch (error) {
@@ -117,6 +126,59 @@ bool buildDevUpdate(std::string& error) {
 
 std::filesystem::path daemonLogPath() {
     return std::filesystem::path(NSHomeDirectory().UTF8String) / "Library/Logs/minfwm.log";
+}
+
+void attachToDaemonLogs() {
+    const auto path = daemonLogPath();
+    std::ifstream log(path);
+    if (log) {
+        std::deque<std::string> recentLines;
+        std::string line;
+        while (std::getline(log, line)) {
+            recentLines.push_back(line);
+            if (recentLines.size() > 20) recentLines.pop_front();
+        }
+        for (const auto& recentLine : recentLines) std::cout << recentLine << '\n';
+    }
+
+    std::error_code sizeError;
+    std::uintmax_t offset = std::filesystem::file_size(path, sizeError);
+    if (sizeError) offset = 0;
+    struct stat logStat {};
+    ino_t inode = ::stat(path.c_str(), &logStat) == 0 ? logStat.st_ino : 0;
+    std::string pendingLine;
+
+    g_detachFromLogs = 0;
+    const auto previousHandler = std::signal(SIGINT, requestLogDetach);
+    std::cout << "minfwm: attached to daemon logs; press Ctrl-C to detach (daemon keeps running)"
+              << std::endl;
+    while (g_detachFromLogs == 0) {
+        std::error_code currentSizeError;
+        const auto currentSize = std::filesystem::file_size(path, currentSizeError);
+        struct stat currentStat {};
+        const ino_t currentInode = ::stat(path.c_str(), &currentStat) == 0 ? currentStat.st_ino : 0;
+        if (!currentSizeError && (currentInode != inode || currentSize < offset)) {
+            offset = 0;
+            inode = currentInode;
+            pendingLine.clear();
+        }
+        if (!currentSizeError && currentSize > offset) {
+            std::ifstream updates(path);
+            updates.seekg(static_cast<std::streamoff>(offset));
+            const std::string chunk((std::istreambuf_iterator<char>(updates)),
+                                    std::istreambuf_iterator<char>());
+            offset += chunk.size();
+            pendingLine += chunk;
+            std::size_t lineEnd = 0;
+            while ((lineEnd = pendingLine.find('\n')) != std::string::npos) {
+                std::cout << pendingLine.substr(0, lineEnd) << '\n';
+                pendingLine.erase(0, lineEnd + 1);
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    }
+    std::signal(SIGINT, previousHandler);
+    std::cout << "minfwm: detached from daemon logs; daemon is still running" << std::endl;
 }
 
 std::uintmax_t daemonLogSize() {
@@ -293,6 +355,7 @@ int main(int argc, const char * argv[]) {
                 std::cout << "minfwm: dev-update completed successfully: build succeeded, "
                           << "layout saved, foreground daemon PID " << newPid
                           << " confirmed ready via IPC" << std::endl;
+                if (parsed.command->attachLogs) attachToDaemonLogs();
                 return 0;
             }
 
@@ -309,6 +372,7 @@ int main(int argc, const char * argv[]) {
             std::cout << "minfwm: dev-update completed successfully: build succeeded, "
                       << (layoutSaved ? "layout saved, " : "no running layout to save, ")
                       << "daemon restarted and confirmed ready via IPC" << std::endl;
+            if (parsed.command->attachLogs) attachToDaemonLogs();
             return 0;
         }
         if (command == minfwm::ParsedCommandLine::Command::START ||

@@ -95,11 +95,13 @@ CommandLineParseResult parseCommandLine(int argc, const char* const* argv) {
     }
 
     if (command == "dev-update") {
-        if (argc != 2) {
-            return invalidArguments("dev-update does not accept arguments");
+        if (argc != 2 && !(argc == 3 && argv[2] != nullptr &&
+                           std::string_view(argv[2]) == "--attach")) {
+            return invalidArguments("dev-update accepts only the --attach option");
         }
         ParsedCommandLine parsed;
         parsed.command = ParsedCommandLine::Command::DEV_UPDATE;
+        parsed.attachLogs = argc == 3;
         return CommandLineParseResult{parsed, {}};
     }
 

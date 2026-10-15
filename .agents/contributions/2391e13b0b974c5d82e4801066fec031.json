@@ -1,0 +1,16 @@
+{
+  "assistance": "ai",
+  "base": "7764edd8ee2837b73e24855258450df729e539f1",
+  "id": "2391e13b0b974c5d82e4801066fec031",
+  "paths": [
+    "docs/wiki/Development.md",
+    "src/cli/CommandLine.cpp",
+    "src/cli/CommandLine.hpp",
+    "src/cli/main.mm"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}

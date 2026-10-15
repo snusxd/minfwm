@@ -53,6 +53,15 @@ When making changes to the daemon or CLI, use the built-in `dev-update` command:
 ./build/minfwm dev-update
 ```
 
+To follow the daemon log after the update, pass `--attach`:
+
+```sh
+./build/minfwm dev-update --attach
+```
+
+Attach prints the most recent 20 log lines and follows new output. Press `Ctrl-C`
+to detach from the log; the daemon continues running.
+
 What `dev-update` does:
 1. Rebuilds the `minfwm` binary in your `build` directory.
 2. Captures and saves your current window positions and camera locations.

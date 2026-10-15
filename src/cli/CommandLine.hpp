@@ -24,6 +24,7 @@ struct ParsedCommandLine {
     float x = 0.0F;
     float y = 0.0F;
     bool devVersion = false;
+    bool attachLogs = false;
 };
 
 struct CommandLineParseResult {
