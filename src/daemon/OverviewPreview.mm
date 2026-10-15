@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <iostream>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -94,6 +95,19 @@ public:
             m_permissionCheckedAt = now;
         }
         return m_permitted;
+    }
+    bool requestPermission() override {
+        std::cout << "minfwm daemon: requesting Screen Recording permission for overview previews" << std::endl;
+        const bool granted = CGRequestScreenCaptureAccess();
+        // Do not reuse a cached denial after the user responds to the dialog.
+        m_permissionCheckedAt = -std::numeric_limits<double>::infinity();
+        if (!granted) {
+            std::cerr << "minfwm daemon: overview previews need Screen Recording access; enable it in "
+                         "System Settings > Privacy & Security > Screen Recording. "
+                         "Windows remain live without access; macOS may require a daemon restart after granting it."
+                      << std::endl;
+        }
+        return granted;
     }
     void reset() override {
         m_cache->content = nil;
@@ -289,6 +303,7 @@ struct OverviewPreview::State {
     size_t budget;
     size_t generation = 0;
     bool inFlight = false;
+    bool permissionRequestAttempted = false;
     double lastLaunch = -std::numeric_limits<double>::infinity();
     double latestNow = 0;
     double captureRetryAt = 0;
@@ -333,8 +348,21 @@ bool OverviewPreview::beginDisplay(int64_t displayId, core::Rect bounds, float s
     auto& state = *m_state;
     const bool active = state.displays.contains(displayId);
     if (active && state.displays.at(displayId).frameOpen) finishDisplay(displayId);
-    if (!std::isfinite(now) || !validRect(bounds) || !state.provider || !state.presenter ||
-        !core::overviewPreviewActive(active, scale, enabled, rewindOnFocus, state.provider->permitted()) ||
+    if (!std::isfinite(now) || !validRect(bounds) || !state.provider || !state.presenter) {
+        endDisplay(displayId);
+        return false;
+    }
+    bool permitted = false;
+    if (enabled && rewindOnFocus && std::isfinite(scale) && scale > 0 && scale <= 1) {
+        permitted = state.provider->permitted();
+        if (!permitted && !state.permissionRequestAttempted) {
+            // Request during initial native-scale frames as well as overview,
+            // never repeatedly during animation, denial or session reset.
+            state.permissionRequestAttempted = true;
+            permitted = state.provider->requestPermission();
+        }
+    }
+    if (!core::overviewPreviewActive(active, scale, enabled, rewindOnFocus, permitted) ||
         !state.presenter->begin(displayId, bounds)) {
         endDisplay(displayId);
         return false;

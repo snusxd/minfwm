@@ -1,0 +1,19 @@
+{
+  "assistance": "ai",
+  "base": "eb165e5e0849230e1cb2e6dc601c840d1a2063cd",
+  "id": "e24db20a9cb74d10a3341dbd8fe279f9",
+  "paths": [
+    "docs/Acceptance-macos.md",
+    "docs/ai/handoffs/TASK-OVERVIEW-PREVIEWS.md",
+    "docs/ai/plans/overview-previews.md",
+    "docs/wiki/Configuration.md",
+    "src/daemon/OverviewPreview.hpp",
+    "src/daemon/OverviewPreview.mm",
+    "tests/OverviewPreviewTests.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-OVERVIEW-PERMISSION",
+  "tools": [
+    "codex"
+  ]
+}

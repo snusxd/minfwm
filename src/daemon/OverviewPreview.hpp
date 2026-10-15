@@ -38,6 +38,9 @@ public:
         using Completion = std::function<void(ImagePtr)>;
         virtual ~CaptureProvider() = default;
         [[nodiscard]] virtual bool permitted() const = 0;
+        // Called once for missing access when enabled previews first initialize.
+        // Test providers must never invoke a real macOS permission dialog.
+        virtual bool requestPermission() { return false; }
         // Completion may arrive on any queue; the adapter marshals to main.
         virtual void capture(uint32_t wid, pid_t pid, size_t longestEdge, Completion completion) = 0;
         virtual void reset() {}

@@ -123,7 +123,7 @@ Snapping automatically eases large windows into place along display borders when
 | `zoomed-esc-center` | `"screen"` | Camera target when pressing `Escape` to exit overview: `"screen"`, `"mouse"`, or `"focus"`. |
 
 > [!TIP]
-> **Overview Previews**: When zooming far out, `minfwm` can display lightweight preview thumbnails for background windows instead of continuously rendering live windows. Active and pinned windows always stay live. If Screen Recording permission is not enabled, overview simply keeps all windows live.
+> **Overview Previews**: When zooming far out, `minfwm` can display lightweight preview thumbnails for background windows instead of continuously rendering live windows. Active and pinned windows always stay live. With previews enabled and `rewind-on-focus = true`, the daemon requests missing Screen Recording permission once when it starts rendering displays. If access is denied, overview keeps all windows live. Enable previously denied access in System Settings → Privacy & Security → Screen Recording; macOS may require restarting the daemon after granting it.
 
 ---
 

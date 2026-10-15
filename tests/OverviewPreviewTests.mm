@@ -17,9 +17,16 @@ using namespace minfwm;
 class Capture final : public OverviewPreview::CaptureProvider {
 public:
     bool permission = true;
+    bool grantOnRequest = false;
+    size_t permissionRequests = 0;
     size_t requests = 0;
     std::vector<Completion> pending;
     bool permitted() const override { return permission; }
+    bool requestPermission() override {
+        ++permissionRequests;
+        if (grantOnRequest) permission = true;
+        return permission;
+    }
     void capture(uint32_t, pid_t, size_t edge, Completion completion) override {
         expect(edge == 512, "capture is bounded at source");
         ++requests;
@@ -86,6 +93,44 @@ void policyTests() {
         expect(!core::overviewPreviewEligible(interaction), "direct interaction is excluded");
     }
 }
+void permissionRequestTests() {
+    auto capture = std::make_shared<Capture>();
+    auto presenter = std::make_shared<Presenter>();
+    OverviewPreview previews(capture, presenter);
+    capture->permission = false;
+    const core::Rect bounds{0, 0, 100, 100};
+    expect(!previews.beginDisplay(1, bounds, 1, false, true, 0, {}) &&
+           capture->permissionRequests == 0, "disabled previews never request screen recording");
+    expect(!previews.beginDisplay(1, bounds, 1, true, false, 0, {}) &&
+           capture->permissionRequests == 0, "direct overview interaction never requests unused capture access");
+    expect(!previews.beginDisplay(1, bounds, std::numeric_limits<float>::quiet_NaN(), true, true, 0, {}) &&
+           capture->permissionRequests == 0, "invalid display input cannot trigger a permission prompt");
+    expect(!previews.beginDisplay(1, bounds, 1, true, true, 0, {}) &&
+           capture->permissionRequests == 1, "startup at native scale requests missing access once");
+    for (int frame = 1; frame <= 4; ++frame) {
+        expect(!previews.beginDisplay(frame, bounds, .2f, true, true, frame, {}),
+               "denied access keeps every display in live mode");
+        previews.reset();
+    }
+    expect(capture->permissionRequests == 1 && capture->requests == 0 && presenter->shown == 0,
+           "frames, multiple displays and session resets do not repeat a denied prompt or capture");
+    capture->permission = true;
+    expect(previews.beginDisplay(1, bounds, .2f, true, true, 5, {}) && capture->permissionRequests == 1,
+           "access granted in Settings is detected without another permission request");
+
+    auto granted = std::make_shared<Capture>();
+    OverviewPreview alreadyGranted(granted, presenter);
+    expect(alreadyGranted.beginDisplay(2, bounds, .2f, true, true, 6, {}) &&
+           granted->permissionRequests == 0, "previously authorized startup never prompts");
+
+    auto immediate = std::make_shared<Capture>();
+    immediate->permission = false;
+    immediate->grantOnRequest = true;
+    OverviewPreview grantedByPrompt(immediate, presenter);
+    expect(grantedByPrompt.beginDisplay(3, bounds, .2f, true, true, 7, {}) &&
+           immediate->permissionRequests == 1, "a successful permission request enables preview mode immediately");
+}
+
 void adapterTests() {
     auto capture = std::make_shared<Capture>();
     auto presenter = std::make_shared<Presenter>();
@@ -301,6 +346,7 @@ void lifetimeAndBudgetTests() {
 int main() {
     @autoreleasepool {
         policyTests();
+        permissionRequestTests();
         adapterTests();
         asyncAndDisplaysTests();
         reusedIdentityTests();

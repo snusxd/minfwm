@@ -9,8 +9,9 @@ The mode enters at 45% and exits at 55%. ScreenCaptureKit captures one window at
 time with at least 50 ms between launches. Source snapshots are at most 512 pixels
 on their longest edge, with a 64 MiB image cache and reusable CALayers on a
 nonactivating canvas per display. Missing Screen Recording permission, capture
-errors, parking errors and budget exhaustion preserve live fallback. No automatic
-permission prompt or screenshots on disk are introduced. The budget covers cached
+errors, parking errors and budget exhaustion preserve live fallback. Enabled
+previews request missing capture permission once per daemon run; already granted
+access and disabled previews do not prompt. No screenshots are saved to disk. The budget covers cached
 images, not total process/GPU/canvas memory. Applications continue running.
 
 ## Files and ownership
@@ -61,3 +62,14 @@ User requested integration directly into `main`. The latest committed bookmark
 focus behavior is retained alongside overview diagnostics. Existing uncommitted
 working changes are preserved separately from this merge. Live acceptance remains
 pending; this integration does not start or restart the daemon.
+
+## Screen Recording permission request follow-up
+
+At the user's request, initial display rendering now calls
+`CGRequestScreenCaptureAccess()` once when previews and focus rewind are enabled
+and preflight reports missing access. Denial keeps windows live; frames, multiple
+displays, reloads and overview-session resets cannot repeat the request. Previously
+denied access must be enabled in System Settings, subject to macOS restart rules.
+The permission cache is refreshed after the request. The app build and focused
+overview-preview CTest passed with injected permission responses; the real system
+dialog remains a manual check. The running daemon was not restarted by this edit.
