@@ -58,10 +58,14 @@ speed = 1.0
 multi-display-mode = "isolated"
 ignored-displays = []
 
+[bookmarks]
+save-focus = true
+
 [keybinds]
 super = ["Cmd", "Alt"]
 center-camera-to-focus = ["Super", "F"]
 center-focus-to-camera = ["Super", "S"]
+temporarily-fullscreen = ["Super", "Ctrl", "F"]
 drag-everywhere = ["Super", "Ctrl"]
 bookmarks-add = ["Super"]
 bookmarks-goto = ["Super", "Shift"]
@@ -144,6 +148,14 @@ Snapping automatically eases large windows into place along display borders when
 
 ---
 
+### `[bookmarks]`
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `save-focus` | `true` | Save the focused window with each bookmark and restore focus when jumping to it. Set to `false` to save camera position only. |
+
+---
+
 ### `[keybinds]`
 
 Modifiers can include: `"Cmd"`, `"Alt"` (Option), `"Shift"`, `"Ctrl"`, and `"Super"`.
@@ -153,6 +165,7 @@ Modifiers can include: `"Cmd"`, `"Alt"` (Option), `"Shift"`, `"Ctrl"`, and `"Sup
 | `super` | `["Cmd", "Alt"]` | Modifier chord representing the `Super` key throughout `minfwm`. |
 | `center-camera-to-focus` | `["Super", "F"]` | Shortcut to pan the camera to center the focused window. |
 | `center-focus-to-camera` | `["Super", "S"]` | Shortcut to move the focused window to the center of your screen. |
+| `temporarily-fullscreen` | `["Super", "Ctrl", "F"]` | Use the native macOS Fill command (macOS 15+); camera movement or zoom restores the previous frame. The app must expose the system Fill menu item. |
 | `drag-everywhere` | `["Super", "Ctrl"]` | Modifiers to hold while dragging any part of a window to move it. |
 | `bookmarks-add` | `["Super"]` | Modifiers to hold with digits 1–9 to save a camera bookmark slot (e.g. `Super + 1`). |
 | `bookmarks-goto` | `["Super", "Shift"]` | Modifiers to hold with digits 1–9 to jump to a saved bookmark (e.g. `Super + Shift + 1`). |

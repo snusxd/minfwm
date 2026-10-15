@@ -93,6 +93,7 @@ Control the `minfwm` daemon easily from your terminal:
 ### Window Management
 
 - **`Super + Ctrl` + Drag** (or three-finger swipe): **Drag Everywhere** — click and drag anywhere inside a window to move it freely, without needing to grab the title bar.
+- **`Super + Ctrl + F`**: **Temporary Fullscreen** — expands the window to fill the screen (macOS 15+ Fill); panning or zooming the camera immediately restores the original window size.
 - **`Super + P`**: Pin or unpin the currently focused window (pinned windows stay on screen as you pan).
 - **`Super + F`**: Center the camera onto the currently focused window.
 - **`Super + S`**: Pull the focused window to the center of the current camera view.
@@ -100,7 +101,7 @@ Control the `minfwm` daemon easily from your terminal:
 
 ### Camera Bookmarks
 
-Save your favorite canvas locations and jump between them instantly:
+Save your favorite canvas locations and jump between them instantly (bookmarks save both camera position and active window focus):
 
-- **`Super + 1..9`**: Save the current camera position to slot 1–9.
+- **`Super + 1..9`**: Save the current camera position and focused window to slot 1–9.
 - **`Super + Shift + 1..9`**: Jump immediately to saved slot 1–9.

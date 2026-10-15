@@ -11,9 +11,7 @@ Welcome to the `minfwm` documentation!
 - **[Yabai Integration](https://github.com/snusxd/minfwm/wiki/Yabai-Integration)**: Why the Yabai Scripting Addition is required, how to build and load it, and SIP prerequisites.
 - **[Architecture](https://github.com/snusxd/minfwm/wiki/Architecture)**: High-level overview of core geometry, macOS platform adapters, and IPC protocol.
 - **[Development](https://github.com/snusxd/minfwm/wiki/Development)**: Building from source, testing with CTest, and developer tools (`dev-update`).
-- **[macOS Acceptance Checklist](https://github.com/snusxd/minfwm/wiki/Acceptance-macos)**: Checklist for verifying real-world macOS window interactions and gestures.
-- **[Releases](https://github.com/snusxd/minfwm/wiki/Releases)**: Versioning scheme and release workflow.
-- **[Wiki Publishing](https://github.com/snusxd/minfwm/wiki/Publishing)**: How Wiki documentation is automatically synced via GitHub Actions.
+- **[Releases](https://github.com/snusxd/minfwm/wiki/Releases)**: Versioning scheme, upgrading releases, and checking installed version.
 
 ## Requirements at a Glance
 

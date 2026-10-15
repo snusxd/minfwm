@@ -12,12 +12,13 @@
   - Zoom out to an aerial view of your canvas with a four-finger trackpad pinch or `Super` + scroll wheel.
   - Click any window in overview mode to zoom in and center it.
   - Press `Escape` to quickly exit overview.
-- **Camera Bookmarks**: Save up to 9 camera positions (`Super + 1..9`) and instantly jump between them (`Super + Shift + 1..9`).
+- **Camera Bookmarks**: Save up to 9 camera positions and focused windows (`Super + 1..9`) and instantly jump between them (`Super + Shift + 1..9`).
 - **Precision CLI Navigation**: Move the camera to exact coordinates directly from the terminal (`minfwm camera move --x 100 --y 0`).
 
 ## Window Management & Ergonomics
 
 - **Drag Everywhere**: Hold `Super + Ctrl` and drag anywhere inside a window (or swipe with three fingers) to move it without reaching for the title bar.
+- **Temporary Fullscreen**: Press `Super + Ctrl + F` to temporarily expand a window to fill the display; camera panning or zooming immediately restores the window to its original size.
 - **Smart Window Snapping**: Smoothly snaps near-fullscreen windows into place along display edges after panning, with customizable threshold and alignment.
 - **Window Pinning**: Pin frequently referenced windows (`Super + P`) so they follow the camera wherever you pan, with optional always-on-top floating.
 - **Quick Centering**:

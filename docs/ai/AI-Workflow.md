@@ -6,7 +6,7 @@ This reference outlines workflow principles for assisted and autonomous developm
 
 ## Guidelines
 
-- **Repository Policy**: Defined in [AGENTS.md](../../AGENTS.md) and [GEMINI.md](../../GEMINI.md).
+- **Repository Policy**: Defined in [AGENTS.md](../../AGENTS.md).
 - **Skill Profiles**: Pinned skills are configured under `.agents/workflow-stack.json`.
 - **Routine Changes**:
   - Keep iterations lightweight and direct.

@@ -35,6 +35,8 @@ Use this checklist to verify `minfwm` behavior on macOS.
 ## 4. Window Controls & Shortcuts
 
 - [ ] **Drag Everywhere**: Hold `Super + Ctrl` and drag anywhere inside a window (or swipe with three fingers). Confirm the window moves freely without needing to click the title bar.
+- [ ] **Bookmark Focus**: Save bookmarks while different windows are focused, switch to other windows, then jump to each bookmark. Confirm keyboard input goes to the window saved in that slot. Repeat with `bookmarks.save-focus = false` and confirm only the camera position changes. Live verification of this scenario is pending.
+- [ ] **Temporary Fullscreen**: Press `Super + Ctrl + F` repeatedly on different apps and on a display with a negative origin. Confirm the native macOS Fill command expands the window and minfwm does not interrupt its system animation. Pan or zoom during expansion and after it settles; confirm the original frame is restored. Confirm the maximized window stays above other app windows, and restoration moves left/right edges before top/bottom edges. Confirm its temporary topmost level is cleared on restore. Repeat with animations disabled. Live verification of this scenario is pending.
 - [ ] **Window Pinning**: Focus a window and press `Super + P`. Pan the camera. Confirm the pinned window stays visible on screen and floats above other windows.
 - [ ] **Center Camera on Focus**: Pan away from the active window and press `Super + F`. Confirm the camera centers on the focused window.
 - [ ] **Center Focus on Camera**: Select a partially offscreen window and press `Super + S`. Confirm the window moves to the center of your current screen view.

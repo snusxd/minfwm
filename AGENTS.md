@@ -33,7 +33,7 @@ ctest --test-dir build --output-on-failure
 
 ## Testing Guidelines
 - Add a focused CTest before changing a wire or pure-core contract. Test malformed frames, partial I/O, invalid config, negative display origins, lifecycle idempotence, and SA packet bytes.
-- Accessibility, WindowServer, CGEventTap, and live SA checks are manual-only; record them using `docs/wiki/Acceptance-macos.md`.
+- Accessibility, WindowServer, CGEventTap, and live SA checks are manual-only; record them using `docs/Acceptance-macos.md`.
 
 ## Commits and Pull Requests
 - Use Conventional Commit subjects: `type: short English summary` (`fix: reject malformed IPC frame`).
@@ -45,7 +45,7 @@ ctest --test-dir build --output-on-failure
 - Do not commit credentials, machine-specific paths, SIP changes, or live socket files.
 
 ## Active AI Workflow
-- Start a new chat with `docs/wiki/AI-Workflow.md`; open `.agents/skills` guidance only when relevant to the task.
+- Start a new chat with `docs/ai/AI-Workflow.md`; open `.agents/skills` guidance only when relevant to the task.
 - Bootstrap once per new checkout/tool with `python3 tools/ai_bootstrap.py --tool codex` (use the actual tool ID). Do not repeat bootstrap or profile/task validation every chat unless setup changed or a tool error needs diagnosis. Never silently overwrite an existing hook manager.
 - `CLAUDE.md` is the existing symlink to this file; preserve it. Task cards and workflow metadata remain under `docs/ai/` and `.agents/`.
 - Keep routine changes fast: one fresh worker when isolation helps, a short prompt with goal/acceptance/owned paths/relevant skill, coordinator integration, and the smallest affected check. Do not add planner, researcher, reviewer or tester agents by default.

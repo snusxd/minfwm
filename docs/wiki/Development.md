@@ -78,4 +78,4 @@ This allows seamless code iterations without having windows scatter across your 
 - **Indentation**: 4 spaces, no tabs.
 - **Naming**: `PascalCase` for types and classes, `lowerCamelCase` for functions and methods, and `m_` prefix for private member variables.
 - **Architecture**: Keep pure math and geometry algorithms in `src/core/`; keep macOS and AppKit API interactions strictly within `src/daemon/`.
-- **Manual Verification**: Since Accessibility, WindowServer, and trackpad gestures interact with the live operating system, refer to the [macOS Acceptance Checklist](https://github.com/snusxd/minfwm/wiki/Acceptance-macos) for manual testing steps.
+- **Manual Verification**: Since Accessibility, WindowServer, and trackpad gestures interact with the live operating system, see [docs/Acceptance-macos.md](../../docs/Acceptance-macos.md) for manual verification steps.

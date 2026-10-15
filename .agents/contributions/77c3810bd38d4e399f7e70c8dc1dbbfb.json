@@ -1,0 +1,24 @@
+{
+  "assistance": "ai",
+  "base": "6856d50a6f4a3de591da4a5dfe37df4bbad7ba4f",
+  "id": "77c3810bd38d4e399f7e70c8dc1dbbfb",
+  "paths": [
+    "AGENTS.md",
+    "FEATURES.md",
+    "GEMINI.md",
+    "docs/Acceptance-macos.md",
+    "docs/ai/AI-Workflow.md",
+    "docs/wiki/Configuration.md",
+    "docs/wiki/Development.md",
+    "docs/wiki/Getting-Started.md",
+    "docs/wiki/Home.md",
+    "docs/wiki/Publishing.md",
+    "docs/wiki/Releases.md",
+    "tools/ai_workflow.py"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "antigravity"
+  ]
+}
