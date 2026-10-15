@@ -1,0 +1,16 @@
+{
+  "assistance": "ai",
+  "base": "17e266ed5f1ee9af3d985715162611c68c7cfc3b",
+  "id": "79e4cd6643a14060929677d0f40cefff",
+  "paths": [
+    "docs/wiki/Architecture.md",
+    "docs/wiki/Getting-Started.md",
+    "docs/wiki/Home.md",
+    "docs/wiki/Yabai-Integration.md"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}

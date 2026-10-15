@@ -9,6 +9,8 @@ This guide walks you through setting up and using `minfwm`.
 3. **Compatible Yabai Scripting Addition (SA)**: Provides low-level window transforms for smooth offscreen positioning. Follow the [Yabai Integration Guide](https://github.com/snusxd/minfwm/wiki/Yabai-Integration) to build and load it.
 4. **Accessibility Permission**: `minfwm` needs Accessibility access to track windows and mouse/keyboard events.
 
+Screen Recording permission is optional. Grant it if you want static thumbnails for distant windows in overview mode (`[zoom] overview-previews = true`, the default). Without access, the daemon continues with live windows. See [Configuration](https://github.com/snusxd/minfwm/wiki/Configuration) for preview behavior and troubleshooting.
+
 ---
 
 ## Installation
@@ -92,8 +94,8 @@ Control the `minfwm` daemon easily from your terminal:
 
 ### Window Management
 
-- **`Super + Ctrl` + Drag** (or three-finger swipe): **Drag Everywhere** — click and drag anywhere inside a window to move it freely, without needing to grab the title bar.
-- **`Super + Ctrl + F`**: **Temporary Fullscreen** — expands the window to fill the screen (macOS 15+ Fill); panning or zooming the camera immediately restores the original window size.
+- **`Super + Ctrl` + Drag** (or three-finger swipe): **Drag Everywhere** — move a window without needing to grab its title bar. Dragging a clipped title bar also lets you bring that window back onto the display.
+- **`Super + Ctrl + F`**: **Temporary Fullscreen** — invokes the app's native Fill action (macOS 15+); panning or zooming the camera restores the window's previous frame. This works when the app exposes the system Fill command.
 - **`Super + P`**: Pin or unpin the currently focused window (pinned windows stay on screen as you pan).
 - **`Super + F`**: Center the camera onto the currently focused window.
 - **`Super + S`**: Pull the focused window to the center of the current camera view.

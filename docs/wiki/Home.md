@@ -2,12 +2,12 @@
 
 Welcome to the `minfwm` documentation!
 
-`minfwm` is an infinite 2D canvas window manager for macOS 14+. It replaces the concept of traditional virtual desktops (Spaces) with a single continuous 2D surface. You can pan anywhere, zoom out for an overview, organize windows freely, and navigate quickly with trackpad gestures and keyboard shortcuts.
+`minfwm` is an infinite 2D canvas window manager for macOS 14+. It replaces the concept of traditional virtual desktops (Spaces) with a single continuous 2D surface. You can pan anywhere, zoom out for an overview with optional static window previews, organize windows freely, and navigate quickly with trackpad gestures and keyboard shortcuts.
 
 ## Documentation Pages
 
-- **[Getting Started](https://github.com/snusxd/minfwm/wiki/Getting-Started)**: Requirements, installation, starting the daemon, and default shortcuts.
-- **[Configuration](https://github.com/snusxd/minfwm/wiki/Configuration)**: Complete guide to configuring shortcuts, trackpad sensitivity, snapping, and animations in `minfwm.toml`.
+- **[Getting Started](https://github.com/snusxd/minfwm/wiki/Getting-Started)**: Requirements, installation, permissions, starting the daemon, and default shortcuts.
+- **[Configuration](https://github.com/snusxd/minfwm/wiki/Configuration)**: Guide to configuring shortcuts, trackpad sensitivity, snapping, animations, and overview previews in `minfwm.toml`.
 - **[Yabai Integration](https://github.com/snusxd/minfwm/wiki/Yabai-Integration)**: Why the Yabai Scripting Addition is required, how to build and load it, and SIP prerequisites.
 - **[Architecture](https://github.com/snusxd/minfwm/wiki/Architecture)**: High-level overview of core geometry, macOS platform adapters, and IPC protocol.
 - **[Development](https://github.com/snusxd/minfwm/wiki/Development)**: Building from source, testing with CTest, and developer tools (`dev-update`).

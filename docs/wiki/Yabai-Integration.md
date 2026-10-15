@@ -10,7 +10,7 @@ By default, macOS WindowServer strictly confines application windows to the usab
 - Windows cannot normally be positioned above the top menu bar or far outside the visible screen.
 - macOS Accessibility APIs alone cannot smoothly translate or scale windows for aerial canvas overviews.
 
-The Yabai Scripting Addition injects lightweight code into macOS WindowServer/Dock to provide arbitrary window transformation, pinning, and scaling. `minfwm` uses this capability to create its seamless infinite canvas.
+The Yabai Scripting Addition injects lightweight code into macOS WindowServer/Dock. `minfwm` uses its patched transform support to move and scale windows beyond normal screen bounds and its pinned-level support to keep pinned and temporarily maximized windows above other windows. The daemon checks both capabilities during startup and exits if the loaded addition is incompatible.
 
 ---
 
@@ -39,7 +39,7 @@ Because macOS protects system processes, loading any Scripting Addition requires
    minfwm stop
    ```
 
-2. Build and load the Scripting Addition:
+2. Build and load the Scripting Addition. Use the repository's build script so it fetches the compatible Yabai source and applies the `minfwm` patches:
    ```sh
    python3 tools/build_yabai_sa.py
    sudo ./build/yabai-minfwm/bin/yabai --load-sa
@@ -47,6 +47,8 @@ Because macOS protects system processes, loading any Scripting Addition requires
 
    > [!NOTE]
    > Loading the Scripting Addition will briefly restart the macOS Dock. This is normal.
+
+   If the daemon reports that transform or pinned-level support is unavailable, verify that the patched binary and addition were built and loaded from this checkout. A standard, unpatched Yabai addition does not satisfy the required handshake.
 
 3. Start `minfwm`:
    ```sh
@@ -73,3 +75,4 @@ sudo ./build/yabai-minfwm/bin/yabai --uninstall-sa
 - **Dock Restarts**: Loading or updating the Scripting Addition restarts the Dock process.
 - **System Dialogs**: Certain native macOS sheets and alert dialogs are bound to their parent applications and follow standard macOS positioning.
 - **Overview Zoom**: Overview zoom scales down windows visually. Clicking any window returns to 1:1 scale and centers the view.
+- **Temporary Fullscreen**: The shortcut uses the target application's native Fill action and requires macOS 15+ plus an app that exposes that command. It is separate from the Yabai transforms; camera pan or zoom restores the saved window frame.
