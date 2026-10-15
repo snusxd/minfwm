@@ -7,6 +7,7 @@
 #include <utility>
 #include <thread>
 #include <unordered_map>
+#include <sstream>
 
 namespace {
 int failures = 0;
@@ -69,6 +70,73 @@ OverviewPreview::ImagePtr image(size_t width = 16, size_t height = 16) {
     auto owned = std::make_shared<OverviewPreview::Image>(result);
     CGImageRelease(result);
     return owned;
+}
+class CapturedLogs {
+    std::ostringstream m_output;
+    std::streambuf* m_previous;
+public:
+    CapturedLogs() : m_previous(std::cout.rdbuf(m_output.rdbuf())) {}
+    ~CapturedLogs() { std::cout.rdbuf(m_previous); }
+    size_t occurrences(const std::string& text) const {
+        const auto output = m_output.str();
+        size_t count = 0, position = 0;
+        while ((position = output.find(text, position)) != std::string::npos) {
+            ++count;
+            position += text.size();
+        }
+        return count;
+    }
+};
+void diagnosticLogTests() {
+    CapturedLogs logs;
+    auto capture = std::make_shared<Capture>();
+    auto presenter = std::make_shared<Presenter>();
+    OverviewPreview previews(capture, presenter);
+    const core::Rect bounds{0, 0, 100, 100};
+    auto first = window(1);
+    for (int frame = 0; frame < 10; ++frame) {
+        previews.beginDisplay(1, bounds, 1, true, true, frame / 100.0, {});
+    }
+    expect(logs.occurrences("screen-recording=granted") == 1 &&
+           logs.occurrences("mode=live reason=zoom") == 1,
+           "permission and live status are logged only on change");
+    previews.beginDisplay(1, bounds, .2f, true, true, 1, {1});
+    previews.ready(first, 1);
+    previews.finishDisplay(1);
+    capture->complete(image());
+    expect(logs.occurrences("first-snapshot-ready") == 1 && logs.occurrences("first-preview-shown") == 0,
+           "capture success does not claim the original has already been replaced");
+    previews.beginDisplay(1, bounds, .2f, true, true, 1.001, {1});
+    previews.show(1, first, {0, 0, 100, 100});
+    previews.finishDisplay(1);
+    for (int frame = 1; frame <= 60; ++frame) {
+        previews.beginDisplay(1, bounds, .2f, true, true, 1 + frame / 120.0, {1});
+        previews.show(1, first, {0, 0, 100, 100});
+        previews.finishDisplay(1);
+    }
+    expect(logs.occurrences("mode=previews") == 1 && logs.occurrences("display=1 shown=") == 1 &&
+           logs.occurrences("first-preview-shown display=1 WID=1") == 1,
+           "first actual preview is reported immediately while frame summaries remain rate limited");
+    previews.beginDisplay(1, bounds, .6f, true, true, 2, {1});
+    expect(logs.occurrences("preview-session-ended") == 1 && logs.occurrences("cache-released") == 1,
+           "returning to live logs session completion and snapshot release");
+    capture->permission = false;
+    for (int frame = 0; frame < 10; ++frame) {
+        previews.beginDisplay(1, bounds, .2f, true, true, 3 + frame / 100.0, {});
+    }
+    expect(logs.occurrences("screen-recording=missing") == 1 &&
+           logs.occurrences("mode=live reason=permission-missing") == 1,
+           "revoked permission reports live fallback once without per-frame spam");
+
+    auto failing = std::make_shared<Capture>();
+    OverviewPreview failures(failing, presenter);
+    failures.beginDisplay(2, bounds, .2f, true, true, 0, {1});
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        failures.ready(first, attempt * 1.1);
+        failing->complete({});
+    }
+    expect(failures.stats().captureFailures == 4 && logs.occurrences("capture-failed") == 1,
+           "repeated capture failures keep counters accurate but limit error logs to once per five seconds");
 }
 void policyTests() {
     using core::overviewPreviewActive;
@@ -347,6 +415,7 @@ int main() {
     @autoreleasepool {
         policyTests();
         permissionRequestTests();
+        diagnosticLogTests();
         adapterTests();
         asyncAndDisplaysTests();
         reusedIdentityTests();

@@ -125,6 +125,24 @@ Snapping automatically eases large windows into place along display borders when
 > [!TIP]
 > **Overview Previews**: When zooming far out, `minfwm` can display lightweight preview thumbnails for background windows instead of continuously rendering live windows. Active and pinned windows always stay live. With previews enabled and `rewind-on-focus = true`, the daemon requests missing Screen Recording permission once when it starts rendering displays. If access is denied, overview keeps all windows live. Enable previously denied access in System Settings → Privacy & Security → Screen Recording; macOS may require restarting the daemon after granting it.
 
+Overview diagnostics use the `OverviewPreview:` prefix in the daemon log
+(`~/Library/Logs/minfwm.log` when launched by `minfwm start` or `dev-update`).
+Permission and mode changes are logged once. `first-snapshot-ready` confirms
+capture succeeded; `first-preview-shown` immediately reports the first replacement,
+including during short overview sessions. `shown=N` reports how many originals were replaced
+by previews in that display frame. Changed counts, cache bytes, captures and
+failures are reported at most once per second. Capture errors include the stage,
+macOS error domain/code and live fallback, with repeated errors limited to once
+per five seconds. Window IDs are logged; window titles and contents are omitted.
+`WindowRenderer: preview-parking-failed` identifies backend failures that keep a
+captured window live, also limited to once per five seconds.
+`preview-session-ended` and `cache-released` report return to live presentation
+and release of cached snapshots. These logs confirm the code path, not image
+quality or a measured performance improvement.
+
+Set `MINFWM_TRACE_OVERVIEW=1` when launching the daemon for additional `OVERVIEW`
+timings and live-update counts once per second during overview.
+
 ---
 
 ### `[pins]`

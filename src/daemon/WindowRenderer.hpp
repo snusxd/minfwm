@@ -38,6 +38,7 @@ private:
     WindowBackend& m_ax;
     WindowBackend& m_yabai;
     WindowPositionCheck m_checkPosition;
+    double m_nextPreviewFailureLog = 0;
 };
 
 } // namespace minfwm

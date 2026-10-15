@@ -1,0 +1,18 @@
+{
+  "assistance": "ai",
+  "base": "610a7082d9a6a24ec86926f90c6032dd47ead1c4",
+  "id": "3071722fbb124c3a8f2143482385462a",
+  "paths": [
+    "docs/Acceptance-macos.md",
+    "docs/wiki/Configuration.md",
+    "src/daemon/OverviewPreview.mm",
+    "src/daemon/WindowRenderer.hpp",
+    "src/daemon/WindowRenderer.mm",
+    "tests/OverviewPreviewTests.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-OVERVIEW-LOGGING",
+  "tools": [
+    "codex"
+  ]
+}

@@ -9,6 +9,8 @@
 #include <cmath>
 #include <limits>
 #include <iostream>
+#include <optional>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -45,10 +47,22 @@ class ScreenshotProvider final : public OverviewPreview::CaptureProvider {
         SCShareableContent* content = nil;
         double discoveredAt = -std::numeric_limits<double>::infinity();
         size_t generation = 0;
+        double nextErrorLogAt = 0;
     };
     std::shared_ptr<Cache> m_cache = std::make_shared<Cache>();
     mutable double m_permissionCheckedAt = -std::numeric_limits<double>::infinity();
     mutable bool m_permitted = false;
+
+    static void reportCaptureError(const std::shared_ptr<Cache>& cache, uint32_t wid,
+                                   const char* stage, NSError* error) {
+        const double now = CACurrentMediaTime();
+        if (now < cache->nextErrorLogAt) return;
+        cache->nextErrorLogAt = now + 5;
+        const char* domain = error.domain.UTF8String;
+        std::cout << "OverviewPreview: capture-error WID=" << wid << " stage=" << stage
+                  << " domain=" << (domain ? domain : "none") << " code=" << (error ? error.code : 0)
+                  << " fallback=live" << std::endl;
+    }
 
     static void captureWindow(const std::shared_ptr<Cache>& cache, SCShareableContent* content,
                               uint32_t wid, pid_t pid, size_t longestEdge, Completion completion) {
@@ -62,12 +76,14 @@ class ScreenshotProvider final : public OverviewPreview::CaptureProvider {
         if (!selected) {
             // A newly created window may be absent from the short-lived discovery cache.
             cache->content = nil;
+            reportCaptureError(cache, wid, "window-lookup", nil);
             completion({});
             return;
         }
         const CGRect frame = selected.frame;
         const double longest = std::max(frame.size.width, frame.size.height);
         if (!std::isfinite(longest) || longest <= 0 || frame.size.width <= 0 || frame.size.height <= 0) {
+            reportCaptureError(cache, wid, "invalid-source-frame", nil);
             completion({});
             return;
         }
@@ -80,11 +96,16 @@ class ScreenshotProvider final : public OverviewPreview::CaptureProvider {
         configuration.captureResolution = SCCaptureResolutionNominal;
         if (@available(macOS 14.2, *)) configuration.includeChildWindows = NO;
         SCContentFilter* filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:selected];
+        const auto generation = cache->generation;
         [SCScreenshotManager captureImageWithFilter:filter configuration:configuration
                                  completionHandler:^(CGImageRef image, NSError* error) {
             // Retain before ScreenCaptureKit releases its borrowed callback image.
             auto retained = !error && image ? std::make_shared<OverviewPreview::Image>(image) : nullptr;
-            onMain([completion, retained] { completion(retained); });
+            onMain([cache, generation, wid, completion, retained, error] {
+                if (cache->generation != generation) { completion({}); return; }
+                if (error || !retained) reportCaptureError(cache, wid, "screenshot", error);
+                completion(retained);
+            });
         }];
     }
 public:
@@ -123,7 +144,9 @@ public:
         [SCShareableContent getShareableContentExcludingDesktopWindows:YES onScreenWindowsOnly:NO
                                                    completionHandler:^(SCShareableContent* content, NSError* error) {
             onMain([cache, generation, content, error, wid, pid, longestEdge, completion] {
-                if (error || !content || cache->generation != generation) {
+                if (cache->generation != generation) { completion({}); return; }
+                if (error || !content) {
+                    reportCaptureError(cache, wid, "discovery", error);
                     completion({});
                     return;
                 }
@@ -295,6 +318,13 @@ struct OverviewPreview::State {
         // Presenter still retains omitted old layers until finishDisplay.
         std::vector<DrawItem> previousItems;
         bool frameOpen = false;
+        bool firstPreviewLogged = false;
+        double nextSummaryLogAt = 0;
+        size_t loggedShown = std::numeric_limits<size_t>::max();
+        size_t loggedImages = std::numeric_limits<size_t>::max();
+        size_t loggedFailures = std::numeric_limits<size_t>::max();
+        size_t loggedCaptures = std::numeric_limits<size_t>::max();
+        bool loggedInFlight = false;
     };
     std::shared_ptr<CaptureProvider> provider;
     std::shared_ptr<Presenter> presenter;
@@ -304,16 +334,38 @@ struct OverviewPreview::State {
     size_t generation = 0;
     bool inFlight = false;
     bool permissionRequestAttempted = false;
+    std::optional<bool> loggedPermission;
+    std::unordered_map<int64_t, std::string> loggedModes;
+    double nextFailureLogAt = 0;
+    bool budgetLogged = false;
     double lastLaunch = -std::numeric_limits<double>::infinity();
     double latestNow = 0;
     double captureRetryAt = 0;
     Stats stats;
 
+    void logPermission(bool permitted) {
+        if (loggedPermission && *loggedPermission == permitted) return;
+        loggedPermission = permitted;
+        std::cout << "OverviewPreview: screen-recording=" << (permitted ? "granted" : "missing") << std::endl;
+    }
+    void logMode(int64_t displayId, const char* mode, float scale, bool force = false) {
+        auto& previous = loggedModes[displayId];
+        if (!force && previous == mode) return;
+        previous = mode;
+        std::cout << "OverviewPreview: display=" << displayId << " mode=" << mode
+                  << " scale=" << scale << std::endl;
+    }
+
     void clearSession() {
         ++generation;
+        if (stats.imageCount) {
+            std::cout << "OverviewPreview: cache-released images=" << stats.imageCount
+                      << " bytes=" << stats.imageBytes << std::endl;
+        }
         images.clear();
         stats.imageBytes = 0;
         stats.imageCount = 0;
+        budgetLogged = false;
         provider->reset();
         // inFlight remains true until the outstanding callback acknowledges cancellation.
     }
@@ -352,21 +404,33 @@ bool OverviewPreview::beginDisplay(int64_t displayId, core::Rect bounds, float s
         endDisplay(displayId);
         return false;
     }
+    state.latestNow = now;
     bool permitted = false;
     if (enabled && rewindOnFocus && std::isfinite(scale) && scale > 0 && scale <= 1) {
         permitted = state.provider->permitted();
+        state.logPermission(permitted);
         if (!permitted && !state.permissionRequestAttempted) {
             // Request during initial native-scale frames as well as overview,
             // never repeatedly during animation, denial or session reset.
             state.permissionRequestAttempted = true;
             permitted = state.provider->requestPermission();
+            state.logPermission(permitted);
         }
     }
-    if (!core::overviewPreviewActive(active, scale, enabled, rewindOnFocus, permitted) ||
-        !state.presenter->begin(displayId, bounds)) {
+    if (!core::overviewPreviewActive(active, scale, enabled, rewindOnFocus, permitted)) {
+        const char* reason = !enabled ? "live reason=disabled" : !rewindOnFocus ? "live reason=direct-interaction" :
+            !std::isfinite(scale) || scale <= 0 || scale > 1 ? "live reason=invalid-scale" :
+            !permitted ? "live reason=permission-missing" : "live reason=zoom";
+        state.logMode(displayId, reason, scale);
         endDisplay(displayId);
         return false;
     }
+    if (!state.presenter->begin(displayId, bounds)) {
+        state.logMode(displayId, "live reason=canvas-unavailable", scale);
+        endDisplay(displayId);
+        return false;
+    }
+    state.logMode(displayId, "previews", scale, !active);
     auto& display = state.displays[displayId];
     auto ordering = frontToBack;
     for (auto wid : display.frontToBack) {
@@ -408,13 +472,23 @@ bool OverviewPreview::ready(const std::shared_ptr<ClientWindow>& window, double 
     if (entry.image) return true;
     // The live renderer must restore a culled or AX-shrunken source before capture.
     if (window->isHidden || window->isAXHidden || window->needsGeometryRestore) return false;
+    if (state.stats.imageBytes >= state.budget) {
+        if (!state.budgetLogged) {
+            state.budgetLogged = true;
+            std::cout << "OverviewPreview: cache-budget-reached bytes=" << state.stats.imageBytes
+                      << " limit=" << state.budget << " fallback=live" << std::endl;
+        }
+        return false;
+    }
     if (entry.pending || state.inFlight || now < entry.retryAt || now < state.captureRetryAt ||
-        now - state.lastLaunch < launchInterval ||
-        state.stats.imageBytes >= state.budget) return false;
+        now - state.lastLaunch < launchInterval) return false;
     entry.pending = true;
     state.inFlight = true;
     state.lastLaunch = now;
     ++state.stats.captureCount;
+    if (state.stats.imageCount == 0 && state.stats.captureCount == 1) {
+        std::cout << "OverviewPreview: capture-start WID=" << window->wid() << std::endl;
+    }
     const auto generation = state.generation;
     const std::weak_ptr<State> weakState = m_state;
     const std::weak_ptr<ClientWindow> weakWindow = window;
@@ -437,11 +511,26 @@ bool OverviewPreview::ready(const std::shared_ptr<ClientWindow>& window, double 
                     ++state->stats.captureFailures;
                     entry.retryAt = std::max(now, state->latestNow) + failureBackoff;
                     state->captureRetryAt = entry.retryAt;
+                    const double failureTime = std::max(now, state->latestNow);
+                    if (failureTime >= state->nextFailureLogAt) {
+                        state->nextFailureLogAt = failureTime + 5;
+                        const char* reason = !image || !image->get() || !bytes ? "empty-image" :
+                            bytes > state->budget - state->stats.imageBytes ? "cache-budget" : "image-dimensions";
+                        std::cout << "OverviewPreview: capture-failed WID=" << wid << " reason=" << reason
+                                  << " failures=" << state->stats.captureFailures << " retry-seconds=1 fallback=live"
+                                  << std::endl;
+                    }
                     return;
                 }
                 entry.image = image;
                 state->stats.imageBytes += bytes;
                 ++state->stats.imageCount;
+                if (state->stats.imageCount == 1) {
+                    std::cout << "OverviewPreview: first-snapshot-ready WID=" << wid
+                              << " width=" << CGImageGetWidth(image->get())
+                              << " height=" << CGImageGetHeight(image->get())
+                              << " bytes=" << bytes << std::endl;
+                }
             });
         });
     return false;
@@ -463,12 +552,34 @@ void OverviewPreview::show(int64_t displayId, const std::shared_ptr<ClientWindow
     const double zOrder = -static_cast<double>(std::distance(target.frontToBack.begin(), index));
     target.items.push_back({window, physical, entry->second.image, zOrder});
     state.presenter->show(displayId, window->wid(), entry->second.image, physical, zOrder);
+    if (!target.firstPreviewLogged) {
+        target.firstPreviewLogged = true;
+        std::cout << "OverviewPreview: first-preview-shown display=" << displayId
+                  << " WID=" << window->wid() << std::endl;
+    }
 }
 void OverviewPreview::finishDisplay(int64_t displayId) {
     if (![NSThread isMainThread]) return;
     auto found = m_state->displays.find(displayId);
     if (found == m_state->displays.end() || !found->second.frameOpen) return;
     m_state->presenter->finish(displayId);
+    auto& display = found->second;
+    const auto& stats = m_state->stats;
+    const bool changed = display.loggedShown != display.items.size() || display.loggedImages != stats.imageCount ||
+        display.loggedFailures != stats.captureFailures || display.loggedCaptures != stats.captureCount ||
+        display.loggedInFlight != m_state->inFlight;
+    if (changed && m_state->latestNow >= display.nextSummaryLogAt) {
+        std::cout << "OverviewPreview: display=" << displayId << " shown=" << display.items.size()
+                  << " cached-images=" << stats.imageCount << " cache-bytes=" << stats.imageBytes
+                  << " captures=" << stats.captureCount << " failures=" << stats.captureFailures
+                  << " in-flight=" << m_state->inFlight << std::endl;
+        display.nextSummaryLogAt = m_state->latestNow + 1;
+        display.loggedShown = display.items.size();
+        display.loggedImages = stats.imageCount;
+        display.loggedFailures = stats.captureFailures;
+        display.loggedCaptures = stats.captureCount;
+        display.loggedInFlight = m_state->inFlight;
+    }
     found->second.previousItems.clear();
     found->second.frameOpen = false;
 }
@@ -476,6 +587,9 @@ void OverviewPreview::endDisplay(int64_t displayId) {
     if (![NSThread isMainThread]) return;
     auto& state = *m_state;
     if (state.presenter) state.presenter->end(displayId);
+    if (state.displays.contains(displayId)) {
+        std::cout << "OverviewPreview: display=" << displayId << " preview-session-ended" << std::endl;
+    }
     if (state.displays.erase(displayId) && state.displays.empty()) state.clearSession();
 }
 std::shared_ptr<ClientWindow> OverviewPreview::hitTest(core::Point point) const {
@@ -495,6 +609,9 @@ std::shared_ptr<ClientWindow> OverviewPreview::hitTest(core::Point point) const 
 }
 void OverviewPreview::reset() {
     if (![NSThread isMainThread] || !m_state) return;
+    if (!m_state->displays.empty()) {
+        std::cout << "OverviewPreview: reset displays=" << m_state->displays.size() << std::endl;
+    }
     m_state->displays.clear();
     if (m_state->presenter) m_state->presenter->reset();
     if (m_state->provider) m_state->clearSession();

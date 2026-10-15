@@ -344,7 +344,15 @@ BackendResult WindowRenderer::parkForPreview(ClientWindow& window, core::Point p
     // Force the live fallback to reapply its presentation in that case.
     invalidatePosition(window);
     const auto result = m_yabai.move(window.ref(), window.wid(), x, y);
-    if (!result.succeeded()) return result;
+    if (!result.succeeded()) {
+        if (now >= m_nextPreviewFailureLog) {
+            m_nextPreviewFailureLog = now + 5;
+            std::cerr << "WindowRenderer: preview-parking-failed WID=" << window.wid()
+                      << " code=" << static_cast<int>(result.code)
+                      << " fallback=live retry-seconds=0.5" << std::endl;
+        }
+        return result;
+    }
     window.isHidden = true;
     window.overviewPresented = false;
     window.lastRenderedScale = 1;
