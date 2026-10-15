@@ -12,6 +12,7 @@ struct ConfigSnapshot {
     bool invertZoomScrollDirection = false;
     bool trackInvertZoomDirection = false;
     bool rewindOnFocus = true;
+    bool overviewPreviews = true;
     bool centerOnCmdTab = true;
     bool animationsEnabled = true;
     bool snapEnabled = true;

@@ -21,6 +21,12 @@ Use this checklist to verify `minfwm` behavior on macOS.
 - [ ] **Overview Zoom**: Pinch with four fingers on the trackpad or scroll while holding `Super`. Confirm the view zooms out to show an overview of all windows.
 - [ ] **Overview Focus**: While zoomed out, click on any window. Confirm the camera smoothly zooms back in to 100% and focuses that window.
 - [ ] **Escape Return**: While zoomed out, press `Escape`. Confirm the view returns to normal scale.
+- [ ] **Distant Preview Entry**: With Screen Recording already granted, set `[zoom] overview-previews = true`. Zoom below 45% with many windows; thumbnails should replace eligible windows gradually. Focus, whitelist, pinned and auxiliary windows stay live. Check that captures of transformed windows contain correctly framed content without transparent padding, distortion or blank images. This live check is pending.
+- [ ] **Preview Thresholds**: Move repeatedly between 45% and 55%; confirm stable mode within that band, live restoration at 55%, and no jump in window geometry. Check simultaneous pan and zoom, including partly clipped thumbnails.
+- [ ] **Preview Selection and Drag**: Select overlapping thumbnails, including a thumbnail under a live window; confirm the visibly topmost target is selected. Try `Super + Ctrl` dragging a thumbnail; confirm it becomes live and follows the initial pointer offset. Click-to-return and `Escape` must restore originals without ghost canvases.
+- [ ] **Preview Fallback**: Deny/revoke Screen Recording access, disable `overview-previews` via reload, and set `rewind-on-focus = false`. Confirm live windows remain usable and startup succeeds without capture permission or an automatic permission prompt. Failed capture/parking and an exhausted cache must leave affected windows live.
+- [ ] **Preview Lifecycle**: Close, hide/unhide and focus apps during distant overview. Reconfigure/reconnect displays, including negative origins, ignored displays and Retina/non-Retina displays. Reload and shut down while thumbnails are visible; confirm all original windows restore and canvases disappear.
+- [ ] **Preview Performance**: Record identical pan/zoom traces with previews off/on at fixed window counts and scales. Use `MINFWM_TRACE_OVERVIEW=1` for callback time/live-update counts/image bytes and Instruments for frame hitches, asynchronous capture, GPU/WindowServer work and memory. Include entry capture cost, steady navigation and return to live. No speedup has yet been measured.
 
 ---
 

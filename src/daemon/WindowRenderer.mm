@@ -330,6 +330,31 @@ BackendResult WindowRenderer::renderOverview(ClientWindow& window, core::Rect ph
     return result;
 }
 
+BackendResult WindowRenderer::parkForPreview(ClientWindow& window, core::Point parkingPosition, double now) {
+    int x = 0, y = 0;
+    if (!window.originalPhysicalRect || !m_yabai.usesTransforms() || !window.wid() ||
+        !pixelPosition({parkingPosition.x, parkingPosition.y, window.virtualRect.w, window.virtualRect.h}, x, y)) {
+        return {BackendCode::failed};
+    }
+    if (window.isHidden && !window.isAXHidden && m_yabai.hasTransform(window.wid())) return {BackendCode::ok};
+    if (window.isAXHidden || now < window.hideRetryTime) return {BackendCode::failed};
+    window.hideRetryTime = now + 0.5;
+    window.lastProgrammaticMoveTime = now;
+    // Even a failed acknowledgement may follow a successful server transform.
+    // Force the live fallback to reapply its presentation in that case.
+    invalidatePosition(window);
+    const auto result = m_yabai.move(window.ref(), window.wid(), x, y);
+    if (!result.succeeded()) return result;
+    window.isHidden = true;
+    window.overviewPresented = false;
+    window.lastRenderedScale = 1;
+    window.positionNeedsVerification = false;
+    window.rejectedPosition.reset();
+    window.positionRetryTime = 0;
+    window.hideRetryTime = 0;
+    return result;
+}
+
 BackendResult WindowRenderer::hide(ClientWindow& window, core::Rect physical,
                                     core::Rect displayBounds, double now,
                                     std::optional<core::Point> parkingPosition) {

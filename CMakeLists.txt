@@ -29,6 +29,7 @@ find_library(APP_KIT_FRAMEWORK AppKit)
 find_library(APPLICATION_SERVICES_FRAMEWORK ApplicationServices)
 find_library(FOUNDATION_FRAMEWORK Foundation)
 find_library(QUARTZ_CORE_FRAMEWORK QuartzCore)
+find_library(SCREEN_CAPTURE_KIT_FRAMEWORK ScreenCaptureKit REQUIRED)
 
 set(COMMON_LIBS
     ${CORE_GRAPHICS_FRAMEWORK}
@@ -69,6 +70,12 @@ add_library(minfwm_window_runtime STATIC
 )
 target_link_libraries(minfwm_window_runtime PUBLIC minfwm_window_pool)
 
+# Screenshots/canvases stay behind an Objective-C++ adapter; test doubles do
+# not touch WindowServer, Accessibility, or Screen Recording permissions.
+add_library(minfwm_overview_preview STATIC src/daemon/OverviewPreview.mm)
+set_source_files_properties(src/daemon/OverviewPreview.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+target_link_libraries(minfwm_overview_preview PUBLIC minfwm_window_pool ${SCREEN_CAPTURE_KIT_FRAMEWORK})
+
 # Daemon adapters, also linked by socket lifecycle tests without starting AX.
 add_library(minfwm_daemon_runtime STATIC
     src/daemon/DaemonRunLoop.mm
@@ -82,7 +89,7 @@ add_library(minfwm_daemon_runtime STATIC
     src/daemon/ConfigManager.mm
 )
 target_include_directories(minfwm_daemon_runtime SYSTEM PRIVATE third_party/tomlplusplus)
-target_link_libraries(minfwm_daemon_runtime PUBLIC minfwm_ipc_transport minfwm_window_runtime ${COMMON_LIBS})
+target_link_libraries(minfwm_daemon_runtime PUBLIC minfwm_ipc_transport minfwm_window_runtime minfwm_overview_preview ${COMMON_LIBS})
 
 # CLI and daemon share one executable. LaunchAgent starts it with the `daemon`
 # subcommand; normal invocations continue to use the CLI commands.
@@ -156,6 +163,11 @@ if(BUILD_TESTING)
     add_executable(minfwm_window_renderer_tests tests/WindowRendererTests.mm)
     target_link_libraries(minfwm_window_renderer_tests PRIVATE minfwm_window_runtime)
     add_test(NAME minfwm_window_renderer_tests COMMAND minfwm_window_renderer_tests)
+
+    add_executable(minfwm_overview_preview_tests tests/OverviewPreviewTests.mm)
+    set_source_files_properties(tests/OverviewPreviewTests.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+    target_link_libraries(minfwm_overview_preview_tests PRIVATE minfwm_overview_preview)
+    add_test(NAME minfwm_overview_preview_tests COMMAND minfwm_overview_preview_tests)
 
     add_executable(minfwm_config_tests
         tests/ConfigTests.mm

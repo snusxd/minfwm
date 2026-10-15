@@ -45,6 +45,7 @@ horizontal-tuning = "auto"
 invert-zoom-scroll-direction = false
 track-invert-zoom-direction = false
 rewind-on-focus = true
+overview-previews = true
 zoomed-esc-center = "screen"
 
 [pins]
@@ -114,7 +115,31 @@ Snapping automatically eases large windows into place along display borders when
 | `invert-zoom-scroll-direction` | `false` | Invert zoom direction when scrolling with `Super` + scroll wheel. |
 | `track-invert-zoom-direction` | `false` | Invert four-finger trackpad pinch zoom direction independently. |
 | `rewind-on-focus` | `true` | When zoomed out, clicking a window exits overview and focuses that window. If `false`, clicks interact directly with the scaled window. |
+| `overview-previews` | `true` | Replace eligible distant overview windows with frozen thumbnails after capture succeeds. Requires existing Screen Recording permission and `rewind-on-focus = true`; otherwise windows remain live. |
 | `zoomed-esc-center` | `"screen"` | Camera target when pressing `Escape` to exit overview: `"screen"`, `"mouse"`, or `"focus"`. |
+
+Previews start at 45% scale or below and return to live windows at 55% or above.
+Focused, whitelisted, pinned, dragged, selected-return and auxiliary windows stay
+live. Live windows appear above the preview canvas. Preview contents remain frozen
+for the distant overview session; the applications continue running in the
+background. This reduces presentation work, rather than unloading applications.
+
+Capture launches at most once per 50 ms, with one screenshot in flight. Thumbnails
+are limited to 512 pixels on the longest edge and a total 64 MiB image cache. A
+pending/failed capture or exhausted cache keeps the affected window live. Images
+are kept in memory and released when every display leaves preview mode, on display
+refresh, or at shutdown. No screenshot files are saved.
+
+The daemon checks Screen Recording access without requesting it. Grant access
+manually in System Settings if desired; missing permission does not prevent
+startup or ordinary live overview. Live macOS acceptance of this mode is pending.
+
+For manual profiling, launch the daemon with `MINFWM_TRACE_OVERVIEW=1`. Once per
+second during overview it reports `OVERVIEW` lines with average/maximum manager
+update time, live presentation updates, preview draws, capture counts, and image
+bytes. Compare identical navigation with `overview-previews = false` and `true`.
+These timings cover the manager callback, not asynchronous capture, GPU frame
+completion or total WindowServer work; use Instruments for the latter.
 
 ---
 

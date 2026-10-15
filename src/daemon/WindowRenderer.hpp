@@ -18,6 +18,7 @@ public:
 
     BackendResult render(ClientWindow& window, core::Rect physical, double now);
     BackendResult renderOverview(ClientWindow& window, core::Rect physical, float scale, double now);
+    BackendResult parkForPreview(ClientWindow& window, core::Point parkingPosition, double now);
     BackendResult suspend(ClientWindow& window, double now);
     BackendResult releaseToNative(ClientWindow& window, core::Rect physical, double now);
     BackendResult setPinnedLayer(ClientWindow& window, bool alwaysOnTop);

@@ -4,6 +4,7 @@
 #include "YabaiSA.hpp"
 #include "../core/Visibility.hpp"
 #include "../core/WindowOwnership.hpp"
+#include "../core/OverviewPreviewPolicy.hpp"
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #include <cmath>
@@ -119,6 +120,9 @@ bool WindowManager::initialize(bool allowAdministratorLoad) {
 
 void WindowManager::refreshDisplays() {
     if (!m_initialized) return;
+    // Drop canvases before adapting their physical coordinate systems. Parked
+    // originals will resume through the ordinary rendering path below.
+    m_overviewPreviews.reset();
 
     std::size_t added = 0;
     std::size_t updated = 0;
@@ -344,6 +348,7 @@ bool WindowManager::isWindowOnIgnoredDisplay(AXUIElementRef window) const {
 }
 
 void WindowManager::shutdown() {
+    m_overviewPreviews.reset();
     if (!m_initialized) return;
 
     for (auto& display : m_displays) {
@@ -379,6 +384,8 @@ void WindowManager::shutdown() {
     m_applicationNames.clear();
     m_hiddenApplications.clear();
     m_onscreenWindows.reset();
+    m_overviewWindowOrders.clear();
+    m_overviewTrace = {};
     m_savedWindowLayouts.clear();
     m_displays.clear();
     m_initialized = false;
@@ -418,7 +425,7 @@ Display& WindowManager::displayForWindow(AXUIElementRef window) {
     return mainDisplay();
 }
 
-std::shared_ptr<ClientWindow> WindowManager::findWindow(AXUIElementRef element) {
+std::shared_ptr<ClientWindow> WindowManager::findWindow(AXUIElementRef element) const {
     for (auto& display : m_displays) {
         if (auto window = display->windowPool().findWindowByAXRef(element)) return window;
     }
@@ -577,6 +584,24 @@ void WindowManager::updateWindows(int64_t displayId) {
     if (m_nativeCommitPending) commitNativeInteraction();
     const auto* zoomDisplay = m_zoomRequest ? displayById(m_zoomRequest->displayId) : nullptr;
     const bool enteringOverview = zoomDisplay && !zoomDisplay->state().overviewActive();
+    if (enteringOverview) {
+        // Freeze the initial stacking order: parking removes originals from the
+        // on-screen list, but must not reorder their cached thumbnails.
+        auto& order = m_overviewWindowOrders[zoomDisplay->id()];
+        order.clear();
+        auto windows = CFRef<CFArrayRef>::adopt(
+            CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
+        for (CFIndex index = 0; windows && index < CFArrayGetCount(windows.get()); ++index) {
+            auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows.get(), index));
+            if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID()) continue;
+            auto number = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowNumber));
+            uint32_t wid = 0;
+            if (number && CFGetTypeID(number) == CFNumberGetTypeID() &&
+                CFNumberGetValue(number, kCGWindowIDCFNumberType, &wid) && wid) {
+                order.push_back(wid);
+            }
+        }
+    }
     if (now >= m_windowRefreshTime || enteringOverview) refreshWindowSnapshot(now);
     if (m_zoomRequest) {
         if (auto* display = displayById(m_zoomRequest->displayId)) {
@@ -623,6 +648,10 @@ void WindowManager::updateWindows(int64_t displayId) {
 
     const ConfigSnapshot config = ConfigManager::instance().snapshot();
     const core::VisibilityPolicy visibility(config.overscanBufferPx);
+    const bool traceOverview = std::getenv("MINFWM_TRACE_OVERVIEW") != nullptr;
+    std::size_t liveOverviewUpdates = 0;
+    std::size_t previewFrames = 0;
+    bool renderedOverview = false;
 
     core::Rect desktopBounds = m_displays.front()->state().geometry().bounds;
     for (const auto& display : m_displays) {
@@ -641,6 +670,9 @@ void WindowManager::updateWindows(int64_t displayId) {
     for (auto& display : m_displays) {
         if (displayId && display->id() != displayId) continue;
         if (isIgnoredDisplay(display->id())) {
+            (void)m_overviewPreviews.beginDisplay(display->id(), display->state().geometry().bounds,
+                1, false, config.rewindOnFocus, now, m_overviewWindowOrders[display->id()]);
+            m_overviewPreviews.endDisplay(display->id());
             // A reload can make an already managed display native. Release
             // every visible window before this canvas stops rendering it.
             const auto windows = display->windowPool().windows();
@@ -660,6 +692,10 @@ void WindowManager::updateWindows(int64_t displayId) {
                                      config.animationSpeed, config.animationsEnabled);
         previousFrame = now;
         const core::DisplayState& state = display->state();
+        const bool previewMode = m_overviewPreviews.beginDisplay(display->id(), state.geometry().bounds,
+            state.scale(), config.overviewPreviews && screenForDisplay(display->id()),
+            config.rewindOnFocus, now, m_overviewWindowOrders[display->id()]);
+        renderedOverview = renderedOverview || state.overviewActive();
         bool overviewFailed = false;
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref()) continue;
@@ -709,6 +745,21 @@ void WindowManager::updateWindows(int64_t displayId) {
             }
             if (state.overviewActive()) {
                 if (!window->wid()) continue;
+                const bool focused = m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get());
+                const bool previewEligible = previewMode && m_focusedWindow && window != m_overviewFocus &&
+                    core::overviewPreviewEligible({focused, isWhitelisted(*window), window->pinned,
+                                                   beingDragged, window->isAuxiliaryWindow});
+                if (previewEligible && m_overviewPreviews.ready(window, now) &&
+                    m_renderer.parkForPreview(*window, parkingPosition, now).succeeded()) {
+                    m_overviewPreviews.show(display->id(), window, physical);
+                    ++previewFrames;
+                    continue;
+                }
+                const float renderedScale = std::round(state.scale() * 1000) / 1000;
+                if (window->isHidden || window->needsGeometryRestore ||
+                    window->lastRenderedX != std::round(physical.x) ||
+                    window->lastRenderedY != std::round(physical.y) ||
+                    window->lastRenderedScale != renderedScale) ++liveOverviewUpdates;
                 const auto overview = m_renderer.renderOverview(*window, physical, state.scale(), now);
                 if (!overview.succeeded()) {
                     std::cerr << "WindowManager: overview failed WID=" << window->wid()
@@ -736,6 +787,8 @@ void WindowManager::updateWindows(int64_t displayId) {
             std::cerr << "WindowManager: overview unavailable for a window; returning to native scale" << std::endl;
             display->state().resetZoom({state.geometry().bounds.x + state.geometry().bounds.w / 2,
                                         state.geometry().bounds.y + state.geometry().bounds.h / 2});
+            (void)m_overviewPreviews.beginDisplay(display->id(), state.geometry().bounds, 1,
+                false, config.rewindOnFocus, now, m_overviewWindowOrders[display->id()]);
             // Restore every already-scaled window in the same frame. The
             // ordinary renderer retains the transform/AX failure fallback.
             for (const auto& window : display->windowPool().windows()) {
@@ -754,6 +807,7 @@ void WindowManager::updateWindows(int64_t displayId) {
                 (void)m_renderer.render(*window, physical, now);
             }
         }
+        m_overviewPreviews.finishDisplay(display->id());
     }
     if (m_overviewFocus && !overviewActive()) {
         const auto selected = std::exchange(m_overviewFocus, {});
@@ -763,6 +817,30 @@ void WindowManager::updateWindows(int64_t displayId) {
         if (AXUIElementPerformAction(selected->ref(), kAXRaiseAction) != kAXErrorSuccess) {
             std::cerr << "WindowManager: failed to raise overview selection" << std::endl;
         }
+    }
+    if (traceOverview && renderedOverview) {
+        auto& trace = m_overviewTrace;
+        if (!trace.since) trace.since = now;
+        const double seconds = CACurrentMediaTime() - now;
+        trace.totalSeconds += seconds;
+        trace.maxSeconds = std::max(trace.maxSeconds, seconds);
+        trace.liveUpdates += liveOverviewUpdates;
+        trace.previewFrames += previewFrames;
+        ++trace.frames;
+        if (now - trace.since >= 1) {
+            const auto stats = m_overviewPreviews.stats();
+            std::cout << "OVERVIEW frames=" << trace.frames
+                      << " update-avg-ms=" << 1000 * trace.totalSeconds / trace.frames
+                      << " update-max-ms=" << 1000 * trace.maxSeconds
+                      << " live-updates=" << trace.liveUpdates
+                      << " preview-draws=" << trace.previewFrames
+                      << " images=" << stats.imageCount << " image-bytes=" << stats.imageBytes
+                      << " captures=" << stats.captureCount << " capture-failures=" << stats.captureFailures
+                      << std::endl;
+            trace = {};
+        }
+    } else if (!renderedOverview) {
+        m_overviewTrace = {};
     }
 }
 
@@ -969,6 +1047,11 @@ std::shared_ptr<ClientWindow> WindowManager::windowAtPoint(core::Point pointer) 
             !CFNumberGetValue(number, kCGWindowIDCFNumberType, &wid) || !bounds ||
             CFGetTypeID(bounds) != CFDictionaryGetTypeID() || !CGRectMakeWithDictionaryRepresentation(bounds, &frame) ||
             !CGRectContainsPoint(frame, CGPointMake(pointer.x, pointer.y))) continue;
+        if (m_overviewPreviews.ownsCanvasWindow(wid)) {
+            if (auto preview = m_overviewPreviews.hitTest(pointer); preview &&
+                !m_hiddenApplications.contains(preview->pid()) && findWindow(preview->ref()) == preview) return preview;
+            continue;
+        }
         for (const auto& display : m_displays) {
             if (auto window = display->windowPool().findWindowByWID(wid)) return window;
         }
@@ -1064,7 +1147,8 @@ void WindowManager::flushNativeInteractionForPan() {
 bool WindowManager::beginDragEverywhere(core::Point pointer) {
     if (!m_initialized || overviewReturning() || isIgnoredDisplayAtPoint(pointer)) return false;
     auto window = windowAtPoint(pointer);
-    if (!window || !window->virtualCoordinatesInitialized || window->pinned || window->isHidden ||
+    const bool previewHit = window && m_overviewPreviews.hitTest(pointer) == window;
+    if (!window || !window->virtualCoordinatesInitialized || window->pinned || (window->isHidden && !previewHit) ||
         window->applicationSuspended || window->needsGeometryRestore) return false;
     m_draggedWindow = std::move(window);
     m_draggedWindowDisplayId = displayForWindow(m_draggedWindow->ref()).id();
@@ -1072,7 +1156,9 @@ bool WindowManager::beginDragEverywhere(core::Point pointer) {
     m_dragStartVirtualRect = m_draggedWindow->virtualRect;
     const core::Rect physical = displayForWindow(m_draggedWindow->ref()).state().virtualToPhysical(m_draggedWindow->virtualRect);
     CGPoint visualOrigin{physical.x, physical.y};
-    (void)readWindowPosition(m_draggedWindow->ref(), m_draggedWindow->wid(), visualOrigin);
+    // A preview's original is parked off-screen; its visible origin comes from
+    // the model, never from the original's current WindowServer coordinates.
+    if (!previewHit) (void)readWindowPosition(m_draggedWindow->ref(), m_draggedWindow->wid(), visualOrigin);
     m_dragPointerOffset = {pointer.x - static_cast<float>(visualOrigin.x),
                            pointer.y - static_cast<float>(visualOrigin.y)};
     m_draggedWindow->positionAnimation.reset();

@@ -391,7 +391,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
 
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
     if (zoom && !rejectUnknownKeys(*zoom, "zoom", {"invert-zoom-scroll-direction", "track-invert-zoom-direction",
-                                                     "zoomed-esc-center", "rewind-on-focus"}, error)) return false;
+                                                     "zoomed-esc-center", "rewind-on-focus", "overview-previews"}, error)) return false;
     if (camera && !rejectUnknownKeys(*camera, "camera", {"center-on-cmd-tab", "mouse-movement-multiplier",
                                                            "trackpad-movement-multiplier", "trackpad-invert-x",
                                                            "trackpad-invert-y"}, error)) return false;
@@ -408,6 +408,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readBool(root, zoom, "invert-zoom-scroll-direction", candidate.invertZoomScrollDirection, error) ||
         !readBool(root, zoom, "track-invert-zoom-direction", candidate.trackInvertZoomDirection, error) ||
         !readBool(root, zoom, "rewind-on-focus", candidate.rewindOnFocus, error) ||
+        !readBool(root, zoom, "overview-previews", candidate.overviewPreviews, error) ||
         !readBool(root, camera, "center-on-cmd-tab", candidate.centerOnCmdTab, error) ||
         !readBool(root, snap, "enable", candidate.snapEnabled, error) ||
         !readSnapThreshold(snap, candidate.snapThreshold, error) ||

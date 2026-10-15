@@ -570,7 +570,81 @@ void testExternalApplicationSuspension() {
            "unhidden application resumes from unchanged virtual geometry");
 }
 
+void testPreviewParkingAndRecovery() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    sa.layerCode = BackendCode::ok;
+    ClientWindow window(nullptr, 92);
+    initializeWindow(window);
+    WindowRenderer renderer(ax, sa);
+    const auto original = window.virtualRect;
+    expect(renderer.renderOverview(window, {200, 100, 256, 192}, 0.4f, 1).succeeded(),
+           "live overview is initially presented");
+    sa.calls.clear();
+    expect(renderer.parkForPreview(window, {4000, 3000}, 2).succeeded() && window.isHidden &&
+           !window.overviewPresented && sa.x == 4000 && sa.y == 3000,
+           "preview originals park beyond the complete desktop even when their model frame is visible");
+    expect(ax.calls.empty() && window.virtualRect.x == original.x && window.virtualRect.w == original.w,
+           "parking neither resizes the app nor changes its model geometry");
+    const auto operations = sa.calls.size();
+    expect(renderer.parkForPreview(window, {4000, 3000}, 2.1).succeeded() && sa.calls.size() == operations,
+           "cached preview parking sends no per-frame backend operations");
+    expect(renderer.renderOverview(window, {220, 120, 384, 288}, 0.6f, 3).succeeded() &&
+           !window.isHidden && window.overviewPresented && sa.scale == 0.6f,
+           "crossing the exit threshold restores live overview from the unchanged model");
+    sa.failNextMove = true;
+    expect(!renderer.parkForPreview(window, {4000, 3000}, 4).succeeded() && !window.isHidden,
+           "failed parking cannot publish a thumbnail-only window");
+    sa.calls.clear();
+    expect(renderer.renderOverview(window, {220, 120, 384, 288}, 0.6f, 4.01).succeeded() &&
+           std::find(sa.calls.begin(), sa.calls.end(), "overview") != sa.calls.end(),
+           "a failed parking request invalidates the live transform cache for recovery");
+    sa.calls.clear();
+    expect(!renderer.parkForPreview(window, {4000, 3000}, 4.1).succeeded() && sa.calls.empty(),
+           "failed parking retries are bounded instead of blocking every animation frame");
+    expect(renderer.parkForPreview(window, {4000, 3000}, 5).succeeded(), "parking can retry after backoff");
+    expect(renderer.restore(window, 6).succeeded() && !window.isHidden && !window.overviewPresented,
+           "shutdown restores parked originals");
+    sa.transforms = false;
+    sa.calls.clear();
+    ax.calls.clear();
+    expect(!renderer.parkForPreview(window, {4000, 3000}, 7).succeeded() && ax.calls.empty(),
+           "preview parking requires transforms and never hides applications through AX");
+}
+
+void testManyPreviewFramesDoNotMoveOriginals() {
+    RecordingBackend ax, sa;
+    sa.transforms = true;
+    sa.layerCode = BackendCode::ok;
+    WindowRenderer renderer(ax, sa);
+    std::vector<std::unique_ptr<ClientWindow>> windows;
+    for (uint32_t id = 100; id < 200; ++id) {
+        auto window = std::make_unique<ClientWindow>(nullptr, id);
+        initializeWindow(*window);
+        windows.push_back(std::move(window));
+    }
+    for (int frame = 0; frame < 60; ++frame) {
+        for (const auto& window : windows) {
+            expect(renderer.renderOverview(*window, {float(frame), 100, 256, 192}, .4f, frame).succeeded(),
+                   "live comparison presentation succeeds");
+        }
+    }
+    const auto liveUpdates = std::count(sa.calls.begin(), sa.calls.end(), "overview");
+    sa.calls.clear();
+    for (int frame = 60; frame < 120; ++frame) {
+        for (const auto& window : windows) {
+            expect(renderer.parkForPreview(*window, {4000, 3000}, frame).succeeded(),
+                   "cached preview source remains parked through navigation frames");
+        }
+    }
+    const auto parkedUpdates = std::count(sa.calls.begin(), sa.calls.end(), "move");
+    expect(liveUpdates == 6000 && parkedUpdates == 100 && ax.calls.empty(),
+           "100 windows across 60 frames require only 100 one-time parking moves instead of 6000 live updates");
+}
+
 int main() {
+    testManyPreviewFramesDoNotMoveOriginals();
+    testPreviewParkingAndRecovery();
     testReleaseToIgnoredDisplay();
     testOverviewPresentationAndReturn();
     testExternalApplicationSuspension();
