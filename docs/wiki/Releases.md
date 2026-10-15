@@ -1,33 +1,46 @@
 # Releases
 
-Releases use `vMAJOR.N`, for example `v1.1` and `v1.2`. `VERSION_MAJOR` stores
-the current major number. The release workflow assigns `N` by finding the
-largest existing release tag for that major and adding one. It then builds,
-runs CTest, packages the binaries, and publishes a GitHub Release with the new
-tag and generated notes.
+`minfwm` uses version tags in the format `v<MAJOR>.<N>` (for example, `v1.1`, `v1.2`, `v2.0`).
 
-## Publish a release
+- The major version number is defined in the `VERSION_MAJOR` file at the root of the repository.
+- The minor number `N` is automatically calculated by finding the highest existing tag for that major version and incrementing it by one.
 
-1. Merge the changes intended for release into `main` and wait for the CI
-   workflow to pass.
-2. In GitHub, open **Actions → Release → Run workflow**. Select `main` and run
-   the workflow. The version number is assigned automatically.
-3. Check the new GitHub Release and its `minfwm-macos.tar.gz` and `SHA256SUMS`
-   assets.
+---
 
-The release workflow can run only from `main`. It is serialized so two release
-runs cannot choose the same next number. It does not publish automatically on
-every push; use it when you decide the changes are ready for a release.
+## Publishing a Release
 
-## Change the major number
+Releases are built and published via GitHub Actions:
 
-For a major version change, edit `VERSION_MAJOR` to the desired integer, merge
-that change to `main`, then run the release workflow. For example, changing it
-from `1` to `2` makes the next release `v2.1`. Existing tags for older major
-versions remain unchanged.
+1. **Merge Changes**: Ensure all changes are merged into `main` and continuous integration passes.
+2. **Trigger Release**:
+   - Navigate to the **Actions** tab in the GitHub repository.
+   - Select the **Release** workflow from the left sidebar.
+   - Click **Run workflow**, choose the `main` branch, and click the green button.
+3. **Artifacts**:
+   - The workflow builds the project, runs tests, packages the release archives (`minfwm-macos.tar.gz` and `SHA256SUMS`), and publishes a new GitHub Release.
 
-## Check the version
+---
 
-The release binary reports its release tag with `minfwm version`. Local builds
-continue to report their short Git commit hash. `minfwm version --dev` reports
-the latest local commit hash.
+## Changing the Major Version
+
+To release a new major version:
+
+1. Edit the integer in the `VERSION_MAJOR` file (for example, change `1` to `2`).
+2. Commit and merge this change to `main`.
+3. The next release workflow run will publish `v2.0`.
+
+---
+
+## Checking Your Version
+
+Check the installed `minfwm` version via the CLI:
+
+```sh
+minfwm version
+```
+
+For development builds, view the current Git commit hash with:
+
+```sh
+minfwm version --dev
+```

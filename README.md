@@ -2,49 +2,46 @@
 
 ![minfwm preview](docs/images/preview.png)
 
-`minfwm` is an infinite 2D window canvas for macOS. It places windows on a virtual desktop that spans connected displays.
+`minfwm` is an infinite 2D window canvas for macOS 14+. It turns your desktop into an endless virtual workspace that seamlessly spans across all connected displays.
 
 > [!WARNING]
 > This project is completely vibecoded.
 
-## Installation and usage
+## Installation & Quick Start
 
 > [!IMPORTANT]
-> Install the compatible Yabai Scripting Addition separately. Setup requires disabling SIP; see the [Yabai integration guide](https://github.com/snusxd/minfwm/wiki/Yabai-Integration).
+> `minfwm` requires the custom Yabai Scripting Addition to position windows beyond standard display boundaries. Setup requires disabling SIP; see the [Yabai Integration Guide](https://github.com/snusxd/minfwm/wiki/Yabai-Integration).
 
-Install the latest stable release from the to macOS 14+
-[Homebrew tap](https://github.com/snusxd/homebrew-minfwm):
+### Install via Homebrew
 
 ```sh
 brew install snusxd/minfwm/minfwm
 ```
 
-Grant `minfwm` Accessibility permission in System Settings, then enable the
-per-user LaunchAgent:
+### Enable & Start
+
+1. Grant `minfwm` Accessibility permission in **System Settings → Privacy & Security → Accessibility**.
+2. Enable and start the background service:
 
 ```sh
 minfwm enable
 minfwm status
-minfwm camera move --x 100 --y 0
 ```
 
-If the daemon starts before Accessibility is enabled, it stays running and
-rechecks the permission until macOS grants it; a daemon restart is not needed.
+*(If the daemon starts before Accessibility permission is granted, it will wait and start automatically once granted).*
 
-Use `minfwm start`, `stop`, or `restart` to control the daemon. In a source
-checkout, `./build/minfwm dev-update` builds the `minfwm` target first, saves the
-current virtual window layout and camera when the daemon is running, restarts the
-daemon, and waits for its IPC readiness response. A build or startup failure returns
-a nonzero status. The LaunchAgent executable needs Accessibility permission;
-startup errors from the daemon log are reported by `dev-update`.
-When a foreground `minfwm daemon` owns the IPC socket, `dev-update` saves its
-layout, stops it, and starts the rebuilt daemon in the background. Otherwise it
-restarts the LaunchAgent. Readiness is checked against the new daemon's PID.
-`minfwm reload`
-applies configuration changes; `minfwm disable` stops the daemon and removes
-login startup.
+### Useful Commands
 
-## Build from source
+| Command | Action |
+| --- | --- |
+| `minfwm status` | Check if the daemon is running |
+| `minfwm start` / `stop` / `restart` | Control the background daemon |
+| `minfwm reload` | Reload `~/.config/minfwm/minfwm.toml` |
+| `minfwm list displays` | List connected displays |
+| `minfwm camera move --x 100 --y 0` | Pan the camera via CLI |
+| `minfwm disable` | Disable auto-start on login and stop the daemon |
+
+## Build from Source
 
 ```sh
 cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
@@ -52,11 +49,11 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-For a foreground run, start `./build/minfwm daemon`. The daemon socket is
-`$TMPDIR/minfwm.sock`, owned by the current user with mode `0600`.
+For foreground testing: `./build/minfwm daemon`.
 
-## Features and documentation
+During active development, run `./build/minfwm dev-update` to rebuild the binary, preserve open window positions, and smoothly restart the daemon.
 
-See [FEATURES.md](FEATURES.md) for a quick overview of implemented features.
-For setup, configuration, and detailed guides, visit the
-[project Wiki](https://github.com/snusxd/minfwm/wiki).
+## Features & Documentation
+
+- **[FEATURES.md](FEATURES.md)**: Overview of all built-in features and gestures.
+- **[Project Wiki](https://github.com/snusxd/minfwm/wiki)**: Full guides for configuration, shortcuts, architecture, and development.

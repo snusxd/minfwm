@@ -1,0 +1,24 @@
+{
+  "assistance": "ai",
+  "base": "928c0f105aefd1025dbfd81b45510650233c06f5",
+  "id": "7cab4d6a1b124e8a8c1704d2dfd793b5",
+  "paths": [
+    "FEATURES.md",
+    "README.md",
+    "docs/wiki/AI-Workflow.md",
+    "docs/wiki/Acceptance-macos.md",
+    "docs/wiki/Architecture.md",
+    "docs/wiki/Configuration.md",
+    "docs/wiki/Development.md",
+    "docs/wiki/Getting-Started.md",
+    "docs/wiki/Home.md",
+    "docs/wiki/Publishing.md",
+    "docs/wiki/Releases.md",
+    "docs/wiki/Yabai-Integration.md"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "antigravity"
+  ]
+}

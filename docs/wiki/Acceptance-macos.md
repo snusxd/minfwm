@@ -1,84 +1,56 @@
-# macOS acceptance
+# macOS Acceptance Checklist
 
-Accessibility, WindowServer, CGEventTap, window focus, and live Yabai SA behavior
-are manual-only. Build/CTest success does not prove those interactions.
+Automated headless tests (CTest) verify pure geometry, IPC framing, and configuration logic. However, live macOS features—such as Accessibility observers, Core Graphics event taps, WindowServer transforms, and trackpad gestures—require manual verification on real hardware.
 
-## Checks
+Use this checklist to verify `minfwm` behavior on macOS.
 
-- Start with the required Yabai SA; grant and revoke Accessibility permission;
-  verify clear errors and orderly startup/shutdown.
-- Pan with Super drag; verify focus, pin/unpin, native dragging, and camera
-  bookmarks.
-- With snapping enabled, pan a near-fullscreen window with Super drag and with
-  three fingers. Verify the camera tracks the gesture freely, waits through
-  trackpad momentum, then eases to the window edge. Start another pan during
-  the snap animation and verify movement continues from the visible position.
-  Repeat near a window smaller than 90% of either viewport dimension and verify
-  that it does not trigger snapping.
-  Repeat with snapping disabled and with animations disabled. Set each
-  `snap.vertical-tuning` and `snap.horizontal-tuning` value in turn; verify the
-  window lands on the selected edge or center, and `auto` keeps the nearest edge.
-- Check a secondary display with a negative origin and independent cameras.
-- With two displays in isolated mode, pan a focused window above the menu bar
-  and across the edge of its owning display. Verify it does not flicker, clamp,
-  or appear in the other display's camera; only a title-bar drag or drag
-  everywhere should change ownership. After releasing drag everywhere at an
-  unchanged position, verify hover follows the visible window.
-- Connect a display while the daemon is running; verify it gets an independent
-  camera, new windows are assigned to it, and native window drags transfer
-  ownership between display canvases. Pan a camera until windows pass beyond its
-  visible edge and verify those windows stay on their original canvas.
-- With one display ignored, drag a window by its title bar and with drag
-  everywhere from a managed display onto the ignored display. Verify the window
-  remains visible and follows ordinary macOS positioning there. Drag it back
-  and verify the managed camera picks it up without a jump. Pan the managed
-  camera across the ignored display without dragging a window; its ownership
-  must stay with the managed canvas. Repeat after changing `ignored-displays`
-  and running `minfwm reload`.
-- Verify window visibility, native geometry, and restoration after normal exit.
-- Check translation, overview zoom, selection, Escape, application frame
-  correction, and process-exit recovery.
-- Check popups, sheets/dialogs, multiple displays, dragging during and after
-  translation, and behavior when Yabai or the daemon restarts.
+---
 
-## Current evidence
+## 1. Startup, Permissions & Shutdown
 
-On 2026-10-15, macOS 27.0 on Mac16,6 with yabai v7.1.25 reported absolute
-transforms and pinned-level support at daemon startup. A three-finger trackpad
-check of the animated snap was reported by the user as generally working; the
-daemon trace emitted `CAMERA_SNAP ... animated`. With
-`vertical-tuning = "bottom"` and `horizontal-tuning = "center"`, the user
-confirmed that a three-finger snap placed the window at the bottom center.
-The new `[snap]` configuration loaded successfully through `minfwm reload`.
-A controlled comparison of
-threshold values has not been performed live. The LaunchAgent lacked
-Accessibility permission in this session, so the validated daemon ran directly.
-AX notification registration returned `-25207`, and some windows reported
-restore failures during daemon shutdown; these remain separate live issues.
+- [ ] **Accessibility Gate**: Start the daemon without Accessibility permission. Confirm it logs waiting state cleanly without crashing.
+- [ ] **Permission Grant**: Grant Accessibility access in System Settings while the daemon is waiting. Confirm it automatically starts managing windows without needing a process restart.
+- [ ] **Clean Exit**: Stop the daemon (`minfwm stop` or Ctrl+C if foreground). Confirm that all windows hidden or moved by `minfwm` are restored to standard macOS coordinates and transforms are cleared.
 
-The same day, `yabai -m query` showed Ghostty at 1166×704 points on a
-1352×878-point display. Those dimensions passed the old 80% eligibility rule;
-the new 90% rule rejects them in a geometry regression test while retaining
-snap for a 1352×804-point window. The rebuilt daemon started with the new
-rule. After restarting the daemon, the user repeated the gesture and confirmed
-that Ghostty no longer triggers snap.
+---
 
-The repository's October 2026 development notes report successful lifecycle v2
-fixture checks for translation cleanup and process-exit recovery, plus manual
-confirmation of ordinary-window pickup/drop and subsequent panning with hybrid
-native/transform positioning. These checks do not establish broad desktop
-compatibility. Overview has known desktop regressions and an unresolved
-one-frame flash; production uses the compatible non-atomic handoff. Treat
-popups, multi-display overview, third-party dragging, and complete SA replacement
-as unverified until checked on the target Mac.
+## 2. Canvas Navigation & Gestures
 
-On 2026-10-15, `minfwm dev-update` was run three times against a foreground daemon.
-Each run built the CLI, saved the layout, stopped the socket-owning daemon, and
-started a new process; the IPC readiness check verified the new PID. The final
-`minfwm status` reported `running (foreground PID 24356)`, and the daemon log
-reported layout restoration and `Daemon is running`. The complete 13-test CTest
-suite passed on the dirty checkout. Window interaction after the restart was
-not checked manually.
+- [ ] **Three-Finger Pan**: Swipe with three fingers on the trackpad. Confirm the camera pans smoothly and glides to a stop with natural momentum.
+- [ ] **Mouse Pan**: Hold `Super` (`Cmd + Option`) and drag with the left mouse button. Confirm the canvas follows cursor movement.
+- [ ] **Overview Zoom**: Pinch with four fingers on the trackpad or scroll while holding `Super`. Confirm the view zooms out to show an overview of all windows.
+- [ ] **Overview Focus**: While zoomed out, click on any window. Confirm the camera smoothly zooms back in to 100% and focuses that window.
+- [ ] **Escape Return**: While zoomed out, press `Escape`. Confirm the view returns to normal scale.
 
-Record new live results here with macOS version, hardware, exact extension
-capabilities, steps, and outcome. Do not mark unavailable checks as passed.
+---
+
+## 3. Window Snapping
+
+- [ ] **Near-Fullscreen Snap**: Enlarge a window so it covers 90%+ of the screen width and height. Pan the camera until the window approaches a display edge. Confirm the camera smoothly snaps and eases the window into place.
+- [ ] **Interrupted Snap**: Start a new pan gesture during a snap animation. Confirm the gesture immediately takes over smoothly from the visible position.
+- [ ] **Small Windows Ignored**: Pan near windows smaller than 90% of the display. Confirm edge snapping is not triggered.
+
+---
+
+## 4. Window Controls & Shortcuts
+
+- [ ] **Drag Everywhere**: Hold `Super + Ctrl` and drag anywhere inside a window (or swipe with three fingers). Confirm the window moves freely without needing to click the title bar.
+- [ ] **Window Pinning**: Focus a window and press `Super + P`. Pan the camera. Confirm the pinned window stays visible on screen and floats above other windows.
+- [ ] **Center Camera on Focus**: Pan away from the active window and press `Super + F`. Confirm the camera centers on the focused window.
+- [ ] **Center Focus on Camera**: Select a partially offscreen window and press `Super + S`. Confirm the window moves to the center of your current screen view.
+- [ ] **App Switching**: Switch apps using `Cmd + Tab`. Confirm the camera automatically pans to center the newly active window.
+
+---
+
+## 5. Camera Bookmarks
+
+- [ ] **Save Bookmark**: Position the camera over a set of windows and press `Super + 1`.
+- [ ] **Jump to Bookmark**: Pan far away to another part of the canvas, then press `Super + Shift + 1`. Confirm the camera smoothly animates back to the saved position.
+
+---
+
+## 6. Multi-Display Support
+
+- [ ] **Independent Canvases**: On a multi-monitor setup, pan the camera on Display 1. Confirm Display 2 remains stationary.
+- [ ] **Negative Display Origins**: Verify correct positioning on secondary displays placed above or to the left of the main display.
+- [ ] **Ignored Displays**: Add a monitor name to `display.ignored-displays` in `minfwm.toml` and run `minfwm reload`. Drag a window onto that monitor; confirm it behaves as a standard, unmanaged macOS window.

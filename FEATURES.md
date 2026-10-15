@@ -1,24 +1,38 @@
 # Features
 
-- Manage windows on an infinite 2D desktop using macOS Accessibility APIs.
-- Pan the camera by dragging, zoom with scroll when compatible overview support
-  is available, and move the camera to exact coordinates from the CLI.
-- Keep independent camera positions on multiple displays, including displays
-  with negative coordinate origins.
-- Center the camera on the focused window or move the focused window to the
-  camera center with configurable shortcuts.
-- Save and restore up to nine camera positions with keyboard shortcuts.
-- Pin or unpin the focused window and optionally keep pinned windows above
-  others.
-- Choose how new windows are placed, keep selected apps available, and configure
-  window shadows and the offscreen retention margin.
-- Configure scroll direction, Escape return position, and how cameras coordinate
-  across displays.
-- Discover windows as apps launch or close, and restore captured window geometry
-  when the daemon exits.
-- Start, stop, restart, enable or disable login startup, and reload configuration
-  from the CLI; invalid configuration leaves the last valid settings active.
-- Require a compatible Yabai Scripting Addition for presentation transforms;
-  overview zoom depends on its advertised capabilities. The
-  [acceptance checklist](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance)
-  tracks remaining manual checks.
+`minfwm` transforms your macOS workspace into an infinite 2D canvas, allowing you to freely position, organize, and navigate windows without the constraints of traditional monitors or Spaces.
+
+## Infinite Canvas & Navigation
+
+- **Infinite 2D Workspace**: Place windows anywhere on an endless virtual desktop.
+- **Trackpad & Mouse Panning**:
+  - Pan smoothly across the canvas using a three-finger trackpad swipe (with natural momentum) or `Super` + left-click drag.
+  - Multipliers and axis inversions available for complete sensitivity control.
+- **Zoom & Overview**:
+  - Zoom out to an aerial view of your canvas with a four-finger trackpad pinch or `Super` + scroll wheel.
+  - Click any window in overview mode to zoom in and center it.
+  - Press `Escape` to quickly exit overview.
+- **Camera Bookmarks**: Save up to 9 camera positions (`Super + 1..9`) and instantly jump between them (`Super + Shift + 1..9`).
+- **Precision CLI Navigation**: Move the camera to exact coordinates directly from the terminal (`minfwm camera move --x 100 --y 0`).
+
+## Window Management & Ergonomics
+
+- **Drag Everywhere**: Hold `Super + Ctrl` and drag anywhere inside a window (or swipe with three fingers) to move it without reaching for the title bar.
+- **Smart Window Snapping**: Smoothly snaps near-fullscreen windows into place along display edges after panning, with customizable threshold and alignment.
+- **Window Pinning**: Pin frequently referenced windows (`Super + P`) so they follow the camera wherever you pan, with optional always-on-top floating.
+- **Quick Centering**:
+  - Center the camera on the focused window (`Super + F`).
+  - Pull the focused window to the center of your screen (`Super + S`).
+  - Automatically center the camera when switching apps with `Cmd + Tab`.
+- **Display Isolation & Multi-Monitor**:
+  - Independent virtual canvases for each physical display (including secondary monitors with negative origins).
+  - Configure `ignored-displays` to leave specific monitors unmanaged for standard macOS usage.
+- **Safe Window Lifecycle**:
+  - Discovers new windows automatically as applications open.
+  - Automatically restores all captured windows to their original positions when the daemon exits.
+
+## Performance & Control
+
+- **Smooth Animations**: Hardware-paced easing for panning, zooming, and snapping with configurable animation speeds.
+- **Background Daemon**: Managed easily via `minfwm start`, `stop`, `restart`, `status`, and login auto-start (`minfwm enable` / `disable`).
+- **Atomic Configuration**: Edit `~/.config/minfwm/minfwm.toml` and reload on the fly with `minfwm reload`. Invalid changes are automatically rejected without disrupting your workflow.

@@ -1,41 +1,56 @@
 # Architecture
 
-## Boundaries
+This document outlines the core architecture, design principles, and component boundaries of `minfwm`.
 
-- `src/core/` contains platform-independent C++20 geometry, cameras, display
-  state, and visibility policy.
-- `src/daemon/` adapts Accessibility, Core Graphics events, AppKit, run loops,
-  configuration, lifecycle, IPC, and the required Yabai backend.
-- `src/cli/` implements `minfwm`; `src/common/Protocol.hpp` owns the wire format.
+---
 
-Display bounds use one physical coordinate system and may have negative
-origins. Platform adapters convert native screen coordinates at the boundary.
-AppKit and Accessibility state changes run on the main thread; IPC workers
-validate requests and enqueue commands.
+## Architectural Boundaries
 
-## Window presentation
+`minfwm` is structured to separate platform-independent window geometry from macOS-specific system integration:
 
-Each display has a camera over virtual window coordinates. The daemon projects
-visible windows into physical display coordinates and parks or hides other
-windows according to the configured policy. Shutdown restores captured native
-position and size, unhides windows hidden by the daemon, and clears owned
-presentation transforms when possible.
+```
+┌────────────────────────────────────────────────────────┐
+│                        minfwm CLI                      │
+│                  (Command-line control)                │
+└───────────────────────────┬────────────────────────────┘
+                            │ Unix IPC Socket
+┌───────────────────────────▼────────────────────────────┐
+│                      minfwm Daemon                     │
+│  AXObserver │ EventTap │ WindowRenderer │ Yabai Backend│
+└───────────────────────────┬────────────────────────────┘
+                            │ Pure C++20 State & Math
+┌───────────────────────────▼────────────────────────────┐
+│                        Core Engine                     │
+│  Geometry │ Camera Math │ Visibility Policy │ Snapping │
+└────────────────────────────────────────────────────────┘
+```
 
-Native positioning is used in the usable screen area. The required extension
-translates rendered windows outside it while preserving native input geometry.
-Position readback detects application frame corrections; persistently
-constrained positions are rejected.
+### 1. Core (`src/core/`)
+- Written in modern, pure C++20.
+- Contains geometry math, camera transformations, viewport projections, visibility culling, and edge-snapping algorithms.
+- **Zero macOS API dependencies**: Completely decoupled from AppKit, Core Graphics, and Accessibility APIs, allowing comprehensive headless testing on any system.
 
-## IPC
+### 2. macOS Daemon (`src/daemon/`)
+- The background daemon process invoked by `minfwm daemon`.
+- Hooks into macOS subsystems:
+  - **Accessibility APIs (`AXUIElement`, `AXObserver`)**: Discovers newly opened windows, tracks window destruction, and manages window focus.
+  - **Core Graphics Event Tap (`CGEventTap`)**: Intercepts trackpad swipe/pinch gestures, mouse drags, and keyboard shortcuts.
+  - **Yabai Scripting Addition Adapter**: Dispatches low-level WindowServer transforms for offscreen translation and overview scaling.
+  - **IPC Server**: Listens on the Unix domain socket for CLI commands.
+- All state updates to AppKit and Accessibility execute on the main thread.
 
-The local `MFWM` version-1 protocol uses a little-endian command and payload
-length. Payloads are capped at 64 bytes. The Unix socket is
-`$TMPDIR/minfwm.sock`, owned by the current user with mode `0600`; a lock file
-prevents a second daemon from replacing the active socket. Invalid CLI input
-returns a nonzero status.
+### 3. CLI & IPC (`src/cli/` & `src/common/`)
+- `minfwm` is a unified executable providing both the daemon and CLI control tools.
+- Commands communicate with the running daemon over a private Unix domain socket at `$TMPDIR/minfwm.sock` (file mode `0600`, accessible only by the current user).
+- Uses a compact, versioned binary protocol (`Protocol.hpp`) ensuring low-latency communication.
 
-## Decisions
+---
 
-The daemon requires a compatible Yabai Scripting Addition handshake with
-transform and pinned-level support. Core geometry stays independent of Apple
-APIs. See source history for prior design discussions.
+## Coordinate Model & Virtual Canvas
+
+Instead of moving windows across rigid desktop spaces:
+1. **Virtual Space**: Every window lives at specific 2D coordinates `(X, Y)` on an endless canvas.
+2. **Camera Projection**: Each physical display acts as a viewport (camera) into this virtual canvas.
+3. **Multi-Display Isolation**: Connected displays maintain their own independent cameras and canvases. Secondary displays with negative coordinate origins are seamlessly mapped to the global coordinate space.
+4. **Visibility & Culling**: Windows that move far outside the visible camera view are culled from active rendering to conserve system resources, while their positions are preserved in memory.
+5. **Clean Exit**: When the daemon shuts down, all custom WindowServer transforms are cleared, and windows are restored safely to their original native positions.

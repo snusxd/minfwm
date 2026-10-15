@@ -1,12 +1,22 @@
-# Publishing the Wiki
+# Wiki Publishing
 
-`.github/workflows/wiki.yml` syncs Markdown pages from `docs/wiki/` to the
-repository's GitHub Wiki after changes land on `main`. It also supports manual
-runs. Wiki pages are kept flat in `docs/wiki/` so each source filename maps to
-one Wiki page. Removed source pages are removed from the Wiki; non-Markdown Wiki
-files are preserved.
+The `docs/wiki/` directory in this repository serves as the single source of truth for the project's GitHub Wiki.
 
-Before the first run, enable the repository Wiki and create its initial page.
-Add an Actions secret named `WIKI_TOKEN` with permission to write to that Wiki.
-The workflow needs this secret because the Wiki is stored in a separate Git
-repository. Changes pushed by the workflow do not trigger another workflow run.
+---
+
+## How Synchronization Works
+
+A GitHub Actions workflow (`.github/workflows/wiki.yml`) automatically synchronizes all Markdown files from `docs/wiki/*.md` to the official GitHub Wiki whenever changes are merged into the `main` branch.
+
+- **Flat Structure**: Every `.md` file in `docs/wiki/` maps directly to a Wiki page named after the file.
+- **Automatic Deletion**: If a file is deleted from `docs/wiki/`, it is automatically removed from the Wiki.
+- **Manual Runs**: The workflow can also be triggered manually from the GitHub Actions tab.
+
+---
+
+## Setup Requirements
+
+If configuring the sync workflow for a new repository or fork:
+
+1. **Enable Wiki**: Go to repository **Settings**, enable the **Wikis** feature, and create an initial dummy page.
+2. **Access Token**: Add an Actions secret named `WIKI_TOKEN` (a Personal Access Token with repository write permissions), as GitHub Wikis are stored in a separate Git repository.

@@ -1,32 +1,75 @@
-# Yabai integration
+# Yabai Scripting Addition Integration
 
-Yabai's Scripting Addition (SA) is required. The daemon checks its version and
-capability handshake and refuses to start unless transform and pinned-level
-support are available. The stock SA cannot guarantee placement above the menu
-bar; use the compatible extension built below.
+`minfwm` relies on a patched version of the **Yabai Scripting Addition (SA)** to manage windows beyond the standard macOS screen boundaries.
 
-## Experimental extension
+---
 
-The repository contains a pinned Yabai 7.1.25 extension with lifecycle v2
-translation and overview capabilities. Build it locally:
+## Why Is This Needed?
+
+By default, macOS WindowServer strictly confines application windows to the usable screen area:
+- Windows cannot normally be positioned above the top menu bar or far outside the visible screen.
+- macOS Accessibility APIs alone cannot smoothly translate or scale windows for aerial canvas overviews.
+
+The Yabai Scripting Addition injects lightweight code into macOS WindowServer/Dock to provide arbitrary window transformation, pinning, and scaling. `minfwm` uses this capability to create its seamless infinite canvas.
+
+---
+
+## Prerequisites: Disabling SIP
+
+Because macOS protects system processes, loading any Scripting Addition requires disabling System Integrity Protection (SIP):
+
+1. Shut down your Mac.
+2. Boot into macOS Recovery (hold the Power button on Apple Silicon, or `Cmd + R` on Intel Macs).
+3. Open **Utilities → Terminal** from the menu bar.
+4. Run the following command:
+   ```sh
+   csrutil disable
+   ```
+   *(Or for minimal SIP configuration, see Yabai's documentation on configuring specific SIP flags).*
+5. Restart your Mac.
+
+---
+
+## Building and Loading the Scripting Addition
+
+`minfwm` includes an automated script that checks out the compatible Yabai version, applies the required transform patches, and builds the addition locally.
+
+1. Stop `minfwm` if it is currently running:
+   ```sh
+   minfwm stop
+   ```
+
+2. Build and load the Scripting Addition:
+   ```sh
+   python3 tools/build_yabai_sa.py
+   sudo ./build/yabai-minfwm/bin/yabai --load-sa
+   ```
+
+   > [!NOTE]
+   > Loading the Scripting Addition will briefly restart the macOS Dock. This is normal.
+
+3. Start `minfwm`:
+   ```sh
+   minfwm start
+   ```
+
+To ensure `minfwm` starts automatically after reboots, configure your system to load the Scripting Addition on boot (as described in the official Yabai documentation, via `sudoers` and `launchd`).
+
+---
+
+## Uninstallation / Reverting
+
+If you wish to remove the custom Scripting Addition:
 
 ```sh
-python3 tools/build_yabai_sa.py
-sudo ./build/yabai-minfwm/bin/yabai --load-sa
+minfwm stop
+sudo ./build/yabai-minfwm/bin/yabai --uninstall-sa
 ```
 
-Disable System Integrity Protection before setup. Stop the daemon with
-`minfwm stop` before loading. This replaces the installed Yabai SA and may
-restart Dock. To revert, stop the daemon with `minfwm stop`, uninstall using
-the original Yabai `--uninstall-sa`, then load the original `--load-sa`. An SA
-unload may leave transforms in WindowServer, so confirm normal native dragging
-before restarting the daemon.
+---
 
-The daemon automatically uses compatible lifecycle v2 translation for
-above-menu-bar/offscreen placement. Overview additionally needs a newer
-capability set. The production overview handoff uses the compatible move/reset
-path; an atomic handoff remains limited to the isolated fixture. This feature is
-experimental: desktop movement, one-frame flashes, popups/dialogs, multi-display
-behavior, and third-party native dragging have outstanding manual checks.
+## Notes & Known Limitations
 
-Use [the current macOS acceptance checklist](https://github.com/snusxd/minfwm/wiki/Acceptance-macos#macos-acceptance).
+- **Dock Restarts**: Loading or updating the Scripting Addition restarts the Dock process.
+- **System Dialogs**: Certain native macOS sheets and alert dialogs are bound to their parent applications and follow standard macOS positioning.
+- **Overview Zoom**: Overview zoom scales down windows visually. Clicking any window returns to 1:1 scale and centers the view.

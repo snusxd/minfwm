@@ -1,18 +1,19 @@
-# Repository AI workflow
+# Repository AI Workflow
 
-Repository policy is in `AGENTS.md`; the selected skill profile is
-`.agents/workflow-stack.json`. New Codex work reads `AGENTS.md` and this page.
-Open relevant skill guidance when an unfamiliar subsystem requires it.
+This reference outlines workflow principles for assisted and autonomous development in `minfwm`.
 
-For a routine change, use one worker only when isolation helps, provide the goal,
-acceptance, owned paths, and one focused check, then inspect the result. Do not
-create a task card or run a multi-role lifecycle by default. Use the seven-stage
-runtime only for risky, multi-step, or parallel work. Concurrent code writers
-use separate worktrees; shared contracts, CMake, instructions, and integration
-state have one writer.
+---
 
-Register actual participants before managed commits and use
-`tools/ai-commit --tools codex --task TASK-ID -- -m 'type: English summary'`.
-Never invent identities or claim unavailable manual checks. Task cards and
-workflow metadata remain in `docs/ai/tasks/` and `.agents/`; these machine-readable
-files are not Wiki pages.
+## Guidelines
+
+- **Repository Policy**: Defined in [AGENTS.md](../../AGENTS.md) and [GEMINI.md](../../GEMINI.md).
+- **Skill Profiles**: Pinned skills are configured under `.agents/workflow-stack.json`.
+- **Routine Changes**:
+  - Keep iterations lightweight and direct.
+  - Provide a clear goal, acceptance criteria, owned paths, and the smallest relevant check.
+  - Reserve multi-step task cards (`docs/ai/tasks/`) for complex, multi-agent, or risky tasks.
+- **Concurrency & Worktrees**:
+  - Concurrent writers must use separate Git worktrees. Shared contracts, CMake configuration, and integration state have one writer at a time.
+- **Commits**:
+  - Format commit messages according to Conventional Commits: `type: short English summary`.
+  - Use `tools/ai-commit` to register actual participants for managed commits.

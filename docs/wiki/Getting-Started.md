@@ -1,70 +1,106 @@
-# Getting started
+# Getting Started
 
-## Requirements
+This guide walks you through setting up and using `minfwm`.
 
-- macOS 14 or newer, AppleClang, C++20, and CMake 3.20 or newer.
-- Accessibility permission for `minfwm`.
-- Disabled System Integrity Protection (SIP).
-- The compatible [Yabai Scripting Addition](https://github.com/snusxd/minfwm/wiki/Yabai-Integration) built and loaded separately; the Homebrew formula does not install it.
+## Prerequisites
 
-## Build and run
+1. **macOS 14 (Sonoma) or newer**.
+2. **Disabled System Integrity Protection (SIP)**: Required to load the custom Yabai Scripting Addition.
+3. **Compatible Yabai Scripting Addition (SA)**: Provides low-level window transforms for smooth offscreen positioning. Follow the [Yabai Integration Guide](https://github.com/snusxd/minfwm/wiki/Yabai-Integration) to build and load it.
+4. **Accessibility Permission**: `minfwm` needs Accessibility access to track windows and mouse/keyboard events.
+
+---
+
+## Installation
+
+### Option 1: Homebrew (Recommended)
+
+Install the latest release via Homebrew:
+
+```sh
+brew install snusxd/minfwm/minfwm
+```
+
+### Option 2: Build from Source
+
+Requirements: AppleClang, C++20, and CMake 3.20+.
 
 ```sh
 cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
-./build/minfwm daemon
 ```
 
-Grant Accessibility permission in System Settings. If the daemon starts before
-the permission is enabled, it keeps checking and starts automatically once
-macOS grants access; you do not need to restart it.
-For per-user login startup, run:
+The resulting binary will be located at `./build/minfwm`.
 
-```sh
-./build/minfwm enable
-```
+---
 
-Useful commands:
+## Initial Setup & Permissions
 
-```sh
-./build/minfwm start
-./build/minfwm stop
-./build/minfwm restart
-./build/minfwm dev-update
-./build/minfwm disable
-./build/minfwm reload
-./build/minfwm camera move --x 100 --y 0
-```
+1. **Grant Accessibility Permission**:
+   - Open **System Settings → Privacy & Security → Accessibility**.
+   - Add and enable `minfwm` (or your terminal application if running manually).
+   - If the daemon starts before permissions are granted, it will automatically detect the permission once granted without needing a restart.
 
-`start`, `stop`, and `restart` control the current user's LaunchAgent.
-`dev-update` builds the `minfwm` target first, saves the current virtual window
-layout and camera when the daemon is running, restarts the daemon next to the
-invoked CLI binary, and reports success only after the daemon answers an IPC
-readiness check. It reports startup failures from the daemon log and returns
-a nonzero status if the build or startup fails.
-If a foreground `minfwm daemon` owns the socket, `dev-update` saves its layout
-and replaces it with a background daemon from the rebuilt binary. Otherwise it
-restarts the LaunchAgent. The readiness check verifies the new daemon's PID.
-`disable` prevents login startup and stops it. The daemon socket is
-`$TMPDIR/minfwm.sock`, owned by the current user with mode `0600`.
+2. **Enable Background Service**:
+   Register and start the daemon as a user LaunchAgent:
 
-## Controls
+   ```sh
+   minfwm enable
+   ```
 
-- Super and left-drag pans the canvas.
-- Moving three fingers on the trackpad pans the canvas and continues with
-  decaying momentum after you lift them.
-- Hold Ctrl+Super while moving three fingers to drag the window under the
-  pointer everywhere.
-- Pinching four fingers together or apart zooms the display under the pointer
-  when a compatible overview extension is available.
-- Super and vertical scroll zooms the display under the pointer when a
-  compatible overview extension is available.
-- Clicking a window while zoomed restores normal scale and centers it.
-- Escape exits overview; its return anchor is configurable.
-- Cmd+1…9 loads a camera bookmark; Cmd+Shift+1…9 saves one.
-- Super+P pins or unpins the focused window.
-- Super+F centers the camera on the focused window.
-- Super+S centers the focused window in the camera.
+   To check that it is running:
 
-See [Configuration](https://github.com/snusxd/minfwm/wiki/Configuration) for the supported options.
+   ```sh
+   minfwm status
+   ```
+
+---
+
+## CLI Management
+
+Control the `minfwm` daemon easily from your terminal:
+
+| Command | Description |
+| --- | --- |
+| `minfwm status` | Check whether the daemon is currently running and its PID. |
+| `minfwm start` | Start the background daemon. |
+| `minfwm stop` | Stop the background daemon and restore windows to original positions. |
+| `minfwm restart` | Restart the background daemon. |
+| `minfwm reload` | Reload configuration from `~/.config/minfwm/minfwm.toml` on the fly. |
+| `minfwm list displays` | List connected displays and their names (useful for display configuration). |
+| `minfwm enable` | Register and start `minfwm` to launch automatically at login. |
+| `minfwm disable` | Stop `minfwm` and disable auto-start on login. |
+| `minfwm camera move --x <px> --y <px>` | Move the active camera by a specific pixel offset. |
+| `minfwm dev-update` | (Developers) Rebuilds the binary, preserves window positions, and restarts the daemon. |
+
+---
+
+## Default Controls & Gestures
+
+> [!NOTE]
+> By default, **`Super`** is set to **`Cmd + Option`** (`Cmd + Alt`). You can customize this chord in your [Configuration](https://github.com/snusxd/minfwm/wiki/Configuration).
+
+### Canvas Navigation
+
+- **Three-Finger Swipe**: Pan the canvas smoothly in any direction (features natural decay momentum).
+- **`Super` + Left-Click Drag**: Pan the canvas with your mouse.
+- **Four-Finger Pinch**: Zoom out to an overview of your canvas.
+- **`Super` + Scroll Wheel**: Zoom in or out.
+- **Click Window in Overview**: Zooms back into 100% scale and centers on that window.
+- **`Escape`**: Exit overview zoom mode.
+
+### Window Management
+
+- **`Super + Ctrl` + Drag** (or three-finger swipe): **Drag Everywhere** — click and drag anywhere inside a window to move it freely, without needing to grab the title bar.
+- **`Super + P`**: Pin or unpin the currently focused window (pinned windows stay on screen as you pan).
+- **`Super + F`**: Center the camera onto the currently focused window.
+- **`Super + S`**: Pull the focused window to the center of the current camera view.
+- **`Cmd + Tab`**: Automatically moves the camera to center the newly focused application window.
+
+### Camera Bookmarks
+
+Save your favorite canvas locations and jump between them instantly:
+
+- **`Super + 1..9`**: Save the current camera position to slot 1–9.
+- **`Super + Shift + 1..9`**: Jump immediately to saved slot 1–9.
