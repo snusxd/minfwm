@@ -166,14 +166,16 @@ void InputInterceptor::stop() {
     m_trackpadInput.stop();
     m_trackpadTouchActive.store(false, std::memory_order_release);
     m_trackpadScrollCaptured = false;
-    m_trackpadPanDisplayId.reset();
-    m_trackpadGestureActive = false;
+    finishTrackpadPan(false);
+    if (m_trackpadDragEverywhereActive) WindowManager::instance().cancelDragEverywhere();
+    m_trackpadDragEverywhereActive = false;
+    m_trackpadDragPointer = {};
     m_trackpadZoomGestureActive = false;
-    m_trackpadPanVelocity = {};
-    if (m_trackpadMomentumTimer) {
-        [m_trackpadMomentumTimer invalidate];
-        [m_trackpadMomentumTimer release];
-        m_trackpadMomentumTimer = nil;
+    if (m_mousePanDisplayId) {
+        if (Display* display = WindowManager::instance().displayById(*m_mousePanDisplayId)) {
+            WindowManager::instance().finishCameraPan(*display, false);
+        }
+        m_mousePanDisplayId.reset();
     }
     m_panGesture.reset();
     updateCursor(false, false, CGPointZero);
@@ -208,6 +210,12 @@ void InputInterceptor::stop() {
 void InputInterceptor::handleTrackpadPan(bool active, core::Point delta, float zoomDelta) {
     auto& wm = WindowManager::instance();
     if (!active) {
+        if (m_trackpadDragEverywhereActive) {
+            wm.endDragEverywhere(m_trackpadDragPointer);
+            m_trackpadDragEverywhereActive = false;
+            m_trackpadDragPointer = {};
+            return;
+        }
         if (m_trackpadZoomGestureActive) {
             m_trackpadZoomGestureActive = false;
             return;
@@ -233,7 +241,7 @@ void InputInterceptor::handleTrackpadPan(bool active, core::Point delta, float z
     }
 
     if (zoomDelta != 0.0f) {
-        if (!m_trackpadZoomGestureActive) finishTrackpadPan();
+        if (!m_trackpadZoomGestureActive) finishTrackpadPan(false);
         m_trackpadZoomGestureActive = true;
         CGEventRef pointerEvent = CGEventCreate(nullptr);
         const CGPoint location = pointerEvent ? CGEventGetLocation(pointerEvent) : CGPointZero;
@@ -244,7 +252,40 @@ void InputInterceptor::handleTrackpadPan(bool active, core::Point delta, float z
         return;
     }
     if (m_trackpadZoomGestureActive) return;
+    // The first contact of a new gesture has no delta. Stop old inertia now,
+    // before its next timer tick can move the camera under the user's fingers.
+    if (m_trackpadMomentumTimer && delta.x == 0.0f && delta.y == 0.0f) {
+        finishTrackpadPan(false);
+    }
     if (delta.x == 0.0f && delta.y == 0.0f) return;
+
+    const bool startingGesture = !m_trackpadGestureActive && !m_trackpadDragEverywhereActive;
+    if (startingGesture && m_trackpadMomentumTimer) finishTrackpadPan(false);
+
+    if (startingGesture) {
+        const ConfigSnapshot config = ConfigManager::instance().snapshot();
+        const CGEventFlags currentFlags = CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState);
+        if (matchesModifierChord(currentFlags, config.dragEverywhereModifiers, config.superModifiers)) {
+            CGEventRef pointerEvent = CGEventCreate(nullptr);
+            const CGPoint location = pointerEvent ? CGEventGetLocation(pointerEvent) : CGPointZero;
+            if (pointerEvent) CFRelease(pointerEvent);
+            m_trackpadDragPointer = {static_cast<float>(location.x), static_cast<float>(location.y)};
+            if (wm.beginDragEverywhere(m_trackpadDragPointer)) {
+                m_trackpadDragEverywhereActive = true;
+            }
+        }
+    }
+
+    if (m_trackpadDragEverywhereActive) {
+        const CGEventFlags currentFlags = CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState);
+        const ConfigSnapshot config = ConfigManager::instance().snapshot();
+        if (matchesModifierChord(currentFlags, config.dragEverywhereModifiers, config.superModifiers)) {
+            m_trackpadDragPointer.x += delta.x;
+            m_trackpadDragPointer.y += delta.y;
+            wm.dragWindowTo(m_trackpadDragPointer);
+        }
+        return;
+    }
 
     if (!m_trackpadGestureActive) {
         if (m_trackpadMomentumTimer) {
@@ -288,12 +329,11 @@ void InputInterceptor::applyTrackpadPanDelta(core::Point delta) {
     auto& wm = WindowManager::instance();
     if (wm.overviewReturning()) return;
     if (Display* display = wm.displayById(*m_trackpadPanDisplayId)) {
-        display->state().cancelCameraAnimation();
         const ConfigSnapshot config = ConfigManager::instance().snapshot();
         const float deltaX = config.trackpadInvertX ? -delta.x : delta.x;
         const float deltaY = config.trackpadInvertY ? -delta.y : delta.y;
-        display->camera().move(deltaX * config.trackpadMovementMultiplier / display->state().scale(),
-                               deltaY * config.trackpadMovementMultiplier / display->state().scale());
+        wm.panCamera(*display, {deltaX * config.trackpadMovementMultiplier / display->state().scale(),
+                                deltaY * config.trackpadMovementMultiplier / display->state().scale()});
     }
 }
 
@@ -312,11 +352,16 @@ void InputInterceptor::advanceTrackpadMomentum() {
     if (std::hypot(m_trackpadPanVelocity.x, m_trackpadPanVelocity.y) < 12.0f) finishTrackpadPan();
 }
 
-void InputInterceptor::finishTrackpadPan() {
+void InputInterceptor::finishTrackpadPan(bool snap) {
     if (m_trackpadMomentumTimer) {
         [m_trackpadMomentumTimer invalidate];
         [m_trackpadMomentumTimer release];
         m_trackpadMomentumTimer = nil;
+    }
+    if (m_trackpadPanDisplayId) {
+        if (Display* display = WindowManager::instance().displayById(*m_trackpadPanDisplayId)) {
+            WindowManager::instance().finishCameraPan(*display, snap);
+        }
     }
     m_trackpadGestureActive = false;
     m_trackpadPanDisplayId.reset();
@@ -435,12 +480,20 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     auto* interceptor = static_cast<InputInterceptor*>(refcon);
     if (!interceptor) return event;
     if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+        if (interceptor->m_mousePanDisplayId) {
+            if (Display* display = WindowManager::instance().displayById(*interceptor->m_mousePanDisplayId)) {
+                WindowManager::instance().finishCameraPan(*display, false);
+            }
+            interceptor->m_mousePanDisplayId.reset();
+        }
         interceptor->m_panGesture.reset();
         interceptor->updateCursor(false, false, CGPointZero);
         WindowManager::instance().setPanning(false);
         WindowManager::instance().endNativeInteraction();
         WindowManager::instance().cancelDragEverywhere();
         interceptor->m_dragEverywhereActive = false;
+        interceptor->m_trackpadDragEverywhereActive = false;
+        interceptor->m_trackpadDragPointer = {};
         const CGPoint pointer = event ? CGEventGetLocation(event) : CGPointZero;
         WindowManager::instance().exitOverview({static_cast<float>(pointer.x), static_cast<float>(pointer.y)}, false);
         if (interceptor->m_eventTap) {
@@ -586,7 +639,17 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
             delta = {static_cast<float>(CGEventGetIntegerValueField(event, kCGMouseEventDeltaX)),
                      static_cast<float>(CGEventGetIntegerValueField(event, kCGMouseEventDeltaY))};
         }
+        const bool wasPanning = interceptor->m_panGesture.isPanning();
         const core::PanUpdate update = interceptor->m_panGesture.handle(panEvent, modifiersHeld, displayId, delta);
+        if (interceptor->m_panGesture.isPanning()) interceptor->m_mousePanDisplayId = update.displayId;
+        if (wasPanning && !interceptor->m_panGesture.isPanning()) {
+            if (interceptor->m_mousePanDisplayId) {
+                if (Display* display = wm.displayById(*interceptor->m_mousePanDisplayId)) {
+                    wm.finishCameraPan(*display);
+                }
+            }
+            interceptor->m_mousePanDisplayId.reset();
+        }
         if (type == kCGEventLeftMouseDown) {
             if (update.consume) wm.flushNativeInteractionForPan();
             else {
@@ -606,10 +669,9 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         interceptor->updateCursor(modifiersHeld, draggingCursor, location);
         if (!wm.overviewReturning() && update.displayId && (update.delta.x != 0 || update.delta.y != 0)) {
             if (Display* display = wm.displayById(*update.displayId)) {
-                display->state().cancelCameraAnimation();
                 const float multiplier = ConfigManager::instance().snapshot().mouseMovementMultiplier;
-                display->camera().move(update.delta.x * multiplier / display->state().scale(),
-                                       update.delta.y * multiplier / display->state().scale());
+                wm.panCamera(*display, {update.delta.x * multiplier / display->state().scale(),
+                                        update.delta.y * multiplier / display->state().scale()});
             }
         }
         if (update.consume || (wm.overviewActive() && rewindOnFocus && type != kCGEventFlagsChanged)) return nullptr;

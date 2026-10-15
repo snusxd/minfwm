@@ -30,13 +30,14 @@ private:
     void handleTrackpadPan(bool active, core::Point delta, float zoomDelta);
     void applyTrackpadPanDelta(core::Point delta);
     void advanceTrackpadMomentum();
-    void finishTrackpadPan();
+    void finishTrackpadPan(bool snap = true);
     
     CFRef<CFMachPortRef> m_eventTap;
     CFRef<CFRunLoopSourceRef> m_runLoopSource;
     CFRef<CFMachPortRef> m_scrollEventTap;
     CFRef<CFRunLoopSourceRef> m_scrollRunLoopSource;
     core::PanGesture m_panGesture;
+    std::optional<std::int64_t> m_mousePanDisplayId;
     TrackpadInput m_trackpadInput;
     std::shared_ptr<std::atomic_bool> m_trackpadCallbackEnabled;
     std::atomic_bool m_trackpadTouchActive{false};
@@ -48,6 +49,8 @@ private:
     double m_trackpadMomentumLastTick = 0.0;
     NSTimer* m_trackpadMomentumTimer = nil;
     bool m_trackpadGestureActive = false;
+    bool m_trackpadDragEverywhereActive = false;
+    core::Point m_trackpadDragPointer{};
     bool m_trackpadZoomGestureActive = false;
     uint64_t m_overviewButtons = 0;
     std::bitset<256> m_overviewKeys;

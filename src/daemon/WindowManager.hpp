@@ -78,6 +78,8 @@ public:
     void advanceWindowAnimation(ClientWindow& window, double now, float speed = 1.0f,
                                 bool enabled = true);
     bool toggleFocusedWindowPin();
+    bool panCamera(Display& display, core::Point delta);
+    void finishCameraPan(Display& display, bool snap = true);
     void centerCameraToFocusedWindow();
     void centerFocusedWindowToCamera();
     void centerCameraOnWindow(AXUIElementRef element);

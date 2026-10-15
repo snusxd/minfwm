@@ -39,6 +39,14 @@ struct DisplayGeometry {
 
 [[nodiscard]] bool canUseNativePosition(Rect frame, Rect usableBounds) noexcept;
 
+enum class SnapTuning { automatic, leading, center, trailing };
+
+// Snaps a panning camera viewport to the edges of a nearby near-fullscreen window.
+[[nodiscard]] Rect snapViewportToNearFullscreenWindow(Rect previousViewport, Rect viewport,
+                                                       Rect window, float edgeThreshold,
+                                                       SnapTuning horizontal = SnapTuning::automatic,
+                                                       SnapTuning vertical = SnapTuning::automatic) noexcept;
+
 [[nodiscard]] std::optional<std::int64_t> nearestDisplay(
     std::span<const DisplayGeometry> displays, Point point) noexcept;
 

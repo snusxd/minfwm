@@ -26,7 +26,8 @@ inline constexpr std::size_t kResponseSize = 4;
 enum class Command : std::uint16_t {
     RELOAD = 0,
     CAMERA_MOVE = 1,
-    SAVE_LAYOUT = 2
+    SAVE_LAYOUT = 2,
+    PING = 3
 };
 
 enum class ResponseStatus : std::uint16_t {
@@ -142,6 +143,10 @@ inline Request makeSaveLayoutRequest() {
     return Request{static_cast<std::uint16_t>(Command::SAVE_LAYOUT), {}};
 }
 
+inline Request makePingRequest() {
+    return Request{static_cast<std::uint16_t>(Command::PING), {}};
+}
+
 inline Request makeCameraMoveRequest(float x, float y) {
     Request request;
     request.command = static_cast<std::uint16_t>(Command::CAMERA_MOVE);
@@ -200,6 +205,7 @@ inline ErrorCode decodeRequestFrame(std::span<const std::uint8_t> frame, Request
     switch (static_cast<Command>(request.command)) {
         case Command::RELOAD:
         case Command::SAVE_LAYOUT:
+        case Command::PING:
             return request.payload.empty() ? ErrorCode::NONE : ErrorCode::MALFORMED;
         case Command::CAMERA_MOVE: {
             float x = 0.0F;

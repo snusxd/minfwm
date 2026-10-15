@@ -9,6 +9,7 @@
 #include "DaemonRunLoop.hpp"
 #include "DisplayFrameClock.hpp"
 #include "CFRAII.hpp"
+#include "AccessibilityPermission.hpp"
 
 namespace {
 volatile sig_atomic_t g_stopRequested = 0;
@@ -27,14 +28,23 @@ int runDaemon() {
         signal(SIGINT, requestStop);
         signal(SIGTERM, requestStop);
 
-        // Verify accessibility permissions
+        // Prompt once, then keep rechecking because TCC permission changes are
+        // not delivered to an already-running process. This mirrors the app
+        // activation refresh used in Keyboard GUI without requiring a daemon
+        // restart after the user enables Accessibility in System Settings.
         NSDictionary *options = @{(id)kAXTrustedCheckOptionPrompt: @YES};
         if (!AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)options)) {
-            std::cerr << "minfwm daemon: Accessibility permission is not active. Grant it in System Settings, then run `minfwm restart`."
+            std::cerr << "minfwm daemon: waiting for Accessibility permission; enable it in System Settings"
                       << std::endl;
-            // Exit successfully so launchd's KeepAlive policy doesn't relaunch
-            // the daemon and show the same permission prompt forever.
-            return 0;
+            const bool granted = minfwm::waitUntilAccessibilityPermissionGranted(
+                [] { return AXIsProcessTrusted(); },
+                [] { CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, true); },
+                [] { return g_stopRequested != 0; });
+            if (!granted) {
+                std::cout << "minfwm daemon: stopped while waiting for Accessibility permission" << std::endl;
+                return 0;
+            }
+            std::cout << "minfwm daemon: Accessibility permission is active" << std::endl;
         }
         auto systemWide = minfwm::CFRef<AXUIElementRef>::adopt(AXUIElementCreateSystemWide());
         if (!systemWide || AXUIElementSetMessagingTimeout(systemWide.get(), 0.1f) != kAXErrorSuccess) {
@@ -105,6 +115,7 @@ int runDaemon() {
             if (!displayLinked) wm.updateWindows();
         }];
 
+        server.markReady();
         std::cout << "minfwm daemon: Daemon is running." << std::endl;
         minfwm::runDaemonRunLoop();
     }

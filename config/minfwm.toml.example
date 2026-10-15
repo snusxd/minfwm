@@ -13,6 +13,10 @@
 # camera.trackpad-movement-multiplier = 1.0
 # camera.trackpad-invert-x = false
 # camera.trackpad-invert-y = false
+# snap.enable = true
+# snap.threshold = 32
+# snap.vertical-tuning = "auto"
+# snap.horizontal-tuning = "auto"
 # multi-display-mode = "isolated"
 # display.ignored-displays = []
 # pins.always-on-top = true
@@ -45,6 +49,16 @@ trackpad-movement-multiplier = 1.0
 # Reverse the corresponding trackpad pan axes when needed.
 trackpad-invert-x = false
 trackpad-invert-y = false
+
+[snap]
+# Ease toward a nearby near-fullscreen window after panning ends.
+enable = true
+# Maximum edge distance in physical display points (range 0–1000).
+threshold = 32
+# Where the window lands inside the viewport: top/center/bottom/auto.
+vertical-tuning = "auto"
+# Where the window lands inside the viewport: left/center/right/auto.
+horizontal-tuning = "auto"
 
 [display]
 multi-display-mode = "isolated"

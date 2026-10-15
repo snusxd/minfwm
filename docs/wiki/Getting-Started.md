@@ -16,7 +16,9 @@ ctest --test-dir build --output-on-failure
 ./build/minfwm daemon
 ```
 
-Grant Accessibility permission in System Settings, then restart the daemon.
+Grant Accessibility permission in System Settings. If the daemon starts before
+the permission is enabled, it keeps checking and starts automatically once
+macOS grants access; you do not need to restart it.
 For per-user login startup, run:
 
 ```sh
@@ -36,8 +38,14 @@ Useful commands:
 ```
 
 `start`, `stop`, and `restart` control the current user's LaunchAgent.
-`dev-update` saves the current virtual window layout and camera, then restarts
-the daemon next to the invoked CLI binary.
+`dev-update` builds the `minfwm` target first, saves the current virtual window
+layout and camera when the daemon is running, restarts the daemon next to the
+invoked CLI binary, and reports success only after the daemon answers an IPC
+readiness check. It reports startup failures from the daemon log and returns
+a nonzero status if the build or startup fails.
+If a foreground `minfwm daemon` owns the socket, `dev-update` saves its layout
+and replaces it with a background daemon from the rebuilt binary. Otherwise it
+restarts the LaunchAgent. The readiness check verifies the new daemon's PID.
 `disable` prevents login startup and stops it. The daemon socket is
 `$TMPDIR/minfwm.sock`, owned by the current user with mode `0600`.
 
@@ -46,6 +54,8 @@ the daemon next to the invoked CLI binary.
 - Super and left-drag pans the canvas.
 - Moving three fingers on the trackpad pans the canvas and continues with
   decaying momentum after you lift them.
+- Hold Ctrl+Super while moving three fingers to drag the window under the
+  pointer everywhere.
 - Pinching four fingers together or apart zooms the display under the pointer
   when a compatible overview extension is available.
 - Super and vertical scroll zooms the display under the pointer when a

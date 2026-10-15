@@ -3,9 +3,47 @@
 #import "ConfigManager.hpp"
 #import <iostream>
 #include <algorithm>
+#include <unordered_set>
 #import <QuartzCore/QuartzCore.h>
 
 namespace minfwm {
+namespace {
+
+std::unordered_set<pid_t> visibleWindowOwnerPids() {
+    std::unordered_set<pid_t> result;
+    auto windows = CFRef<CFArrayRef>::adopt(CGWindowListCopyWindowInfo(
+        kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID));
+    if (!windows) return result;
+
+    for (CFIndex index = 0; index < CFArrayGetCount(windows.get()); ++index) {
+        const auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows.get(), index));
+        if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID()) continue;
+
+        const auto pidValue = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowOwnerPID));
+        const auto layerValue = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowLayer));
+        const auto alphaValue = static_cast<CFNumberRef>(CFDictionaryGetValue(info, kCGWindowAlpha));
+        pid_t pid = 0;
+        int layer = -1;
+        double alpha = 1.0;
+        if (!pidValue || CFGetTypeID(pidValue) != CFNumberGetTypeID() ||
+            !CFNumberGetValue(pidValue, kCFNumberIntType, &pid) || pid <= 0 ||
+            !layerValue || CFGetTypeID(layerValue) != CFNumberGetTypeID() ||
+            !CFNumberGetValue(layerValue, kCFNumberIntType, &layer) || layer != 0) continue;
+        if (alphaValue && CFGetTypeID(alphaValue) == CFNumberGetTypeID() &&
+            !CFNumberGetValue(alphaValue, kCFNumberDoubleType, &alpha)) continue;
+        if (alpha <= 0) continue;
+
+        const auto bounds = static_cast<CFDictionaryRef>(CFDictionaryGetValue(info, kCGWindowBounds));
+        CGRect frame{};
+        if (!bounds || CFGetTypeID(bounds) != CFDictionaryGetTypeID() ||
+            !CGRectMakeWithDictionaryRepresentation(bounds, &frame) ||
+            frame.size.width <= 1 || frame.size.height <= 1) continue;
+        result.insert(pid);
+    }
+    return result;
+}
+
+} // namespace
 
 AXObserver::AXObserver() : m_launchObserver(nil), m_terminateObserver(nil) {}
 
@@ -42,9 +80,10 @@ bool AXObserver::start() {
             m_refreshPending = true;
             m_nextReconcileTime = 0;
             NSRunningApplication* app = note.userInfo[NSWorkspaceApplicationKey];
-            if (!app || app.activationPolicy != NSApplicationActivationPolicyRegular) return;
+            if (!app) return;
             const pid_t pid = app.processIdentifier;
             (void)this->observeApplication(app);
+            if (app.activationPolicy != NSApplicationActivationPolicyRegular) return;
             if (!this->focusActivatedApplication(pid)) {
                 m_pendingActivationPid = pid;
             } else {
@@ -70,9 +109,14 @@ bool AXObserver::start() {
         if (m_started) this->unobserveApplication(app.processIdentifier);
     }];
 
+    const auto visiblePids = visibleWindowOwnerPids();
     bool registrationFailed = false;
     for (NSRunningApplication* app in [workspace runningApplications]) {
-        if (app.activationPolicy == NSApplicationActivationPolicyRegular) {
+        // Some apps render their real window in an accessory helper process.
+        // Steam's CEF "Steam Helper" is one example: its windows are layer 0,
+        // while the main Steam NSRunningApplication can report PID -1.
+        if (app.activationPolicy == NSApplicationActivationPolicyRegular ||
+            visiblePids.contains(app.processIdentifier)) {
             registrationFailed = !observeApplication(app) || registrationFailed;
         }
     }
@@ -116,8 +160,8 @@ void AXObserver::stop() {
 bool AXObserver::observeApplication(NSRunningApplication* app) {
     auto& wm = WindowManager::instance();
     if (!app) return false;
-    if (app.activationPolicy != NSApplicationActivationPolicyRegular) return true;
     pid_t pid = app.processIdentifier;
+    if (pid <= 0) return true;
     const char* name = app.localizedName.UTF8String;
     wm.setApplicationState(pid, name ? name : "", app.hidden);
     if (auto existing = m_appObservers.find(pid); existing != m_appObservers.end()) return refreshWindows(existing->second, false);

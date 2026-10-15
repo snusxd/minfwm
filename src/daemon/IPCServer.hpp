@@ -17,6 +17,7 @@ public:
 
     bool start();
     void stop();
+    void markReady();
     std::string lastError() const;
 
 private:
@@ -28,6 +29,7 @@ private:
     std::string m_socketPath;
     std::thread m_serverThread;
     std::atomic<bool> m_running;
+    std::atomic<bool> m_ready{false};
     int m_wakeupReadFd;
     int m_wakeupWriteFd;
     mutable std::mutex m_stateMutex;

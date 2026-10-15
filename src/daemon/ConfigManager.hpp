@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <string_view>
+#include "../core/Geometry.hpp"
 
 namespace minfwm {
 
@@ -13,6 +14,10 @@ struct ConfigSnapshot {
     bool rewindOnFocus = true;
     bool centerOnCmdTab = true;
     bool animationsEnabled = true;
+    bool snapEnabled = true;
+    float snapThreshold = 32.0f;
+    core::SnapTuning snapHorizontalTuning = core::SnapTuning::automatic;
+    core::SnapTuning snapVerticalTuning = core::SnapTuning::automatic;
     float animationSpeed = 1.0f;
     std::string zoomedEscCenter = "screen";
     std::string multiDisplayMode = "isolated";

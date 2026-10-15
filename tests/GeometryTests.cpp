@@ -37,6 +37,8 @@ int main() {
     using minfwm::core::shouldPreferNativePosition;
     using minfwm::core::frameFitsDisplay;
     using minfwm::core::nearestDisplay;
+    using minfwm::core::snapViewportToNearFullscreenWindow;
+    using minfwm::core::SnapTuning;
 
     Camera camera;
     camera.move(-125.0f, 80.0f);
@@ -77,6 +79,138 @@ int main() {
     expectNear(roundTrip.y, virtualRect.y, "virtual/physical y transform round-trips");
     expectNear(roundTrip.w, virtualRect.w, "virtual/physical width is preserved");
     expectNear(roundTrip.h, virtualRect.h, "virtual/physical height is preserved");
+
+    const Rect previousViewport{-1975, -340, 1920, 1080};
+    const Rect nearWindowViewport{-1925, -300, 1920, 1080};
+    const Rect nearFullscreenWindow{-1900, -285, 1880, 1050};
+    const Rect snappedViewport = snapViewportToNearFullscreenWindow(
+        previousViewport, nearWindowViewport, nearFullscreenWindow, 32);
+    expectNear(snappedViewport.x, -1940, "camera viewport snaps its right edge to a near-fullscreen window");
+    expectNear(snappedViewport.y, -285, "camera viewport snaps its top edge to a near-fullscreen window");
+    const Rect explicitAuto = snapViewportToNearFullscreenWindow(
+        previousViewport, nearWindowViewport, nearFullscreenWindow, 32,
+        SnapTuning::automatic, SnapTuning::automatic);
+    expectNear(explicitAuto.x, snappedViewport.x, "explicit automatic horizontal tuning preserves current snap behavior");
+    expectNear(explicitAuto.y, snappedViewport.y, "explicit automatic vertical tuning preserves current snap behavior");
+    const Rect topLeft = snapViewportToNearFullscreenWindow(
+        previousViewport, nearWindowViewport, nearFullscreenWindow, 32,
+        SnapTuning::leading, SnapTuning::leading);
+    expectNear(topLeft.x, -1900, "left tuning places the window at the viewport left edge");
+    expectNear(topLeft.y, -285, "top tuning places the window at the viewport top edge");
+    const Rect bottomRight = snapViewportToNearFullscreenWindow(
+        previousViewport, nearWindowViewport, nearFullscreenWindow, 32,
+        SnapTuning::trailing, SnapTuning::trailing);
+    expectNear(bottomRight.x, -1940, "right tuning places the window at the viewport right edge");
+    expectNear(bottomRight.y, -315, "bottom tuning places the window at the viewport bottom edge");
+    const Rect centered = snapViewportToNearFullscreenWindow(
+        previousViewport, nearWindowViewport, nearFullscreenWindow, 32,
+        SnapTuning::center, SnapTuning::center);
+    expectNear(centered.x, -1920, "horizontal center tuning centers the window");
+    expectNear(centered.y, -300, "vertical center tuning centers the window");
+    const Rect verticalOnly = snapViewportToNearFullscreenWindow(
+        {-1700, -340, 1920, 1080}, {-1700, -300, 1920, 1080}, nearFullscreenWindow, 32,
+        SnapTuning::leading, SnapTuning::automatic);
+    expectNear(verticalOnly.x, -1900, "fixed horizontal tuning applies when vertical proximity triggers snap");
+    expectNear(verticalOnly.y, -285, "automatic vertical tuning still chooses its nearest edge");
+    const Rect horizontalOnly = snapViewportToNearFullscreenWindow(
+        {-1975, 0, 1920, 1080}, {-1925, 0, 1920, 1080}, nearFullscreenWindow, 32,
+        SnapTuning::automatic, SnapTuning::trailing);
+    expectNear(horizontalOnly.x, -1940, "automatic horizontal tuning still chooses its nearest edge");
+    expectNear(horizontalOnly.y, -315, "fixed vertical tuning applies when horizontal proximity triggers snap");
+    const Rect outOfRange = snapViewportToNearFullscreenWindow(
+        {-2100, -500, 1920, 1080}, {-2000, -400, 1920, 1080}, nearFullscreenWindow, 32,
+        SnapTuning::leading, SnapTuning::leading);
+    expectNear(outOfRange.x, -2000, "fixed tuning does not trigger snap outside the threshold");
+    const Rect ordinaryWindow{-1900, -285, 1200, 800};
+    const Rect unsnappedViewport = snapViewportToNearFullscreenWindow(
+        previousViewport, nearWindowViewport, ordinaryWindow, 32);
+    expectNear(unsnappedViewport.x, nearWindowViewport.x, "camera does not snap to ordinary-sized windows");
+    const Rect untunedOrdinary = snapViewportToNearFullscreenWindow(
+        previousViewport, nearWindowViewport, ordinaryWindow, 32,
+        SnapTuning::leading, SnapTuning::leading);
+    expectNear(untunedOrdinary.x, nearWindowViewport.x,
+               "fixed tuning does not make ordinary windows eligible for snap");
+    const Rect screenViewportBefore{0, 50, 1352, 878};
+    const Rect screenViewportAfter{0, 70, 1352, 878};
+    const Rect smallTerminal{14, 82, 1166, 704};
+    const Rect terminalSnap = snapViewportToNearFullscreenWindow(
+        screenViewportBefore, screenViewportAfter, smallTerminal, 64);
+    expectNear(terminalSnap.y, screenViewportAfter.y,
+               "an 86%-wide, 80%-tall terminal is not nearly fullscreen");
+    const Rect nearFullscreenApp{0, 74, 1352, 804};
+    const Rect appSnap = snapViewportToNearFullscreenWindow(
+        {0, 30, 1352, 878}, {0, 60, 1352, 878}, nearFullscreenApp, 64);
+    expectNear(appSnap.y, 74,
+               "a window covering over 90% of both display dimensions can still snap");
+    const Rect movingAway = snapViewportToNearFullscreenWindow(
+        nearWindowViewport, {-1970, -300, 1920, 1080}, nearFullscreenWindow, 32);
+    expectNear(movingAway.x, -1970, "camera can move away after passing a snap point");
+    const Rect widerSnap = snapViewportToNearFullscreenWindow(
+        {-2100, -340, 1920, 1080}, {-1990, -300, 1920, 1080}, nearFullscreenWindow, 64);
+    expectNear(widerSnap.x, -1940, "a larger threshold attracts a farther viewport");
+    const Rect narrowerSnap = snapViewportToNearFullscreenWindow(
+        {-2100, -340, 1920, 1080}, {-1990, -300, 1920, 1080}, nearFullscreenWindow, 32);
+    expectNear(narrowerSnap.x, -1990, "the default threshold leaves a farther viewport free");
+
+    DisplayState snapDisplay({9, {0, 0, 1920, 1080}});
+    expect(snapDisplay.camera().setPosition(-1975, -340), "snap test starts at a negative camera origin");
+    expect(snapDisplay.panCamera({50, 40}), "camera accepts a gesture movement");
+    expectNear(snapDisplay.camera().x(), -1925, "snap does not interrupt an active gesture");
+    expect(snapDisplay.panCamera({3, 2}), "camera accepts a momentum movement");
+    expectNear(snapDisplay.camera().x(), -1922, "snap waits for the momentum tail");
+    const Rect snapWindow{-1900, -285, 1880, 1050};
+    expect(snapDisplay.finishCameraPan(std::span<const Rect>(&snapWindow, 1), 32),
+           "gesture end selects a nearby snap target");
+    expectNear(snapDisplay.camera().x(), -1922, "snap animation does not jump at gesture end");
+    snapDisplay.advanceZoom(0.18);
+    expect(snapDisplay.camera().x() < -1922 && snapDisplay.camera().x() > -1940,
+           "snap animation advances smoothly toward its target");
+    snapDisplay.advanceZoom(0.18);
+    expectNear(snapDisplay.camera().x(), -1940, "snap animation reaches its target");
+    expectNear(snapDisplay.camera().y(), -285, "snap animation reaches the vertical target");
+    expect(!snapDisplay.finishCameraPan(std::span<const Rect>(&snapWindow, 1), 32),
+           "a completed pan cannot start another snap without new input");
+
+    expect(snapDisplay.panCamera({-10, 0}), "new gesture can move away from a snap target");
+    expect(!snapDisplay.finishCameraPan(std::span<const Rect>(&snapWindow, 1), 32),
+           "moving away from a snap target does not pull the camera back");
+    expectNear(snapDisplay.camera().x(), -1950, "moving away preserves the free position");
+
+    expect(snapDisplay.panCamera({25, 0}), "new gesture can interrupt a previous snap");
+    snapDisplay.cancelCameraPan();
+    expectNear(snapDisplay.camera().x(), -1925, "cancelled gesture leaves the camera where it stopped");
+    expect(!snapDisplay.finishCameraPan(std::span<const Rect>(&snapWindow, 1), 32),
+           "cancelled gesture cannot trigger a delayed snap");
+
+    expect(snapDisplay.panCamera({-5, 0}), "camera can pan back toward a snap point");
+    expect(snapDisplay.finishCameraPan(std::span<const Rect>(&snapWindow, 1), 32),
+           "a later gesture can select a new snap target");
+    snapDisplay.advanceZoom(0.09);
+    const float interruptedPosition = snapDisplay.camera().x();
+    expect(snapDisplay.panCamera({-5, 0}), "new input interrupts an in-flight snap animation");
+    expectNear(snapDisplay.camera().x(), interruptedPosition - 5,
+               "new input continues from the current animated position");
+    snapDisplay.cancelCameraPan();
+    snapDisplay.advanceZoom(1.0);
+    expectNear(snapDisplay.camera().x(), interruptedPosition - 5,
+               "an interrupted snap cannot resume after the gesture ends");
+
+    expect(snapDisplay.panCamera({-2, 0}), "camera can start a snap with animations disabled");
+    expect(snapDisplay.finishCameraPan(std::span<const Rect>(&snapWindow, 1), 32),
+           "camera selects a snap target when animations are disabled");
+    snapDisplay.advanceZoom(1.0 / 60.0, 1.0f, false);
+    expectNear(snapDisplay.camera().x(), -1940,
+               "disabled animations settle the snap at its target");
+
+    DisplayState tunedDisplay({10, {0, 0, 1920, 1080}});
+    expect(tunedDisplay.camera().setPosition(-1975, -340), "tuned snap test sets its starting camera");
+    expect(tunedDisplay.panCamera({50, 40}), "tuned snap test pans toward the window");
+    expect(tunedDisplay.finishCameraPan(std::span<const Rect>(&snapWindow, 1), 32,
+                                        SnapTuning::center, SnapTuning::trailing),
+           "tuned snap starts an animation after the gesture");
+    tunedDisplay.advanceZoom(0.36);
+    expectNear(tunedDisplay.camera().x(), -1920, "tuned camera animation uses horizontal center");
+    expectNear(tunedDisplay.camera().y(), -315, "tuned camera animation uses vertical bottom");
 
     const Rect viewport = display.viewport();
     VisibilityPolicy policy(100.0f);

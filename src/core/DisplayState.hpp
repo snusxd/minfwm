@@ -21,6 +21,11 @@ public:
     [[nodiscard]] bool overviewActive() const noexcept { return m_return.has_value() || m_scale != 1 || m_targetScale != 1; }
     bool animateCameraTo(Point target) noexcept;
     void cancelCameraAnimation() noexcept;
+    bool panCamera(Point delta) noexcept;
+    bool finishCameraPan(std::span<const Rect> windows, float edgeThreshold,
+                         SnapTuning horizontal = SnapTuning::automatic,
+                         SnapTuning vertical = SnapTuning::automatic) noexcept;
+    void cancelCameraPan() noexcept;
     bool setScaleAt(float scale, Point physicalAnchor) noexcept;
     bool requestZoom(float scrollDelta, Point physicalAnchor) noexcept;
     void advanceZoom(double elapsedSeconds, float animationSpeed = 1.0f,
@@ -59,6 +64,7 @@ private:
         double elapsed = 0;
     };
     std::optional<CameraTransition> m_cameraTransition;
+    std::optional<Rect> m_cameraPanStart;
     std::map<int, Point> m_bookmarks;
 };
 

@@ -28,7 +28,7 @@ bool setClientTimeouts(int fileDescriptor) {
 
 } // namespace
 
-IPCClient::Result IPCClient::sendMessage(const Request& request) {
+IPCClient::Result IPCClient::sendMessage(const Request& request, pid_t expectedPeerPid) {
     const auto encodedRequest = encodeRequestFrame(request);
     if (!encodedRequest.has_value()) {
         return Result{false, {}, "request payload exceeds protocol limit"};
@@ -61,6 +61,18 @@ IPCClient::Result IPCClient::sendMessage(const Request& request) {
         return Result{false, {}, "failed to connect to daemon"};
     }
 
+    pid_t actualPeerPid = 0;
+    socklen_t peerPidLength = sizeof(actualPeerPid);
+    if (::getsockopt(clientFd, SOL_LOCAL, LOCAL_PEERPID, &actualPeerPid, &peerPidLength) != 0 ||
+        peerPidLength != sizeof(actualPeerPid) || actualPeerPid <= 0) {
+        return Result{false, {}, "could not identify daemon socket owner"};
+    }
+    if (expectedPeerPid != 0 && actualPeerPid != expectedPeerPid) {
+        return Result{false, {}, "daemon socket belongs to PID " +
+                      std::to_string(actualPeerPid) + ", not expected PID " +
+                      std::to_string(expectedPeerPid)};
+    }
+
     if (!writeAll(clientFd, encodedRequest->data(), encodedRequest->size())) {
         return Result{false, {}, "failed to send request"};
     }
@@ -69,7 +81,7 @@ IPCClient::Result IPCClient::sendMessage(const Request& request) {
     if (!readResponse(clientFd, response)) {
         return Result{false, {}, "invalid or missing daemon response"};
     }
-    return Result{true, response, {}};
+    return Result{true, response, {}, actualPeerPid};
 }
 
 } // namespace minfwm

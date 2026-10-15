@@ -28,9 +28,19 @@ minfwm status
 minfwm camera move --x 100 --y 0
 ```
 
+If the daemon starts before Accessibility is enabled, it stays running and
+rechecks the permission until macOS grants it; a daemon restart is not needed.
+
 Use `minfwm start`, `stop`, or `restart` to control the daemon. In a source
-checkout, `./build/minfwm dev-update` saves the current virtual window layout and
-camera, then restarts the daemon next to that CLI binary. `minfwm reload`
+checkout, `./build/minfwm dev-update` builds the `minfwm` target first, saves the
+current virtual window layout and camera when the daemon is running, restarts the
+daemon, and waits for its IPC readiness response. A build or startup failure returns
+a nonzero status. The LaunchAgent executable needs Accessibility permission;
+startup errors from the daemon log are reported by `dev-update`.
+When a foreground `minfwm daemon` owns the IPC socket, `dev-update` saves its
+layout, stops it, and starts the rebuilt daemon in the background. Otherwise it
+restarts the LaunchAgent. Readiness is checked against the new daemon's PID.
+`minfwm reload`
 applies configuration changes; `minfwm disable` stops the daemon and removes
 login startup.
 

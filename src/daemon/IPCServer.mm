@@ -86,6 +86,7 @@ bool IPCServer::start() {
     m_startSucceeded = false;
     m_startError.clear();
     m_running = true;
+    m_ready = false;
 
     try {
         m_serverThread = std::thread(&IPCServer::run, this);
@@ -110,6 +111,7 @@ void IPCServer::stop() {
     {
         std::lock_guard lock(m_stateMutex);
         m_running = false;
+        m_ready = false;
         wakeupWriteFd = m_wakeupWriteFd;
     }
 
@@ -133,6 +135,10 @@ void IPCServer::stop() {
             m_wakeupReadFd = -1;
         }
     }
+}
+
+void IPCServer::markReady() {
+    m_ready = true;
 }
 
 std::string IPCServer::lastError() const {
@@ -254,6 +260,8 @@ void IPCServer::handleClient(int clientFd) {
 
 ErrorCode IPCServer::dispatchRequest(const Request& request) {
     switch (static_cast<Command>(request.command)) {
+        case Command::PING:
+            return m_ready.load() ? ErrorCode::NONE : ErrorCode::INTERNAL;
         case Command::RELOAD: {
             auto state = std::make_shared<MainQueueState>();
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -357,11 +365,12 @@ ErrorCode IPCServer::dispatchRequest(const Request& request) {
                     try {
                         std::cout << "IPCServer: Received CAMERA_MOVE: " << x << ", " << y << std::endl;
                         auto& wm = WindowManager::instance();
-                        if (!wm.mainDisplay().camera().move(x, y)) {
+                        Display& display = wm.mainDisplay();
+                        if (!wm.panCamera(display, {x, y})) {
                             std::lock_guard lock(state->mutex);
                             state->result = ErrorCode::MALFORMED;
                         } else {
-                            wm.mainDisplay().state().cancelCameraAnimation();
+                            wm.finishCameraPan(display);
                             wm.updateWindows();
                         }
                     } catch (...) {

@@ -49,6 +49,10 @@ void testRequestEncodingAndDecoding() {
     assert(decodedSaveLayout.command == static_cast<std::uint16_t>(Command::SAVE_LAYOUT));
     assert(decodedSaveLayout.payload.empty());
 
+    const auto pingFrame = minfwm::encodeRequestFrame(minfwm::makePingRequest());
+    assert(pingFrame.has_value());
+    assert(requestFromFrame(*pingFrame).command == static_cast<std::uint16_t>(Command::PING));
+
     const Request camera = minfwm::makeCameraMoveRequest(1.5F, -2.25F);
     const auto cameraFrame = minfwm::encodeRequestFrame(camera);
     assert(cameraFrame.has_value());
@@ -102,6 +106,12 @@ void testMalformedAndUnsupportedFrames() {
     const auto invalidSaveLayoutFrame = minfwm::encodeRequestFrame(invalidSaveLayout);
     assert(invalidSaveLayoutFrame.has_value());
     requestFromFrame(*invalidSaveLayoutFrame, ErrorCode::MALFORMED);
+
+    Request invalidPing = minfwm::makePingRequest();
+    invalidPing.payload = {1};
+    const auto invalidPingFrame = minfwm::encodeRequestFrame(invalidPing);
+    assert(invalidPingFrame.has_value());
+    requestFromFrame(*invalidPingFrame, ErrorCode::MALFORMED);
 
     Request invalidCamera;
     invalidCamera.command = static_cast<std::uint16_t>(Command::CAMERA_MOVE);

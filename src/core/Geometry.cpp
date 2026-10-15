@@ -16,6 +16,53 @@ bool canUseNativePosition(Rect frame, Rect usable) noexcept {
     return visibleWidth >= std::min(40.0f, frame.w) && visibleHeight >= std::min(40.0f, frame.h);
 }
 
+Rect snapViewportToNearFullscreenWindow(Rect previousViewport, Rect viewport,
+                                         Rect window, float edgeThreshold,
+                                         SnapTuning horizontal, SnapTuning vertical) noexcept {
+    const auto valid = [](Rect rect) {
+        return std::isfinite(rect.x) && std::isfinite(rect.y) &&
+            std::isfinite(rect.w) && std::isfinite(rect.h) &&
+            std::isfinite(rect.right()) && std::isfinite(rect.bottom()) &&
+            rect.w > 0 && rect.h > 0;
+    };
+    if (!valid(previousViewport) || !valid(viewport) || !valid(window) ||
+        !std::isfinite(edgeThreshold) || edgeThreshold < 0 ||
+        window.w < viewport.w * 0.9f || window.h < viewport.h * 0.9f ||
+        window.w > viewport.w * 1.2f || window.h > viewport.h * 1.2f) return viewport;
+
+    const auto snapAxis = [edgeThreshold](float previousOrigin, float origin, float viewportLength,
+                                          float windowOrigin, float windowLength) {
+        const float leadingTarget = windowOrigin;
+        const float trailingTarget = windowOrigin + windowLength - viewportLength;
+        const float previousLeadingDistance = std::abs(previousOrigin - leadingTarget);
+        const float previousTrailingDistance = std::abs(previousOrigin - trailingTarget);
+        const float leadingDistance = std::abs(origin - leadingTarget);
+        const float trailingDistance = std::abs(origin - trailingTarget);
+        const float previousDistance = std::min(previousLeadingDistance, previousTrailingDistance);
+        const float distance = std::min(leadingDistance, trailingDistance);
+        if (distance > edgeThreshold || distance >= previousDistance) return origin;
+        return leadingDistance <= trailingDistance ? leadingTarget : trailingTarget;
+    };
+    const float autoX = snapAxis(previousViewport.x, viewport.x, viewport.w, window.x, window.w);
+    const float autoY = snapAxis(previousViewport.y, viewport.y, viewport.h, window.y, window.h);
+    if (autoX == viewport.x && autoY == viewport.y) return viewport;
+
+    const auto tunedTarget = [](SnapTuning tuning, float automaticTarget, float windowOrigin,
+                                float windowLength, float viewportLength) {
+        switch (tuning) {
+            case SnapTuning::leading: return windowOrigin;
+            case SnapTuning::center: return static_cast<float>(
+                double(windowOrigin) + (double(windowLength) - viewportLength) / 2.0);
+            case SnapTuning::trailing: return windowOrigin + windowLength - viewportLength;
+            case SnapTuning::automatic: return automaticTarget;
+        }
+        return automaticTarget;
+    };
+    viewport.x = tunedTarget(horizontal, autoX, window.x, window.w, viewport.w);
+    viewport.y = tunedTarget(vertical, autoY, window.y, window.h, viewport.h);
+    return viewport;
+}
+
 Rect Rect::expanded(float amount) const noexcept {
     return { x - amount, y - amount, w + (2.0f * amount), h + (2.0f * amount) };
 }

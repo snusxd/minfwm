@@ -466,6 +466,30 @@ bool WindowManager::toggleFocusedWindowPin() {
     return true;
 }
 
+bool WindowManager::panCamera(Display& display, core::Point delta) {
+    return display.state().panCamera(delta);
+}
+
+void WindowManager::finishCameraPan(Display& display, bool snap) {
+    auto& state = display.state();
+    const ConfigSnapshot config = ConfigManager::instance().snapshot();
+    if (!snap || state.overviewActive() || !config.snapEnabled) {
+        state.cancelCameraPan();
+        return;
+    }
+    std::vector<core::Rect> windows;
+    for (const auto& window : display.windowPool().windows()) {
+        if (!window || !window->virtualCoordinatesInitialized || window->pinned || window->isHidden ||
+            window->applicationSuspended || window->needsGeometryRestore) continue;
+        windows.push_back(window->virtualRect);
+    }
+    if (state.finishCameraPan(windows, config.snapThreshold / state.scale(),
+                              config.snapHorizontalTuning, config.snapVerticalTuning) &&
+        std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+        std::cout << "CAMERA_SNAP display=" << display.id() << " animated" << std::endl;
+    }
+}
+
 void WindowManager::removeWindow(AXUIElementRef element) {
     if (auto window = findWindow(element)) (void)m_yabaiBackend.resetTransform(window->wid());
     for (auto& display : m_displays) display->windowPool().removeWindow(element);

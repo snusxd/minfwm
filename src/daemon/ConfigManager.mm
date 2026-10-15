@@ -329,8 +329,52 @@ bool readAnimationSpeed(const TomlTable* table, float& out, std::string& error) 
     return true;
 }
 
+bool readSnapThreshold(const TomlTable* table, float& out, std::string& error) {
+    if (!table) return true;
+    const TomlNode* node = table->get("threshold");
+    if (!node) return true;
+
+    double value = 0.0;
+    if (const auto floating = node->value<double>()) {
+        value = *floating;
+    } else if (const auto integer = node->value<std::int64_t>()) {
+        value = static_cast<double>(*integer);
+    } else {
+        error = "snap.threshold must be a finite number from 0 to 1000";
+        return false;
+    }
+    if (!std::isfinite(value) || value < 0.0 || value > 1000.0) {
+        error = "snap.threshold must be a finite number from 0 to 1000";
+        return false;
+    }
+    out = static_cast<float>(value);
+    return true;
+}
+
+bool readSnapTuning(const TomlTable* table, std::string_view key,
+                    std::string_view leading, std::string_view trailing,
+                    minfwm::core::SnapTuning& out, std::string& error) {
+    if (!table) return true;
+    const TomlNode* node = table->get(key);
+    if (!node) return true;
+    const auto value = node->value<std::string>();
+    if (value) {
+        if (*value == "auto") out = minfwm::core::SnapTuning::automatic;
+        else if (*value == leading) out = minfwm::core::SnapTuning::leading;
+        else if (*value == "center") out = minfwm::core::SnapTuning::center;
+        else if (*value == trailing) out = minfwm::core::SnapTuning::trailing;
+        else {
+            error = "snap." + std::string(key) + " has an unsupported value";
+            return false;
+        }
+        return true;
+    }
+    error = "snap." + std::string(key) + " must be a string";
+    return false;
+}
+
 bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
-    if (!rejectUnknownKeys(root, {"window", "zoom", "camera", "display", "keybinds", "pins", "animations"},
+    if (!rejectUnknownKeys(root, {"window", "zoom", "camera", "snap", "display", "keybinds", "pins", "animations"},
                            {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
                             "center-on-cmd-tab", "mouse-movement-multiplier", "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior",
                             "always-on-top", "ignored-displays"}, error)) return false;
@@ -338,6 +382,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     const TomlTable* window = tableAt(root, "window", error);
     const TomlTable* zoom = tableAt(root, "zoom", error);
     const TomlTable* camera = tableAt(root, "camera", error);
+    const TomlTable* snap = tableAt(root, "snap", error);
     const TomlTable* display = tableAt(root, "display", error);
     const TomlTable* keybinds = tableAt(root, "keybinds", error);
     const TomlTable* pins = tableAt(root, "pins", error);
@@ -350,6 +395,8 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     if (camera && !rejectUnknownKeys(*camera, "camera", {"center-on-cmd-tab", "mouse-movement-multiplier",
                                                            "trackpad-movement-multiplier", "trackpad-invert-x",
                                                            "trackpad-invert-y"}, error)) return false;
+    if (snap && !rejectUnknownKeys(*snap, "snap", {"enable", "threshold",
+                                                   "horizontal-tuning", "vertical-tuning"}, error)) return false;
     if (display && !rejectUnknownKeys(*display, "display", {"multi-display-mode", "ignored-displays"}, error)) return false;
     if (keybinds && !rejectUnknownKeys(*keybinds, "keybinds",
                                        {"super", "center-camera-to-focus", "center-focus-to-camera",
@@ -362,6 +409,10 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readBool(root, zoom, "track-invert-zoom-direction", candidate.trackInvertZoomDirection, error) ||
         !readBool(root, zoom, "rewind-on-focus", candidate.rewindOnFocus, error) ||
         !readBool(root, camera, "center-on-cmd-tab", candidate.centerOnCmdTab, error) ||
+        !readBool(root, snap, "enable", candidate.snapEnabled, error) ||
+        !readSnapThreshold(snap, candidate.snapThreshold, error) ||
+        !readSnapTuning(snap, "horizontal-tuning", "left", "right", candidate.snapHorizontalTuning, error) ||
+        !readSnapTuning(snap, "vertical-tuning", "top", "bottom", candidate.snapVerticalTuning, error) ||
         !readString(root, zoom, "zoomed-esc-center", candidate.zoomedEscCenter, error) ||
         !readMouseMovementMultiplier(root, camera, candidate.mouseMovementMultiplier, error) ||
         !readTrackpadMovementMultiplier(root, camera, candidate.trackpadMovementMultiplier, error) ||

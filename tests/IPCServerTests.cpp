@@ -1,4 +1,5 @@
 #include "IPCServer.hpp"
+#include "IPCClient.hpp"
 #include "UniqueFd.hpp"
 
 #include <cstdlib>
@@ -84,6 +85,22 @@ int main() {
         expect(exists(path), "failed server stop does not unlink the running server socket");
         sendInvalidRequest(path, false);
         sendInvalidRequest(path, true);
+        minfwm::IPCClient client;
+        const auto beforeReady = client.sendMessage(minfwm::makePingRequest());
+        expect(beforeReady.transportSucceeded && beforeReady.response.status == minfwm::ResponseStatus::ERROR,
+               "ping rejects a server before daemon initialization finishes");
+        owner.markReady();
+        const auto ready = client.sendMessage(minfwm::makePingRequest());
+        expect(ready.transportSucceeded && ready.response.status == minfwm::ResponseStatus::OK,
+               "ping confirms a ready daemon");
+        const auto owned = client.sendMessage(minfwm::makePingRequest(), ::getpid());
+        expect(owned.transportSucceeded && owned.response.status == minfwm::ResponseStatus::OK,
+               "ping accepts the expected daemon PID");
+        expect(owned.peerPid == ::getpid(), "client reports the daemon PID");
+        const auto wrongOwner = client.sendMessage(minfwm::makePingRequest(), ::getpid() + 1);
+        expect(!wrongOwner.transportSucceeded &&
+               wrongOwner.error.find("not expected PID") != std::string::npos,
+               "ping rejects a socket owned by another process before sending");
         owner.stop();
         owner.stop();
         expect(!exists(path), "server stop removes its owned socket idempotently");

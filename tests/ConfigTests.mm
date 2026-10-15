@@ -36,6 +36,11 @@ int main() {
         parsed, error);
     expect(valid, "documented TOML config parses");
     expect(parsed.enableWindowShadows, "boolean value is parsed");
+    expect(parsed.snapEnabled && parsed.snapThreshold == 32.0f,
+           "snap defaults to enabled with a 32-point threshold");
+    expect(parsed.snapHorizontalTuning == minfwm::core::SnapTuning::automatic &&
+           parsed.snapVerticalTuning == minfwm::core::SnapTuning::automatic,
+           "snap tuning defaults to automatic on both axes");
     expect(parsed.overscanBufferPx == 250.5f, "finite numeric value is parsed");
     expect(parsed.whitelist.size() == 2, "string array is parsed");
     expect(minfwm::ConfigManager::parseText(
@@ -60,6 +65,65 @@ int main() {
            "previous root-level TOML remains supported");
 
     expect(!parsed.invertZoomScrollDirection, "zoom scroll inversion defaults to false");
+    expect(minfwm::ConfigManager::parseText("[snap]\nenable = false\nthreshold = 64.5\n", parsed, error) &&
+           !parsed.snapEnabled && parsed.snapThreshold == 64.5f,
+           "snap options parse together from their own table");
+    expect(minfwm::ConfigManager::parseText("[snap]\nenable = true\nthreshold = 96\n", parsed, error) &&
+           parsed.snapEnabled && parsed.snapThreshold == 96.0f,
+           "snap accepts a boolean and an integer threshold");
+    expect(minfwm::ConfigManager::parseText(
+               "[snap]\nhorizontal-tuning = \"right\"\nvertical-tuning = \"bottom\"\n",
+               parsed, error) &&
+           parsed.snapHorizontalTuning == minfwm::core::SnapTuning::trailing &&
+           parsed.snapVerticalTuning == minfwm::core::SnapTuning::trailing,
+           "snap parses horizontal and vertical tuning independently");
+    for (const auto [horizontal, expected] : {
+             std::pair{"left", minfwm::core::SnapTuning::leading},
+             std::pair{"center", minfwm::core::SnapTuning::center},
+             std::pair{"right", minfwm::core::SnapTuning::trailing},
+             std::pair{"auto", minfwm::core::SnapTuning::automatic}}) {
+        expect(minfwm::ConfigManager::parseText(
+                   std::string("[snap]\nhorizontal-tuning = \"") + horizontal + "\"\n", parsed, error) &&
+               parsed.snapHorizontalTuning == expected,
+               "every horizontal tuning value parses");
+    }
+    for (const auto [vertical, expected] : {
+             std::pair{"top", minfwm::core::SnapTuning::leading},
+             std::pair{"center", minfwm::core::SnapTuning::center},
+             std::pair{"bottom", minfwm::core::SnapTuning::trailing},
+             std::pair{"auto", minfwm::core::SnapTuning::automatic}}) {
+        expect(minfwm::ConfigManager::parseText(
+                   std::string("[snap]\nvertical-tuning = \"") + vertical + "\"\n", parsed, error) &&
+               parsed.snapVerticalTuning == expected,
+               "every vertical tuning value parses");
+    }
+    minfwm::ConfigSnapshot thresholdLimits;
+    expect(minfwm::ConfigManager::parseText("[snap]\nthreshold = 0\n", thresholdLimits, error) &&
+           thresholdLimits.snapThreshold == 0.0f, "zero snap threshold is accepted");
+    expect(minfwm::ConfigManager::parseText("[snap]\nthreshold = 1000\n", thresholdLimits, error) &&
+           thresholdLimits.snapThreshold == 1000.0f, "maximum snap threshold is accepted");
+    const auto snapSettings = parsed;
+    for (const char* invalid : {
+             "[snap]\nenable = \"true\"\n",
+             "[snap]\nthreshold = \"64\"\n",
+             "[snap]\nthreshold = -1\n",
+             "[snap]\nthreshold = 1001\n",
+             "[snap]\nthreshold = nan\n",
+             "[snap]\nthreshold = inf\n",
+             "[snap]\nunknown = 1\n",
+             "[snap]\nhorizontal-tuning = \"top\"\n",
+             "[snap]\nvertical-tuning = \"left\"\n",
+             "[snap]\nhorizontal-tuning = 1\n",
+             "[snap]\nvertical-tuning = \"Bottom\"\n",
+             "snap = 42\n",
+             "[camera]\nsnapping = true\n"}) {
+        expect(!minfwm::ConfigManager::parseText(invalid, parsed, error) &&
+               parsed.snapEnabled == snapSettings.snapEnabled &&
+               parsed.snapThreshold == snapSettings.snapThreshold &&
+               parsed.snapHorizontalTuning == snapSettings.snapHorizontalTuning &&
+               parsed.snapVerticalTuning == snapSettings.snapVerticalTuning,
+               "invalid snap settings preserve the previous snapshot");
+    }
     expect(minfwm::ConfigManager::parseText(zoomConfig("true"), parsed, error) &&
            parsed.invertZoomScrollDirection, "boolean option accepts true");
     const auto inverted = parsed;

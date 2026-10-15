@@ -1,6 +1,7 @@
 #include "DisplayState.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace minfwm::core {
 bool DisplayState::beginReturn(std::optional<Point> target, std::optional<Point> physicalAnchor) noexcept {
@@ -14,18 +15,55 @@ bool DisplayState::beginReturn(std::optional<Point> target, std::optional<Point>
         !std::isfinite(camera.x) || !std::isfinite(camera.y)) return false;
     m_return = ReturnTransition{center, anchor, camera, m_scale};
     m_cameraTransition.reset();
+    m_cameraPanStart.reset();
     m_targetScale = 1;
     return true;
 }
 
 bool DisplayState::animateCameraTo(Point target) noexcept {
     if (!std::isfinite(target.x) || !std::isfinite(target.y)) return false;
+    m_cameraPanStart.reset();
     m_cameraTransition = CameraTransition{m_camera.position(), target};
     return true;
 }
 
 void DisplayState::cancelCameraAnimation() noexcept {
     m_cameraTransition.reset();
+}
+
+bool DisplayState::panCamera(Point delta) noexcept {
+    const Rect previousViewport = viewport();
+    if (!m_camera.move(delta)) return false;
+    if (!m_cameraPanStart) m_cameraPanStart = previousViewport;
+    m_cameraTransition.reset();
+    return true;
+}
+
+bool DisplayState::finishCameraPan(std::span<const Rect> windows, float edgeThreshold,
+                                   SnapTuning horizontal, SnapTuning vertical) noexcept {
+    if (!m_cameraPanStart) return false;
+    const Rect start = *m_cameraPanStart;
+    m_cameraPanStart.reset();
+    const Rect current = viewport();
+    float closestDistance = std::numeric_limits<float>::infinity();
+    const Rect* bestWindow = nullptr;
+    for (const Rect& window : windows) {
+        const Rect candidate = snapViewportToNearFullscreenWindow(start, current, window, edgeThreshold);
+        const float distance = std::hypot(candidate.x - current.x, candidate.y - current.y);
+        if (distance > 0.0f && distance < closestDistance) {
+            closestDistance = distance;
+            bestWindow = &window;
+        }
+    }
+    if (!bestWindow) return false;
+    const Rect tuned = snapViewportToNearFullscreenWindow(
+        start, current, *bestWindow, edgeThreshold, horizontal, vertical);
+    if (tuned.x == current.x && tuned.y == current.y) return false;
+    return animateCameraTo({tuned.x, tuned.y});
+}
+
+void DisplayState::cancelCameraPan() noexcept {
+    m_cameraPanStart.reset();
 }
 
 bool DisplayState::setScaleAt(float scale, Point anchor) noexcept {
@@ -42,6 +80,7 @@ bool DisplayState::setScaleAt(float scale, Point anchor) noexcept {
 bool DisplayState::requestZoom(float delta, Point anchor) noexcept {
     if (returning() || !std::isfinite(delta) || !std::isfinite(anchor.x) || !std::isfinite(anchor.y)) return false;
     m_cameraTransition.reset();
+    m_cameraPanStart.reset();
     m_targetScale = std::clamp(m_targetScale * std::exp(std::clamp(delta * 0.015f, -10.0f, 10.0f)), 0.2f, 1.0f);
     m_zoomAnchor = anchor;
     return true;
@@ -119,6 +158,7 @@ void DisplayState::resetZoom(Point anchor) noexcept {
         m_targetScale = 1;
         m_return.reset();
         m_cameraTransition.reset();
+        m_cameraPanStart.reset();
     }
 }
 
@@ -146,6 +186,7 @@ bool DisplayState::updateGeometry(DisplayGeometry geometry) noexcept {
     m_geometry = geometry;
     m_return.reset();
     m_cameraTransition.reset();
+    m_cameraPanStart.reset();
     m_targetScale = m_scale;
     return true;
 }

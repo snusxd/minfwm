@@ -98,6 +98,7 @@ target_compile_definitions(minfwm PRIVATE
     MINFWM_BUILD_COMMIT="${MINFWM_BUILD_COMMIT}"
     MINFWM_BUILD_VERSION="${MINFWM_BUILD_VERSION}"
     MINFWM_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    MINFWM_BUILD_DIR="${CMAKE_BINARY_DIR}"
 )
 
 # Run explicitly on a desktop session; never run as part of automated CTest.
@@ -105,6 +106,10 @@ add_executable(minfwm_manual_window_move EXCLUDE_FROM_ALL tools/ManualWindowMove
 target_link_libraries(minfwm_manual_window_move PRIVATE minfwm_daemon_runtime)
 
 if(BUILD_TESTING)
+    add_executable(minfwm_permission_gate_tests tests/PermissionGateTests.cpp)
+    target_include_directories(minfwm_permission_gate_tests PRIVATE src/daemon)
+    add_test(NAME minfwm_permission_gate_tests COMMAND minfwm_permission_gate_tests)
+
     add_executable(minfwm_window_position_tests tests/WindowPositionTests.mm)
     target_include_directories(minfwm_window_position_tests PRIVATE src/common src/daemon)
     target_link_libraries(minfwm_window_position_tests PRIVATE ${COMMON_LIBS})
@@ -128,7 +133,8 @@ if(BUILD_TESTING)
     target_link_libraries(minfwm_local_socket_tests PRIVATE minfwm_ipc_transport)
     add_test(NAME minfwm_local_socket_tests COMMAND minfwm_local_socket_tests)
 
-    add_executable(minfwm_ipc_server_tests tests/IPCServerTests.cpp)
+    add_executable(minfwm_ipc_server_tests tests/IPCServerTests.cpp src/cli/IPCClient.mm)
+    target_include_directories(minfwm_ipc_server_tests PRIVATE src/cli)
     target_link_libraries(minfwm_ipc_server_tests PRIVATE minfwm_daemon_runtime)
     add_test(NAME minfwm_ipc_server_tests COMMAND minfwm_ipc_server_tests)
     set_tests_properties(minfwm_ipc_server_tests PROPERTIES TIMEOUT 10)

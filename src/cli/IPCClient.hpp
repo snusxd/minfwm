@@ -1,5 +1,6 @@
 #pragma once
 #include "Protocol.hpp"
+#include <sys/types.h>
 
 namespace minfwm {
 
@@ -9,9 +10,10 @@ public:
         bool transportSucceeded = false;
         Response response{};
         std::string error;
+        pid_t peerPid = 0;
     };
 
-    Result sendMessage(const Request& request);
+    Result sendMessage(const Request& request, pid_t expectedPeerPid = 0);
 };
 
 } // namespace minfwm

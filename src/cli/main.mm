@@ -5,9 +5,15 @@
 #include "IPCClient.hpp"
 #include "Protocol.hpp"
 
+#include <mach-o/dyld.h>
 #include <csignal>
+#include <array>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string_view>
+#include <thread>
 
 int runDaemon();
 
@@ -21,6 +27,10 @@ int runDaemon();
 
 #ifndef MINFWM_SOURCE_DIR
 #define MINFWM_SOURCE_DIR "."
+#endif
+
+#ifndef MINFWM_BUILD_DIR
+#define MINFWM_BUILD_DIR "."
 #endif
 
 namespace {
@@ -66,6 +76,114 @@ std::string latestLocalCommit() {
     return result.empty() ? "unknown" : result;
 }
 
+bool buildDevUpdate(std::string& error) {
+    const std::filesystem::path buildDir(MINFWM_BUILD_DIR);
+    if (!std::filesystem::exists(buildDir / "CMakeCache.txt")) {
+        error = "CMake build directory is missing; configure it before dev-update: " + buildDir.string();
+        return false;
+    }
+    std::array<char, MAXPATHLEN> executableBuffer{};
+    uint32_t executableSize = static_cast<uint32_t>(executableBuffer.size());
+    if (_NSGetExecutablePath(executableBuffer.data(), &executableSize) != 0) {
+        error = "could not determine the current executable path";
+        return false;
+    }
+    std::error_code pathError;
+    const bool matchesBuild = std::filesystem::equivalent(
+        executableBuffer.data(), buildDir / "minfwm", pathError);
+    if (pathError || !matchesBuild) {
+        error = "dev-update must run the executable from " + (buildDir / "minfwm").string();
+        return false;
+    }
+    std::cout << "minfwm: building minfwm in " << buildDir << "..." << std::endl;
+    NSTask* task = [[NSTask alloc] init];
+    task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/env"];
+    task.arguments = @[@"cmake", @"--build", [NSString stringWithUTF8String:buildDir.c_str()],
+                       @"--target", @"minfwm", @"--parallel"];
+    NSError* launchError = nil;
+    if (![task launchAndReturnError:&launchError]) {
+        const char* description = launchError.localizedDescription.UTF8String;
+        error = description == nullptr ? "could not start cmake" : description;
+        return false;
+    }
+    [task waitUntilExit];
+    if (task.terminationStatus != 0) {
+        error = "build failed (exit " + std::to_string(task.terminationStatus) + ")";
+        return false;
+    }
+    std::cout << "minfwm: build completed successfully" << std::endl;
+    return true;
+}
+
+std::filesystem::path daemonLogPath() {
+    return std::filesystem::path(NSHomeDirectory().UTF8String) / "Library/Logs/minfwm.log";
+}
+
+std::uintmax_t daemonLogSize() {
+    std::error_code fileError;
+    const auto size = std::filesystem::file_size(daemonLogPath(), fileError);
+    return fileError ? 0 : size;
+}
+
+std::string startupIssueSince(std::uintmax_t initialLogSize) {
+    const auto size = daemonLogSize();
+    std::ifstream log(daemonLogPath());
+    if (!log) return {};
+    log.seekg(static_cast<std::streamoff>(size < initialLogSize ? 0 : initialLogSize));
+    std::string line;
+    std::string failure;
+    while (std::getline(log, line)) {
+        if (line.find("minfwm daemon: Accessibility permission is not active") != std::string::npos ||
+            line.find("minfwm daemon: waiting for Accessibility permission") != std::string::npos ||
+            line.find("minfwm daemon: required Yabai Scripting Addition is unavailable") != std::string::npos ||
+            line.find("minfwm daemon: failed to start IPC server") != std::string::npos ||
+            line.find("minfwm daemon: failed to bound Accessibility messaging timeout") != std::string::npos) {
+            failure = line;
+        } else if (line.find("minfwm daemon: Accessibility permission is active") != std::string::npos) {
+            failure.clear();
+        }
+    }
+    return failure;
+}
+
+bool waitForDaemonReady(std::uintmax_t initialLogSize, std::optional<pid_t> foregroundPid,
+                        std::string& error) {
+    minfwm::IPCClient client;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    do {
+        const auto expectedPid = foregroundPid.has_value() ? foregroundPid : minfwm::daemonPid();
+        if (expectedPid.has_value()) {
+            const auto result = client.sendMessage(minfwm::makePingRequest(), *expectedPid);
+            if (result.transportSucceeded && result.response.status == minfwm::ResponseStatus::OK) {
+                return true;
+            }
+            error = result.transportSucceeded ? "daemon is not ready yet" : result.error;
+        } else {
+            error = "LaunchAgent is not running";
+        }
+        const auto issue = startupIssueSince(initialLogSize);
+        if (!issue.empty()) {
+            if (issue.find("Accessibility permission") != std::string::npos) {
+                error = std::string(foregroundPid.has_value() ? "foreground daemon" : "LaunchAgent") +
+                        " needs Accessibility permission for " +
+                        (std::filesystem::path(MINFWM_BUILD_DIR) / "minfwm").string() +
+                        ". Add this executable in System Settings > Privacy & Security > "
+                        "Accessibility, enable it, then rerun minfwm dev-update";
+            } else {
+                error = issue;
+                error += " (log: ~/Library/Logs/minfwm.log)";
+                return false;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    } while (std::chrono::steady_clock::now() < deadline);
+    if (error.find("needs Accessibility permission") == std::string::npos) {
+        error = "daemon did not become ready within 10 seconds: " + error;
+    }
+    error += " (log: ~/Library/Logs/minfwm.log)";
+    return false;
+}
+
 } // namespace
 
 int main(int argc, const char * argv[]) {
@@ -109,27 +227,88 @@ int main(int argc, const char * argv[]) {
             return 0;
         }
         if (command == minfwm::ParsedCommandLine::Command::DEV_UPDATE) {
-            minfwm::IPCClient client;
-            std::cout << "minfwm: saving daemon layout..." << std::endl;
-            const auto result = client.sendMessage(minfwm::makeSaveLayoutRequest());
-            if (!result.transportSucceeded) {
-                std::cerr << "minfwm: could not save daemon layout: " << result.error << '\n';
-                return 1;
-            }
-            if (result.response.status != minfwm::ResponseStatus::OK) {
-                std::cerr << "minfwm: daemon could not save layout ("
-                          << errorCodeName(result.response.error) << ")\n";
-                return 1;
-            }
-            std::cout << "minfwm: daemon layout saved successfully" << std::endl;
-
-            std::cout << "minfwm: restarting daemon..." << std::endl;
             std::string error;
-            if (!minfwm::controlDaemon("restart", error)) {
-                std::cerr << "minfwm: layout saved, but daemon restart failed: " << error << '\n';
+            if (!buildDevUpdate(error)) {
+                std::cerr << "minfwm: dev-update stopped: " << error << '\n';
                 return 1;
             }
-            std::cout << "minfwm: dev-update completed successfully (layout saved and daemon restart succeeded)\n";
+
+            bool layoutSaved = false;
+            std::optional<pid_t> foregroundPid;
+            const auto launchAgentPid = minfwm::daemonPid();
+            minfwm::IPCClient client;
+            std::cout << "minfwm: checking current daemon layout..." << std::endl;
+            const auto result = client.sendMessage(minfwm::makeSaveLayoutRequest());
+            if (result.transportSucceeded) {
+                if (result.response.status != minfwm::ResponseStatus::OK) {
+                    std::cerr << "minfwm: dev-update stopped: daemon could not save layout ("
+                              << errorCodeName(result.response.error) << ")\n";
+                    return 1;
+                }
+                layoutSaved = true;
+                std::cout << "minfwm: daemon layout saved successfully" << std::endl;
+                if (!launchAgentPid.has_value() || result.peerPid != *launchAgentPid) {
+                    if (!minfwm::isForegroundDaemon(result.peerPid)) {
+                        std::cerr << "minfwm: dev-update stopped: socket owner PID " << result.peerPid
+                                  << " is not this build's daemon\n";
+                        return 1;
+                    }
+                    foregroundPid = result.peerPid;
+                    std::cout << "minfwm: foreground daemon PID " << *foregroundPid
+                              << " owns the socket" << std::endl;
+                }
+            } else if (result.error == "daemon socket is missing or has unsafe ownership" ||
+                       result.error == "failed to connect to daemon") {
+                std::cout << "minfwm: no reachable daemon; no live layout to save" << std::endl;
+            } else {
+                std::cerr << "minfwm: dev-update stopped: could not save daemon layout: "
+                          << result.error << '\n';
+                return 1;
+            }
+
+            const auto initialLogSize = daemonLogSize();
+            if (foregroundPid.has_value()) {
+                std::cout << "minfwm: stopping LaunchAgent to avoid socket contention..." << std::endl;
+                if (!minfwm::controlDaemon("stop", error)) {
+                    std::cerr << "minfwm: dev-update stopped: " << error << '\n';
+                    return 1;
+                }
+                std::cout << "minfwm: stopping foreground daemon PID " << *foregroundPid << "..." << std::endl;
+                if (!minfwm::stopForegroundDaemon(*foregroundPid, error)) {
+                    std::cerr << "minfwm: dev-update stopped: " << error << '\n';
+                    return 1;
+                }
+                pid_t newPid = 0;
+                std::cout << "minfwm: starting rebuilt foreground daemon..." << std::endl;
+                if (!minfwm::startForegroundDaemon(newPid, error)) {
+                    std::cerr << "minfwm: dev-update stopped: " << error << '\n';
+                    return 1;
+                }
+                std::cout << "minfwm: foreground daemon started as PID " << newPid
+                          << "; waiting for IPC readiness..." << std::endl;
+                if (!waitForDaemonReady(initialLogSize, newPid, error)) {
+                    std::cerr << "minfwm: dev-update stopped: " << error << '\n';
+                    return 1;
+                }
+                std::cout << "minfwm: dev-update completed successfully: build succeeded, "
+                          << "layout saved, foreground daemon PID " << newPid
+                          << " confirmed ready via IPC" << std::endl;
+                return 0;
+            }
+
+            std::cout << "minfwm: restarting LaunchAgent daemon..." << std::endl;
+            if (!minfwm::controlDaemon("restart", error)) {
+                std::cerr << "minfwm: dev-update stopped: daemon restart failed: " << error << '\n';
+                return 1;
+            }
+            std::cout << "minfwm: LaunchAgent restart completed; waiting for daemon readiness..." << std::endl;
+            if (!waitForDaemonReady(initialLogSize, std::nullopt, error)) {
+                std::cerr << "minfwm: dev-update stopped: " << error << '\n';
+                return 1;
+            }
+            std::cout << "minfwm: dev-update completed successfully: build succeeded, "
+                      << (layoutSaved ? "layout saved, " : "no running layout to save, ")
+                      << "daemon restarted and confirmed ready via IPC" << std::endl;
             return 0;
         }
         if (command == minfwm::ParsedCommandLine::Command::START ||

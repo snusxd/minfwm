@@ -1,16 +1,27 @@
 #import <Foundation/Foundation.h>
 
 #include "DaemonControl.hpp"
+#include "IPCClient.hpp"
 
 #include <mach-o/dyld.h>
+#include <libproc.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include <array>
+#include <charconv>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <thread>
 #include <vector>
+
+#ifndef MINFWM_BUILD_DIR
+#define MINFWM_BUILD_DIR "."
+#endif
 
 namespace minfwm {
 namespace {
@@ -246,11 +257,112 @@ bool controlDaemon(std::string_view action, std::string& error) {
     return false;
 }
 
-std::string daemonStatus() {
+std::optional<pid_t> parseLaunchAgentPid(const std::string& output) {
+    constexpr std::string_view marker = "\n\tpid = ";
+    const auto position = output.find(marker);
+    if (position == std::string::npos) return std::nullopt;
+    const char* begin = output.data() + position + marker.size();
+    pid_t pid = 0;
+    const auto parsed = std::from_chars(begin, output.data() + output.size(), pid);
+    return parsed.ec == std::errc{} && pid > 0 ? std::optional<pid_t>(pid) : std::nullopt;
+}
+
+std::optional<pid_t> daemonPid() {
     const auto result = runLaunchctl({"print", serviceTarget()});
-    if (result.status != 0) return "stopped";
-    if (result.output.find("state = running") != std::string::npos) return "running";
-    return "loaded, not running";
+    if (result.status != 0 || result.output.find("state = running") == std::string::npos) {
+        return std::nullopt;
+    }
+    return parseLaunchAgentPid(result.output);
+}
+
+std::string daemonStatus() {
+    const auto launchAgent = runLaunchctl({"print", serviceTarget()});
+    IPCClient client;
+    if (launchAgent.status == 0 &&
+        launchAgent.output.find("state = running") != std::string::npos) {
+        const auto pid = parseLaunchAgentPid(launchAgent.output);
+        if (pid.has_value()) {
+            const auto ping = client.sendMessage(makePingRequest(), *pid);
+            if (ping.transportSucceeded && ping.response.status == ResponseStatus::OK) {
+                return "running (LaunchAgent PID " + std::to_string(*pid) + ")";
+            }
+        }
+        return "loaded, not ready";
+    }
+    const auto ping = client.sendMessage(makePingRequest());
+    if (ping.transportSucceeded && ping.response.status == ResponseStatus::OK &&
+        isForegroundDaemon(ping.peerPid)) {
+        return "running (foreground PID " + std::to_string(ping.peerPid) + ")";
+    }
+    return launchAgent.status == 0 ? "loaded, not running" : "stopped";
+}
+
+bool isForegroundDaemon(pid_t pid) {
+    if (pid <= 0 || pid == getpid()) return false;
+    std::array<char, PROC_PIDPATHINFO_MAXSIZE> processPath{};
+    if (::proc_pidpath(pid, processPath.data(), static_cast<uint32_t>(processPath.size())) <= 0) {
+        return false;
+    }
+    std::error_code pathError;
+    return std::filesystem::equivalent(processPath.data(),
+                                       std::filesystem::path(MINFWM_BUILD_DIR) / "minfwm",
+                                       pathError) && !pathError;
+}
+
+bool stopForegroundDaemon(pid_t pid, std::string& error) {
+    if (!isForegroundDaemon(pid)) {
+        error = "socket owner is not the current minfwm build; refusing to stop PID " +
+                std::to_string(pid);
+        return false;
+    }
+    if (::kill(pid, SIGTERM) != 0 && errno != ESRCH) {
+        error = "could not stop foreground daemon PID " + std::to_string(pid);
+        return false;
+    }
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    do {
+        if (::kill(pid, 0) != 0 && errno == ESRCH) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    } while (std::chrono::steady_clock::now() < deadline);
+    error = "foreground daemon PID " + std::to_string(pid) + " did not exit within 10 seconds";
+    return false;
+}
+
+bool startForegroundDaemon(pid_t& pid, std::string& error) {
+    @autoreleasepool {
+        const auto executable = std::filesystem::path(MINFWM_BUILD_DIR) / "minfwm";
+        NSString* logDirectory = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Logs"];
+        NSError* fileError = nil;
+        if (![[NSFileManager defaultManager] createDirectoryAtPath:logDirectory
+                                       withIntermediateDirectories:YES
+                                                        attributes:nil error:&fileError]) {
+            error = "could not create daemon log directory";
+            return false;
+        }
+        NSString* logPath = [logDirectory stringByAppendingPathComponent:@"minfwm.log"];
+        const int logFd = ::open(logPath.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND, 0600);
+        if (logFd < 0) {
+            error = "could not open daemon log file";
+            return false;
+        }
+        NSFileHandle* logHandle = [[NSFileHandle alloc] initWithFileDescriptor:logFd closeOnDealloc:YES];
+        NSTask* task = [[NSTask alloc] init];
+        task.executableURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:executable.c_str()]];
+        task.arguments = @[@"daemon"];
+        task.standardInput = [NSFileHandle fileHandleWithNullDevice];
+        task.standardOutput = logHandle;
+        task.standardError = logHandle;
+        NSError* launchError = nil;
+        if (![task launchAndReturnError:&launchError]) {
+            const char* description = launchError.localizedDescription.UTF8String;
+            error = description == nullptr ? "could not launch foreground daemon" : description;
+            [logHandle closeFile];
+            return false;
+        }
+        pid = task.processIdentifier;
+        [logHandle closeFile];
+        return true;
+    }
 }
 
 } // namespace minfwm
