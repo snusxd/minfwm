@@ -1,4 +1,5 @@
 #include "WindowManager.hpp"
+#include "BookmarkFocus.hpp"
 #include "CFRAII.hpp"
 #include "ConfigManager.hpp"
 #include "YabaiSA.hpp"
@@ -637,6 +638,8 @@ void WindowManager::updateWindows(int64_t displayId) {
     // windows beyond the complete desktop so a culled window cannot appear
     // on a neighbouring monitor whose physical coordinates overlap its canvas.
     const core::Point parkingPosition{desktopBounds.right() + 64.0f, desktopBounds.bottom() + 64.0f};
+    const auto pendingBookmarkFocus = m_pendingBookmarkFocus.lock();
+    std::shared_ptr<ClientWindow> presentedBookmarkFocus;
 
     for (auto& display : m_displays) {
         if (displayId && display->id() != displayId) continue;
@@ -671,9 +674,22 @@ void WindowManager::updateWindows(int64_t displayId) {
                         window->pinLayerRetryTime = now + 1.0;
                     }
                 }
+                if (window == pendingBookmarkFocus &&
+                    bookmarkFocusReadiness(true, false, window->isHidden, window->isAXHidden,
+                                           window->applicationSuspended) == BookmarkFocusReadiness::ready) {
+                    presentedBookmarkFocus = window;
+                }
                 continue;
             }
             if (m_hiddenApplications.contains(window->pid())) {
+                if (window == pendingBookmarkFocus) {
+                    if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+                        std::cout << "BOOKMARK focus-skip index=" << m_pendingBookmarkFocusIndex
+                                  << " wid=" << window->wid() << " reason=application-hidden" << std::endl;
+                    }
+                    m_pendingBookmarkFocus.reset();
+                    m_pendingBookmarkFocusIndex = 0;
+                }
                 if (!window->applicationSuspended) (void)m_renderer.suspend(*window, now);
                 continue;
             }
@@ -719,7 +735,8 @@ void WindowManager::updateWindows(int64_t displayId) {
                 }
                 continue;
             }
-            const bool focused = m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get());
+            const bool focused = (m_focusedWindow && CFEqual(window->ref(), m_focusedWindow.get())) ||
+                window == pendingBookmarkFocus;
             window->preferNativePosition = !beingDragged && core::shouldPreferNativePosition(
                 physical, displayBounds, display->usableBounds());
             const bool protectedWindow = focused || isWhitelisted(*window);
@@ -730,7 +747,12 @@ void WindowManager::updateWindows(int64_t displayId) {
                 (void)m_renderer.hide(*window, physical, displayBounds, now, parkingPosition);
                 continue;
             }
-            (void)m_renderer.render(*window, physical, now);
+            const BackendResult rendered = m_renderer.render(*window, physical, now);
+            if (window == pendingBookmarkFocus && rendered.succeeded() &&
+                bookmarkFocusReadiness(true, false, window->isHidden, window->isAXHidden,
+                                       window->applicationSuspended) == BookmarkFocusReadiness::ready) {
+                presentedBookmarkFocus = window;
+            }
         }
         if (overviewFailed) {
             std::cerr << "WindowManager: overview unavailable for a window; returning to native scale" << std::endl;
@@ -763,6 +785,30 @@ void WindowManager::updateWindows(int64_t displayId) {
         if (AXUIElementPerformAction(selected->ref(), kAXRaiseAction) != kAXErrorSuccess) {
             std::cerr << "WindowManager: failed to raise overview selection" << std::endl;
         }
+    }
+    if (presentedBookmarkFocus && m_pendingBookmarkFocus.lock() == presentedBookmarkFocus) {
+        const int index = m_pendingBookmarkFocusIndex;
+        CFRef<AXUIElementRef> application = CFRef<AXUIElementRef>::adopt(
+            AXUIElementCreateApplication(presentedBookmarkFocus->pid()));
+        NSRunningApplication* runningApplication =
+            [NSRunningApplication runningApplicationWithProcessIdentifier:presentedBookmarkFocus->pid()];
+        [runningApplication activateWithOptions:NSApplicationActivateIgnoringOtherApps];
+        const bool yabaiRequestSent = m_yabaiBackend.focusWindow(presentedBookmarkFocus->wid()).succeeded();
+        const bool accessibilityRequestAccepted =
+            focusBookmarkWindow(application.get(), presentedBookmarkFocus->ref());
+        if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+            std::cout << "BOOKMARK focus index=" << index << " wid=" << presentedBookmarkFocus->wid()
+                      << " yabai-sent=" << yabaiRequestSent
+                      << " ax-accepted=" << accessibilityRequestAccepted << std::endl;
+        }
+        if (yabaiRequestSent || accessibilityRequestAccepted) {
+            m_focusedWindow = CFRef<AXUIElementRef>::retain(presentedBookmarkFocus->ref());
+        } else {
+            std::cerr << "WindowManager: failed to focus presented bookmark window WID="
+                      << presentedBookmarkFocus->wid() << std::endl;
+        }
+        m_pendingBookmarkFocus.reset();
+        m_pendingBookmarkFocusIndex = 0;
     }
 }
 
@@ -835,6 +881,72 @@ void WindowManager::centerFocusedWindowToCamera() {
     Display& display = displayForWindow(window->ref());
     centerWindow(window);
     updateWindows(display.id());
+}
+
+void WindowManager::saveBookmark(Display& display, int index) {
+    const auto config = ConfigManager::instance().snapshot();
+    std::shared_ptr<ClientWindow> focused;
+    if (config.bookmarksSaveFocus) {
+        // The presentation loop refreshes AX focus periodically. Query again
+        // on the save key so a focus change just before the key press is not
+        // lost behind that cache interval.
+        CFRef<AXUIElementRef> systemWide = CFRef<AXUIElementRef>::adopt(AXUIElementCreateSystemWide());
+        CFRef<CFTypeRef> focusedApplication;
+        CFRef<CFTypeRef> focusedValue;
+        const bool queriedFocus = systemWide &&
+            AXUIElementCopyAttributeValue(systemWide.get(), kAXFocusedApplicationAttribute,
+                                          focusedApplication.put()) == kAXErrorSuccess &&
+            focusedApplication && CFGetTypeID(focusedApplication.get()) == AXUIElementGetTypeID() &&
+            AXUIElementCopyAttributeValue(static_cast<AXUIElementRef>(focusedApplication.get()),
+                                          kAXFocusedWindowAttribute, focusedValue.put()) == kAXErrorSuccess &&
+            focusedValue && CFGetTypeID(focusedValue.get()) == AXUIElementGetTypeID();
+        if (queriedFocus) {
+            m_focusedWindow = CFRef<AXUIElementRef>::retain(static_cast<AXUIElementRef>(focusedValue.get()));
+            focused = findWindow(m_focusedWindow.get());
+            if (focused && focused->virtualCoordinatesInitialized && focused->wid()) {
+                m_lastFocusedWindow = focused;
+            }
+        } else {
+            if (m_focusedWindow) focused = findWindow(m_focusedWindow.get());
+            if (!focused) focused = m_lastFocusedWindow.lock();
+        }
+    }
+    if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+        std::cout << "BOOKMARK save index=" << index << " display=" << display.id()
+                  << " save-focus=" << config.bookmarksSaveFocus
+                  << " focused-wid=" << (focused ? focused->wid() : 0) << std::endl;
+    }
+    display.saveBookmark(index, std::move(focused), config.bookmarksSaveFocus);
+}
+
+void WindowManager::loadBookmark(Display& display, int index) {
+    m_pendingBookmarkFocus.reset();
+    m_pendingBookmarkFocusIndex = 0;
+    auto focused = display.loadBookmark(index);
+    if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+        std::cout << "BOOKMARK load index=" << index << " display=" << display.id()
+                  << " focused-wid=" << (focused ? focused->wid() : 0) << std::endl;
+    }
+    if (!focused) return;
+
+    const bool managed = findWindow(focused->ref()) == focused;
+    const bool applicationHidden = m_hiddenApplications.contains(focused->pid());
+    const auto readiness = bookmarkFocusReadiness(managed, applicationHidden, focused->isHidden,
+                                                  focused->isAXHidden, focused->applicationSuspended);
+    if (readiness == BookmarkFocusReadiness::unavailable) {
+        if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+            std::cout << "BOOKMARK focus-skip index=" << index << " wid=" << focused->wid()
+                      << " managed=" << managed << " application-hidden=" << applicationHidden << std::endl;
+        }
+        return;
+    }
+    m_pendingBookmarkFocus = focused;
+    m_pendingBookmarkFocusIndex = index;
+    if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
+        std::cout << "BOOKMARK focus-pending index=" << index << " wid=" << focused->wid()
+                  << " window-hidden=" << focused->isHidden << " ax-hidden=" << focused->isAXHidden
+                  << " application-suspended=" << focused->applicationSuspended << std::endl;
+    }
 }
 
 bool WindowManager::moveWindowToDisplay(const std::shared_ptr<ClientWindow>& window, Display& target,

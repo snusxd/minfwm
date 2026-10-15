@@ -1,0 +1,25 @@
+{
+  "assistance": "ai",
+  "base": "51d429c63d2bc67c2c40b7ef33e695d3ef79f2da",
+  "id": "b283936ae2044b658095a8bdb0993975",
+  "paths": [
+    "CMakeLists.txt",
+    "integrations/yabai/bookmark-focus.patch",
+    "src/daemon/BookmarkFocus.hpp",
+    "src/daemon/ConfigManager.hpp",
+    "src/daemon/ConfigManager.mm",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/YabaiSA.hpp",
+    "src/daemon/YabaiSA.mm",
+    "tests/BookmarkFocusTests.mm",
+    "tests/YabaiSATests.mm",
+    "tools/build_yabai_sa.py"
+  ],
+  "schema_version": 1,
+  "task": "BOOKMARK-FOCUS",
+  "tools": [
+    "codex"
+  ]
+}

@@ -36,6 +36,7 @@ struct ConfigSnapshot {
     std::vector<std::string> dragEverywhereModifiers = {"Super", "Ctrl"};
     std::vector<std::string> bookmarksAddModifiers = {"Super"};
     std::vector<std::string> bookmarksGotoModifiers = {"Super", "Shift"};
+    bool bookmarksSaveFocus = true;
 };
 
 class ConfigManager {

@@ -153,6 +153,10 @@ if(BUILD_TESTING)
     target_link_libraries(minfwm_window_pool_tests PRIVATE minfwm_window_pool)
     add_test(NAME minfwm_window_pool_tests COMMAND minfwm_window_pool_tests)
 
+    add_executable(minfwm_bookmark_focus_tests tests/BookmarkFocusTests.mm)
+    target_link_libraries(minfwm_bookmark_focus_tests PRIVATE minfwm_window_pool)
+    add_test(NAME minfwm_bookmark_focus_tests COMMAND minfwm_bookmark_focus_tests)
+
     add_executable(minfwm_window_renderer_tests tests/WindowRendererTests.mm)
     target_link_libraries(minfwm_window_renderer_tests PRIVATE minfwm_window_runtime)
     add_test(NAME minfwm_window_renderer_tests COMMAND minfwm_window_renderer_tests)

@@ -186,6 +186,24 @@ void testMovementWithoutFocusCapability() {
     expect(!sa.handshake() && !sa.compatible(), "zero flags do not bypass validation of truncated handshakes");
 }
 
+void testWindowFocusCapability() {
+    {
+        FakeSAServer server(false, false, 0x20, false, "2.1.29", false, 1);
+        minfwm::YabaiSA sa(server.path());
+        expect(sa.handshake() && sa.supportsWindowFocus(),
+               "SET_WINDOW handshake capability enables native window focus");
+        expect(sa.focusWindow(0x12345678), "native focus command is sent for a nonzero WID");
+        expect(server.opcodes() == std::vector<uint8_t>{0x0c},
+               "native focus uses the Yabai window-focus opcode");
+    }
+    {
+        FakeSAServer server(false, false, 0, true, "2.1.29", false, 0);
+        minfwm::YabaiSA sa(server.path());
+        expect(sa.handshake() && !sa.supportsWindowFocus() && !sa.focusWindow(42),
+               "native window focus is rejected when SET_WINDOW is unavailable");
+    }
+}
+
 class FallbackBackend final : public minfwm::WindowBackend {
 public:
     int moveCalls = 0;
@@ -373,6 +391,11 @@ int main() {
                {0x09, 0x00, 0x09, 0x78, 0x56, 0x34, 0x12,
                 0x04, 0x00, 0x00, 0x00},
                "normal layer restoration sends the normal-level key rather than the base-level key");
+        expect(minfwm::YabaiSA::encodeFocusPacket(0x12345678),
+               {0x05, 0x00, 0x0c, 0x78, 0x56, 0x34, 0x12},
+               "focus packet contains the Yabai focus opcode and little-endian WID");
+        expect(minfwm::YabaiSA::encodeFocusPacket(0).empty(),
+               "focus packet rejects a zero WID");
         expect(minfwm::YabaiSA::encodeHandshakePacket(), {0x01, 0x00, 0x01},
                "handshake packet uses current SA framing");
         expect(minfwm::YabaiSA::encodeTransformPacket(42, 123, -100, -120),
@@ -412,6 +435,7 @@ int main() {
         }
         testInvalidAckAndTimeout();
         testMovementWithoutFocusCapability();
+        testWindowFocusCapability();
         testVerifiedMoveAndFallback();
         testAbsoluteTransforms();
     }

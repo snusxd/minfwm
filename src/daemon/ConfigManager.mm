@@ -374,7 +374,7 @@ bool readSnapTuning(const TomlTable* table, std::string_view key,
 }
 
 bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::string& error) {
-    if (!rejectUnknownKeys(root, {"window", "zoom", "camera", "snap", "display", "keybinds", "pins", "animations"},
+    if (!rejectUnknownKeys(root, {"window", "zoom", "camera", "snap", "display", "keybinds", "pins", "animations", "bookmarks"},
                            {"enable-window-shadows", "invert-zoom-scroll-direction", "zoomed-esc-center",
                             "center-on-cmd-tab", "mouse-movement-multiplier", "multi-display-mode", "overscan-buffer-px", "whitelist", "spawn-behavior",
                             "always-on-top", "ignored-displays"}, error)) return false;
@@ -387,6 +387,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
     const TomlTable* keybinds = tableAt(root, "keybinds", error);
     const TomlTable* pins = tableAt(root, "pins", error);
     const TomlTable* animations = tableAt(root, "animations", error);
+    const TomlTable* bookmarks = tableAt(root, "bookmarks", error);
     if (!error.empty()) return false;
 
     if (window && !rejectUnknownKeys(*window, "window", {"enable-window-shadows", "overscan-buffer-px", "whitelist", "spawn-behavior"}, error)) return false;
@@ -403,6 +404,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
                                         "drag-everywhere", "bookmarks-add", "bookmarks-goto"}, error)) return false;
     if (pins && !rejectUnknownKeys(*pins, "pins", {"always-on-top"}, error)) return false;
     if (animations && !rejectUnknownKeys(*animations, "animations", {"enable", "speed"}, error)) return false;
+    if (bookmarks && !rejectUnknownKeys(*bookmarks, "bookmarks", {"save-focus"}, error)) return false;
 
     if (!readBool(root, window, "enable-window-shadows", candidate.enableWindowShadows, error) ||
         !readBool(root, zoom, "invert-zoom-scroll-direction", candidate.invertZoomScrollDirection, error) ||
@@ -424,6 +426,7 @@ bool readConfig(const TomlTable& root, minfwm::ConfigSnapshot& candidate, std::s
         !readWhitelist(root, window, candidate.whitelist, error) ||
         !readString(root, window, "spawn-behavior", candidate.spawnBehavior, error) ||
         !readBool(root, pins, "always-on-top", candidate.pinsAlwaysOnTop, error) ||
+        !readBool(root, bookmarks, "save-focus", candidate.bookmarksSaveFocus, error) ||
         !readBool(root, animations, "enable", candidate.animationsEnabled, error) ||
         !readAnimationSpeed(animations, candidate.animationSpeed, error) ||
         !readSuperKey(keybinds, candidate.superModifiers, error) ||

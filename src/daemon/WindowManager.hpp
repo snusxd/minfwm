@@ -30,8 +30,10 @@ public:
     WindowPool& windowPool() { return *m_windowPool; }
     core::Rect usableBounds() const { return m_usableBounds; }
 
-    void saveBookmark(int index) {
+    void saveBookmark(int index, std::shared_ptr<ClientWindow> focusedWindow, bool saveFocus) {
         m_state.saveBookmark(index);
+        if (saveFocus && focusedWindow) m_bookmarkFocus[index] = focusedWindow;
+        else m_bookmarkFocus.erase(index);
     }
 
     bool updateScreen(core::Rect bounds, core::Rect usableBounds) {
@@ -40,8 +42,10 @@ public:
         return true;
     }
 
-    void loadBookmark(int index) {
-        (void)m_state.loadBookmark(index);
+    std::shared_ptr<ClientWindow> loadBookmark(int index) {
+        if (!m_state.loadBookmark(index)) return {};
+        const auto bookmark = m_bookmarkFocus.find(index);
+        return bookmark == m_bookmarkFocus.end() ? std::shared_ptr<ClientWindow>{} : bookmark->second.lock();
     }
 
 private:
@@ -49,6 +53,7 @@ private:
     core::DisplayState m_state;
     std::unique_ptr<WindowPool> m_windowPool;
     core::Rect m_usableBounds;
+    std::map<int, std::weak_ptr<ClientWindow>> m_bookmarkFocus;
 };
 
 class WindowManager {
@@ -82,6 +87,8 @@ public:
     void finishCameraPan(Display& display, bool snap = true);
     void centerCameraToFocusedWindow();
     void centerFocusedWindowToCamera();
+    void saveBookmark(Display& display, int index);
+    void loadBookmark(Display& display, int index);
     void centerCameraOnWindow(AXUIElementRef element);
     void syncPhysicalToVirtual(AXUIElementRef element);
     void beginNativeInteraction(core::Point pointer);
@@ -151,6 +158,8 @@ private:
     std::map<int64_t, double> m_zoomFrameTimes;
     std::shared_ptr<ClientWindow> m_overviewFocus;
     std::weak_ptr<ClientWindow> m_lastFocusedWindow;
+    std::weak_ptr<ClientWindow> m_pendingBookmarkFocus;
+    int m_pendingBookmarkFocusIndex = 0;
     std::map<pid_t, std::string> m_applicationNames;
     std::set<pid_t> m_hiddenApplications;
     std::optional<std::unordered_set<uint32_t>> m_onscreenWindows;

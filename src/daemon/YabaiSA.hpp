@@ -21,6 +21,7 @@ public:
     bool handshake();
     bool compatible() const { return m_compatible; }
     bool supportsPinnedLevels() const { return m_compatible && m_pinnedLevelSupport; }
+    bool supportsWindowFocus() const { return m_compatible && m_windowFocusSupport; }
     bool supportsTransforms() const { return m_compatible && m_transformSupport; }
     bool supportsOverview() const { return supportsTransforms() && m_overviewSupport; }
     bool supportsNativeHandoff() const { return supportsOverview() && m_nativeHandoffSupport; }
@@ -33,10 +34,12 @@ public:
     static std::vector<uint8_t> encodeNativeNormalizationPacket(uint32_t wid, CGRect nativeFrame);
 
     bool moveWindow(uint32_t wid, int x, int y) const;
+    bool focusWindow(uint32_t wid) const;
     bool setWindowLayer(uint32_t wid, int layer) const;
     bool setWindowPinned(uint32_t wid, bool pinned) const;
 
     static std::vector<uint8_t> encodeMovePacket(uint32_t wid, int x, int y);
+    static std::vector<uint8_t> encodeFocusPacket(uint32_t wid);
     static std::vector<uint8_t> encodeLayerPacket(uint32_t wid, int layer);
     static std::vector<uint8_t> encodePinnedPacket(uint32_t wid, uint32_t ownerPid, bool pinned);
     static std::vector<uint8_t> encodeHandshakePacket();
@@ -54,6 +57,7 @@ private:
     bool m_overviewSupport = false;
     bool m_nativeHandoffSupport = false;
     bool m_pinnedLevelSupport = false;
+    bool m_windowFocusSupport = false;
 };
 
 class YabaiSABackend final : public WindowBackend {
@@ -67,6 +71,7 @@ public:
     bool initialize(bool allowAdministratorLoad = false);
     bool available() const { return m_sa.compatible(); }
     bool supportsPinnedLevels() const { return m_sa.supportsPinnedLevels(); }
+    bool supportsWindowFocus() const { return m_sa.supportsWindowFocus(); }
     bool usesTransforms() const override { return m_sa.supportsTransforms(); }
     bool supportsOverview() const override { return m_sa.supportsOverview(); }
     bool nativeMovePreservesLayer() const override { return m_experimentalNativeHandoff && m_sa.supportsNativeHandoff(); }
@@ -75,6 +80,7 @@ public:
     BackendResult recoverNativePresentation(uint32_t wid, CGRect nativeFrame);
 
     BackendResult move(AXUIElementRef element, uint32_t wid, int x, int y) override;
+    BackendResult focusWindow(uint32_t wid);
     BackendResult moveNative(AXUIElementRef element, uint32_t wid, int x, int y) override;
     bool hasTransform(uint32_t wid) const override { return m_transformed.contains(wid); }
     BackendResult resize(AXUIElementRef element, uint32_t wid, float width, float height) override;

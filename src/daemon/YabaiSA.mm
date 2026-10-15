@@ -26,6 +26,7 @@ namespace {
 
 constexpr uint8_t kHandshakeOpcode = 0x01;
 constexpr uint8_t kWindowMoveOpcode = 0x06;
+constexpr uint8_t kWindowFocusOpcode = 0x0c;
 constexpr uint8_t kWindowLayerOpcode = 0x09;
 constexpr uint8_t kPinnedLevelOpcode = 0x18;
 constexpr size_t kMaxPacketLength = 0x1000;
@@ -239,6 +240,13 @@ std::vector<uint8_t> YabaiSA::encodeMovePacket(uint32_t wid, int x, int y) {
     return finishPacket(std::move(body));
 }
 
+std::vector<uint8_t> YabaiSA::encodeFocusPacket(uint32_t wid) {
+    if (!wid) return {};
+    std::vector<uint8_t> body{kWindowFocusOpcode};
+    appendU32(body, wid);
+    return finishPacket(std::move(body));
+}
+
 std::vector<uint8_t> YabaiSA::encodeLayerPacket(uint32_t wid, int layer) {
     std::vector<uint8_t> body;
     body.reserve(1 + sizeof(wid) + sizeof(int32_t));
@@ -262,6 +270,7 @@ bool YabaiSA::handshake() {
     m_overviewSupport = false;
     m_nativeHandoffSupport = false;
     m_pinnedLevelSupport = false;
+    m_windowFocusSupport = false;
     if (!isOwnedSocket()) return false;
     UniqueFd fd(connectTo(m_socketPath));
     if (!fd) return false;
@@ -293,6 +302,7 @@ bool YabaiSA::handshake() {
         // WINDOW_MOVE and WINDOW_LAYER call SkyLight directly and do not
         // depend on that flag. Still require the complete versioned handshake.
         m_compatible = parseVersion(version);
+        m_windowFocusSupport = m_compatible && (attributes[0] & 0x20) != 0;
         // This extension is shipped with the pinned minfwm SA patch only.
         m_transformSupport = version == "2.1.29" && (attributes[0] & 0x80) != 0 &&
             (attributes[1] & 0x01) != 0; // Lifecycle v2 restores the current native baseline.
@@ -320,6 +330,10 @@ bool YabaiSA::sendPacket(const std::vector<uint8_t>& packet, bool explicitAck) c
 
 bool YabaiSA::moveWindow(uint32_t wid, int x, int y) const {
     return wid != 0 && m_compatible && sendPacket(encodeMovePacket(wid, x, y));
+}
+
+bool YabaiSA::focusWindow(uint32_t wid) const {
+    return wid != 0 && m_windowFocusSupport && sendPacket(encodeFocusPacket(wid));
 }
 
 bool YabaiSA::setWindowLayer(uint32_t wid, int layer) const {
@@ -474,6 +488,10 @@ BackendResult YabaiSABackend::move(AXUIElementRef element, uint32_t wid, int x, 
     }
     const bool moved = m_sa.moveWindow(wid, x, y) && m_checkPosition && m_checkPosition(element, wid, x, y);
     return {moved ? BackendCode::ok : BackendCode::failed};
+}
+
+BackendResult YabaiSABackend::focusWindow(uint32_t wid) {
+    return {m_sa.focusWindow(wid) ? BackendCode::ok : BackendCode::failed};
 }
 
 BackendResult YabaiSABackend::resize(AXUIElementRef, uint32_t, float, float) {

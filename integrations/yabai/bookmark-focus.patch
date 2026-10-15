@@ -1,0 +1,32 @@
+--- a/src/osax/payload.m
++++ b/src/osax/payload.m
+@@ -43,6 +43,7 @@
+ 
+ extern int SLSMainConnectionID(void);
+ extern CGError SLSGetConnectionPSN(int cid, ProcessSerialNumber *psn);
++extern CGError SLPSPostEventRecordTo(ProcessSerialNumber *psn, uint8_t *bytes);
+ extern CGError SLSGetWindowAlpha(int cid, uint32_t wid, float *alpha);
+ extern CGError SLSSetWindowAlpha(int cid, uint32_t wid, float alpha);
+ extern OSStatus SLSMoveWindowWithGroup(int cid, uint32_t wid, CGPoint *point);
+@@ -787,7 +788,20 @@ static void do_window_focus(char *message)
+     unpack(wid);
+ 
+     SLSGetWindowOwner(SLSMainConnectionID(), wid, &window_connection);
+-    SLSGetConnectionPSN(SLSMainConnectionID(), &window_psn);
++    SLSGetConnectionPSN(window_connection, &window_psn);
+ 
+     ((focus_window_call) set_front_window_fp)(window_psn, wid);
++
++    // Match yabai's normal focus path: front the process/window, then make
++    // the target window key with the synthesized WindowServer event pair.
++    uint8_t key_event[0xf8] = {};
++    key_event[0x04] = 0xf8;
++    key_event[0x3a] = 0x10;
++    memcpy(key_event + 0x3c, &wid, sizeof(uint32_t));
++    memset(key_event + 0x20, 0xff, 0x10);
++
++    key_event[0x08] = 0x01;
++    SLPSPostEventRecordTo(&window_psn, key_event);
++    key_event[0x08] = 0x02;
++    SLPSPostEventRecordTo(&window_psn, key_event);
+ }

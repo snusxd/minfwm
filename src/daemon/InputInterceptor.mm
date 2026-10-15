@@ -717,14 +717,14 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
             const CGPoint point = CGEventGetLocation(event);
             if (wm.isIgnoredDisplayAtPoint({static_cast<float>(point.x), static_cast<float>(point.y)})) return event;
             Display& display = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)});
-            display.saveBookmark(index);
+            wm.saveBookmark(display, index);
             return nullptr;
         }
         if (index != -1 && matchesModifierChord(flags, config.bookmarksGotoModifiers, superModifiers)) {
             const CGPoint point = CGEventGetLocation(event);
             if (wm.isIgnoredDisplayAtPoint({static_cast<float>(point.x), static_cast<float>(point.y)})) return event;
             Display& display = wm.displayForPoint({static_cast<float>(point.x), static_cast<float>(point.y)});
-            display.loadBookmark(index);
+            wm.loadBookmark(display, index);
             return NULL;
         }
     }
