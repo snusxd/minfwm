@@ -1,0 +1,15 @@
+{
+  "assistance": "ai",
+  "base": "c0419f7dcbb8766ad1390cf316acee03e257d1dc",
+  "id": "a1113b80e38c41dc901eaa29fe1f3a7c",
+  "paths": [
+    "config/minfwm.toml.example",
+    "docs/wiki/Configuration.md",
+    "docs/wiki/Development.md"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "antigravity"
+  ]
+}

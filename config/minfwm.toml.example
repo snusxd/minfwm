@@ -6,7 +6,9 @@
 # whitelist = ["Terminal", "Music"]
 # spawn-behavior = "center"
 # invert-zoom-scroll-direction = false
+# track-invert-zoom-direction = false
 # rewind-on-focus = true
+# overview-previews = true
 # center-on-cmd-tab = true
 # zoomed-esc-center = "screen"
 # camera.mouse-movement-multiplier = 1.0
@@ -19,6 +21,7 @@
 # snap.horizontal-tuning = "auto"
 # multi-display-mode = "isolated"
 # display.ignored-displays = []
+# bookmarks.save-focus = true
 # pins.always-on-top = true
 # animations.enable = true
 # animations.speed = 1.0
@@ -34,8 +37,10 @@ spawn-behavior = "center"
 invert-zoom-scroll-direction = false
 # Reverse four-finger trackpad pinch zoom independently of wheel zoom.
 track-invert-zoom-direction = false
-# Return the camera to a focused application after it is activated.
+# Return the camera to 100% scale and center on a focused window after it is clicked.
 rewind-on-focus = true
+# Render lightweight static previews for distant windows during overview. Requires Screen Recording permission.
+overview-previews = true
 # Escape anchor while zoomed: "screen", "mouse", or "focus".
 zoomed-esc-center = "screen"
 
@@ -64,6 +69,10 @@ horizontal-tuning = "auto"
 multi-display-mode = "isolated"
 ignored-displays = []
 
+[bookmarks]
+# Save focused window with each bookmark and restore it when jumping.
+save-focus = true
+
 [pins]
 always-on-top = true
 
@@ -80,9 +89,11 @@ speed = 1.0
 # Super+1..9 saves a bookmark; Super+Shift+1..9 returns to it.
 # Super+P pins/unpins the focused window; Escape exits overview.
 # Super+F centers the camera on the focused window; Super+S centers the window in the camera.
+# Super+Ctrl+F temporarily expands the window to fill display (macOS 15+ native Fill).
 super = ["Cmd", "Alt"]
 center-camera-to-focus = ["Super", "F"]
 center-focus-to-camera = ["Super", "S"]
+temporarily-fullscreen = ["Super", "Ctrl", "F"]
 drag-everywhere = ["Super", "Ctrl"]
 bookmarks-add = ["Super"]
 bookmarks-goto = ["Super", "Shift"]

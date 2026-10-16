@@ -78,9 +78,8 @@ This allows seamless code iterations without having windows scatter across your 
 - **Indentation**: 4 spaces, no tabs.
 - **Naming**: `PascalCase` for types and classes, `lowerCamelCase` for functions and methods, and `m_` prefix for private member variables.
 - **Architecture**: Keep pure math and geometry algorithms in `src/core/`; keep macOS and AppKit API interactions strictly within `src/daemon/`.
-- **Manual Verification**: Since Accessibility, WindowServer, and trackpad gestures interact with the live operating system, see [docs/Acceptance-macos.md](../../docs/Acceptance-macos.md) for manual verification steps.
+- **Manual Verification**: Since Accessibility, WindowServer, and trackpad gestures interact with the live operating system, see [docs/Acceptance-macos.md](https://github.com/snusxd/minfwm/blob/main/docs/Acceptance-macos.md) for manual verification steps.
 
-## Diagnosing inconsistent drag and resize
+## Diagnosing Inconsistent Drag and Resize
 
-See [Window interaction trace](../Window-Interaction-Diagnostics.md) for operation
-tracing, optional sampled AX/WindowServer geometry, capture commands and field meanings.
+For developers troubleshooting drag and resize behavior, see [docs/Window-Interaction-Diagnostics.md](https://github.com/snusxd/minfwm/blob/main/docs/Window-Interaction-Diagnostics.md) for interaction tracing and sampled geometry logs.
