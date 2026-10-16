@@ -21,6 +21,7 @@ public:
     [[nodiscard]] bool overviewActive() const noexcept { return m_return.has_value() || m_scale != 1 || m_targetScale != 1; }
     bool animateCameraTo(Point target) noexcept;
     void cancelCameraAnimation() noexcept;
+    void freezePresentation() noexcept;
     bool panCamera(Point delta) noexcept;
     bool finishCameraPan(std::span<const Rect> windows, float edgeThreshold,
                          SnapTuning horizontal = SnapTuning::automatic,

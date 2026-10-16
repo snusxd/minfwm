@@ -17,6 +17,8 @@ public:
         : m_ax(ax), m_yabai(yabai), m_checkPosition(std::move(check)) {}
 
     BackendResult render(ClientWindow& window, core::Rect physical, double now);
+    BackendResult presentNativeInteraction(ClientWindow& window, core::Rect physical, float scale,
+                                           bool presentationMatches, double now);
     BackendResult renderOverview(ClientWindow& window, core::Rect physical, float scale, double now);
     BackendResult parkForPreview(ClientWindow& window, core::Point parkingPosition, double now);
     BackendResult suspend(ClientWindow& window, double now);

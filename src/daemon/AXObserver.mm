@@ -1,3 +1,4 @@
+#include "WindowTrace.hpp"
 #import "AXObserver.hpp"
 #import "WindowManager.hpp"
 #import "ConfigManager.hpp"
@@ -341,6 +342,12 @@ void AXObserver::axCallback(AXObserverRef observer, AXUIElementRef element, CFSt
         std::erase_if(app.windows, [element](const auto& window) { return CFEqual(window.get(), element); });
     } else if (CFStringCompare(notification, kAXWindowMovedNotification, 0) == kCFCompareEqualTo ||
                CFStringCompare(notification, kAXWindowResizedNotification, 0) == kCFCompareEqualTo) {
+        if (const auto window = wm.findWindow(element)) {
+            WindowTraceScope traceScope(window->traceGestureId);
+            traceWindow("ax.notification", window->wid(), [&](auto& out) {
+                out << " kind=" << (CFEqual(notification, kAXWindowMovedNotification) ? "moved" : "resized");
+            });
+        }
         if (wm.nativeInteractionPending()) self->m_refreshPending = true;
         (void)self->observeWindow(app, element, false);
         wm.syncPhysicalToVirtual(element);

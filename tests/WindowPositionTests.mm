@@ -61,6 +61,17 @@ int main() {
         presentation.transform = CGAffineTransformIdentity;
         presentation.frame.origin = CGPointZero;
         expect(!minfwm::needsNativePresentationRecovery(presentation), "identity at native origin is already normalized");
+        const minfwm::core::Rect projected{-100.4f, -300.6f, 320, 240};
+        presentation.transform = CGAffineTransformMake(2, 0, 0, 2, 200, 602);
+        expect(minfwm::nativePresentationMatches(presentation, projected, .5f),
+               "presentation matcher uses inverse scale and rounded negative origin");
+        presentation.transform.tx = 202;
+        expect(!minfwm::nativePresentationMatches(presentation, projected, .5f),
+               "actual transform drift is detected independently of the renderer cache");
+        presentation.transform.a = NAN;
+        expect(!minfwm::nativePresentationMatches(presentation, projected, .5f) &&
+               !minfwm::nativePresentationMatches(presentation, projected, 0),
+               "invalid transform and scale cannot masquerade as matching presentation");
         CGPoint position{7, 8};
         selectedEntries = @[];
         allEntries = @[window(99, 999, 999), window(42, 10, -120)];

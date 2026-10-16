@@ -1,0 +1,42 @@
+{
+  "assistance": "ai",
+  "base": "f072460fe31f65f662254f278866baec1c0f73e9",
+  "id": "9bebd127940342b4899bc8aa9653915c",
+  "paths": [
+    "CMakeLists.txt",
+    "docs/Acceptance-macos.md",
+    "docs/Window-Interaction-Diagnostics.md",
+    "docs/ai/ADR-NATIVE-INTERACTION.md",
+    "docs/ai/tasks/TASK-CLIPPED-WINDOW-INTERACTION.md",
+    "docs/wiki/Development.md",
+    "src/core/DisplayState.cpp",
+    "src/core/DisplayState.hpp",
+    "src/core/NativeWindowInteraction.hpp",
+    "src/daemon/AXBackend.mm",
+    "src/daemon/AXObserver.mm",
+    "src/daemon/InputInterceptor.hpp",
+    "src/daemon/InputInterceptor.mm",
+    "src/daemon/WindowBackend.hpp",
+    "src/daemon/WindowManager.hpp",
+    "src/daemon/WindowManager.mm",
+    "src/daemon/WindowPool.hpp",
+    "src/daemon/WindowPosition.hpp",
+    "src/daemon/WindowPosition.mm",
+    "src/daemon/WindowRenderer.hpp",
+    "src/daemon/WindowRenderer.mm",
+    "src/daemon/WindowTrace.hpp",
+    "src/daemon/YabaiSA.hpp",
+    "src/daemon/YabaiSA.mm",
+    "tests/GeometryTests.cpp",
+    "tests/NativeWindowInteractionTests.cpp",
+    "tests/WindowInteractionTests.mm",
+    "tests/WindowPositionTests.mm",
+    "tests/WindowRendererTests.mm",
+    "tests/YabaiSATests.mm"
+  ],
+  "schema_version": 1,
+  "task": "TASK-CLIPPED-WINDOW-INTERACTION",
+  "tools": [
+    "codex"
+  ]
+}

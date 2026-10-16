@@ -23,6 +23,8 @@ public:
     virtual ~WindowBackend() = default;
 
     virtual BackendResult move(AXUIElementRef element, uint32_t wid, int x, int y) = 0;
+    // A native interaction must retain presentation even on an uncertain ACK.
+    virtual BackendResult movePreservingTransform(AXUIElementRef, uint32_t, int, int) { return {BackendCode::unsupported}; }
     virtual BackendResult moveNative(AXUIElementRef, uint32_t, int, int) { return {BackendCode::unsupported}; }
     virtual bool hasTransform(uint32_t) const { return false; }
     virtual bool nativeMovePreservesLayer() const { return false; }
@@ -36,6 +38,7 @@ public:
     virtual bool usesTransforms() const { return false; }
     virtual bool supportsOverview() const { return false; }
     virtual BackendResult presentOverview(AXUIElementRef, uint32_t, int, int, float) { return {BackendCode::unsupported}; }
+    virtual BackendResult presentOverviewPreservingTransform(AXUIElementRef, uint32_t, int, int, float) { return {BackendCode::unsupported}; }
     virtual BackendResult restore(AXUIElementRef element, uint32_t wid, int x, int y,
                                   float width, float height) {
         const BackendResult moved = move(element, wid, x, y);

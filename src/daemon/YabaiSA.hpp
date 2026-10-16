@@ -76,10 +76,12 @@ public:
     bool supportsOverview() const override { return m_sa.supportsOverview(); }
     bool nativeMovePreservesLayer() const override { return m_experimentalNativeHandoff && m_sa.supportsNativeHandoff(); }
     BackendResult presentOverview(AXUIElementRef element, uint32_t wid, int x, int y, float scale) override;
+    BackendResult presentOverviewPreservingTransform(AXUIElementRef element, uint32_t wid, int x, int y, float scale) override;
     BackendResult resetTransform(uint32_t wid) override;
     BackendResult recoverNativePresentation(uint32_t wid, CGRect nativeFrame);
 
     BackendResult move(AXUIElementRef element, uint32_t wid, int x, int y) override;
+    BackendResult movePreservingTransform(AXUIElementRef element, uint32_t wid, int x, int y) override;
     BackendResult focusWindow(uint32_t wid);
     BackendResult moveNative(AXUIElementRef element, uint32_t wid, int x, int y) override;
     bool hasTransform(uint32_t wid) const override { return m_transformed.contains(wid); }
@@ -91,6 +93,7 @@ public:
                           float width, float height) override;
 
 private:
+    BackendResult presentOverviewImpl(AXUIElementRef element, uint32_t wid, int x, int y, float scale, bool preserve);
     YabaiSA m_sa;
     WindowPositionCheck m_checkPosition;
     bool m_experimentalNativeHandoff = false;

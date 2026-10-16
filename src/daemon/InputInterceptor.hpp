@@ -24,6 +24,7 @@ public:
     void stop();
 
 private:
+    friend struct WindowInteractionTestAccess;
     static CGEventRef eventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
     static CGEventRef scrollTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon);
     void updateCursor(bool superHeld, bool dragging, CGPoint pointer);
@@ -56,7 +57,6 @@ private:
     std::bitset<256> m_overviewKeys;
     bool m_zoomScrollCaptured = false;
     bool m_dragEverywhereActive = false;
-    bool m_clippedTitlebarDragActive = false;
     NSPanel* m_cursorOverlay = nil;
     NSImageView* m_cursorImageView = nil;
     bool m_backgroundCursorHidingEnabled = false;

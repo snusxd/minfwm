@@ -41,6 +41,9 @@ public:
         transformed = true;
         return {overviewCode};
     }
+    BackendResult presentOverviewPreservingTransform(AXUIElementRef element, uint32_t wid, int x, int y, float scale) override {
+        return presentOverview(element, wid, x, y, scale);
+    }
     bool usesTransforms() const override { return transforms; }
     bool hasTransform(uint32_t) const override { return transformed; }
     BackendResult moveNative(AXUIElementRef, uint32_t, int targetX, int targetY) override {
@@ -64,6 +67,9 @@ public:
             return {BackendCode::failed};
         }
         return {moveCode};
+    }
+    BackendResult movePreservingTransform(AXUIElementRef element, uint32_t wid, int targetX, int targetY) override {
+        return move(element, wid, targetX, targetY);
     }
     BackendResult resize(AXUIElementRef, uint32_t, float w, float h) override {
         calls.push_back("resize");
@@ -473,6 +479,34 @@ void testNativeDropSurvivesNextPan() {
            "invalid native observation leaves canvas position intact");
 }
 
+void testNativeInteractionHasOnlyPresentationOwnership() {
+    RecordingBackend ax, sa;
+    sa.transforms = true; sa.layerCode = BackendCode::ok;
+    ClientWindow window(nullptr, 89);
+    initializeWindow(window);
+    window.needsGeometryRestore = true;
+    window.preferNativePosition = true;
+    WindowRenderer renderer(ax, sa);
+    expect(renderer.presentNativeInteraction(window, {-206, 529, 740, 833}, 1, false, 1).succeeded(),
+           "native interaction can reassert canvas presentation");
+    expect(ax.calls.empty() && std::find(sa.calls.begin(), sa.calls.end(), "native") == sa.calls.end() &&
+           std::find(sa.calls.begin(), sa.calls.end(), "reset") == sa.calls.end(),
+           "native interaction never writes AX geometry, hands off native position or resets transform");
+    expect(window.needsGeometryRestore, "presentation does not consume a deferred native geometry restoration");
+    sa.calls.clear();
+    expect(renderer.presentNativeInteraction(window, {-206, 529, 740, 833}, 1, false, 1.1).succeeded() && !sa.calls.empty(),
+           "app transform overwrite is repaired even when renderer cached coordinates are unchanged");
+    sa.calls.clear();
+    expect(renderer.presentNativeInteraction(window, {-206, 529, 740, 833}, 1, true, 1.2).succeeded() && sa.calls.empty(),
+           "matching presentation needs no operation while native input remains active");
+    sa.moveCode = BackendCode::failed;
+    expect(!renderer.presentNativeInteraction(window, {-206, 529, 740, 833}, 1, false, 1.3).succeeded() && ax.calls.empty(),
+           "failed presentation never falls back to an AX geometry writer");
+    sa.moveCode = BackendCode::ok;
+    expect(renderer.presentNativeInteraction(window, {-100, 200, 370, 416.5f}, .5f, false, 2).succeeded() && sa.scale == .5f,
+           "native interaction preserves presentation scale without changing client size");
+}
+
 void testApplicationNotificationCannotAdoptCameraTransform() {
     RecordingBackend ax, sa;
     sa.transforms = true;
@@ -661,6 +695,7 @@ void testManyPreviewFramesDoNotMoveOriginals() {
 }
 
 int main() {
+    testNativeInteractionHasOnlyPresentationOwnership();
     testManyPreviewFramesDoNotMoveOriginals();
     testPreviewParkingAndRecovery();
     testTemporaryTopmostLayerLifecycle();

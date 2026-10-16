@@ -29,6 +29,8 @@ public:
     [[nodiscard]] pid_t pid() const noexcept { return m_pid; }
     bool captureInitialGeometry();
 
+    uint64_t traceGestureId = 0;
+    double traceObservationTime = 0;
     VirtualRect virtualRect;
     std::optional<VirtualRect> originalPhysicalRect;
     float lastRenderedX = -99999.0f;
@@ -105,6 +107,7 @@ public:
     }
 
 private:
+    friend struct WindowInteractionTestAccess;
     struct AXRefHash {
         std::size_t operator()(AXUIElementRef ref) const noexcept;
     };

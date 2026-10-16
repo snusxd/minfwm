@@ -1,3 +1,4 @@
+#include "WindowTrace.hpp"
 #include "WindowPosition.hpp"
 #include "CFRAII.hpp"
 
@@ -50,7 +51,7 @@ std::optional<std::unordered_set<uint32_t>> readSessionWindowIds() {
 }
 
 std::optional<NativeWindowPresentation> readNativeWindowPresentation(uint32_t wid) {
-    // Optional SA recovery only. Public AX operation never calls these APIs.
+    // Selected-window native observations and optional SA recovery; no AX calls.
     static void* sky = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY);
     static auto connection = sky ? reinterpret_cast<int (*)()>(dlsym(sky, "SLSMainConnectionID")) : nullptr;
     static auto bounds = sky ? reinterpret_cast<CGError (*)(int, uint32_t, CGRect*)>(dlsym(sky, "SLSGetWindowBounds")) : nullptr;
@@ -60,6 +61,19 @@ std::optional<NativeWindowPresentation> readNativeWindowPresentation(uint32_t wi
         bounds(connection(), wid, &result.frame) != kCGErrorSuccess ||
         transform(connection(), wid, &result.transform) != kCGErrorSuccess) return {};
     return result;
+}
+
+bool nativePresentationMatches(const NativeWindowPresentation& presentation, core::Rect physical, float scale) {
+    if (!std::isfinite(physical.x) || !std::isfinite(physical.y) || !std::isfinite(scale) || scale < .2f || scale > 1) return false;
+    const double quantized = std::round(scale * 1000) / 1000;
+    const double inverse = 1 / quantized;
+    const auto transform = presentation.transform;
+    return std::isfinite(transform.a) && std::isfinite(transform.b) && std::isfinite(transform.c) &&
+        std::isfinite(transform.d) && std::isfinite(transform.tx) && std::isfinite(transform.ty) &&
+        std::abs(transform.a - inverse) <= .001 && std::abs(transform.d - inverse) <= .001 &&
+        std::abs(transform.b) <= .001 && std::abs(transform.c) <= .001 &&
+        std::abs(transform.tx + std::round(physical.x) * inverse) <= .5 * inverse &&
+        std::abs(transform.ty + std::round(physical.y) * inverse) <= .5 * inverse;
 }
 
 bool needsNativePresentationRecovery(const NativeWindowPresentation& presentation) {

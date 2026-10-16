@@ -31,6 +31,13 @@ void DisplayState::cancelCameraAnimation() noexcept {
     m_cameraTransition.reset();
 }
 
+void DisplayState::freezePresentation() noexcept {
+    m_targetScale = m_scale;
+    m_return.reset();
+    m_cameraTransition.reset();
+    m_cameraPanStart.reset();
+}
+
 bool DisplayState::panCamera(Point delta) noexcept {
     const Rect previousViewport = viewport();
     if (!m_camera.move(delta)) return false;

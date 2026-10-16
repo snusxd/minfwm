@@ -1,3 +1,4 @@
+#include "WindowTrace.hpp"
 #include "WindowManager.hpp"
 #include "BookmarkFocus.hpp"
 #include "CFRAII.hpp"
@@ -42,6 +43,30 @@ bool readAXSize(AXUIElementRef element, CGSize& size) {
            AXValueGetValue(static_cast<AXValueRef>(value.get()), kAXValueTypeCGSize, &size);
 }
 
+void traceWindowObservation(ClientWindow& window, const core::DisplayState& state, bool transformed, double now) {
+    const auto* observe = std::getenv("MINFWM_TRACE_WINDOW_OBSERVE");
+    if (!windowTraceEnabled() || !observe || !*observe || std::string_view(observe) == "0" || now < window.traceObservationTime) return;
+    window.traceObservationTime = now + 0.05;
+    WindowTraceScope traceScope(window.traceGestureId);
+    const auto native = readNativeWindowPresentation(window.wid());
+    CGPoint axPoint{}; CGSize axSize{}; CGPoint serverPoint{};
+    const bool axPositionOK = readAXPoint(window.ref(), axPoint);
+    const bool axSizeOK = readAXSize(window.ref(), axSize);
+    const bool serverOK = readWindowPosition(window.ref(), window.wid(), serverPoint);
+    traceWindow("observe", window.wid(), [&](auto& out) {
+        out << " ax_position_ok=" << axPositionOK << " ax_size_ok=" << axSizeOK << " ws_ok=" << serverOK
+            << " ax=" << axPoint.x << ',' << axPoint.y << ',' << axSize.width << ',' << axSize.height
+            << " ws=" << serverPoint.x << ',' << serverPoint.y << " native_ok=" << bool(native)
+            << " tracked_transform=" << transformed
+            << " cached=" << window.lastRenderedX << ',' << window.lastRenderedY << " native_preferred=" << window.preferNativePosition;
+        traceRect(out, "model", window.virtualRect); traceRect(out, "projected", state.virtualToPhysical(window.virtualRect));
+        if (native) out << " native=" << native->frame.origin.x << ',' << native->frame.origin.y
+            << ',' << native->frame.size.width << ',' << native->frame.size.height
+            << " transform=" << native->transform.a << ',' << native->transform.b << ',' << native->transform.c
+            << ',' << native->transform.d << ',' << native->transform.tx << ',' << native->transform.ty;
+    });
+}
+
 NSString* layoutSnapshotPath() {
     NSString* support = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
     NSString* directory = [support stringByAppendingPathComponent:@"minfwm"];
@@ -66,6 +91,10 @@ bool isIgnoredDisplayName(NSString* name, const std::vector<std::string>& ignore
 
 bool WindowManager::initialize(bool allowAdministratorLoad) {
     if (m_initialized) return true;
+    traceWindow("session.start", 0, [&](auto& out) {
+        out << " observe=" << (std::getenv("MINFWM_TRACE_WINDOW_OBSERVE") ? std::getenv("MINFWM_TRACE_WINDOW_OBSERVE") : "0")
+            << " rect_order=x,y,w,h transform_order=a,b,c,d,tx,ty backend_codes=0:ok,1:unavailable,2:unsupported,3:failed";
+    });
 
     std::cout << "WindowManager: Initializing public AX backend" << std::endl;
     ConfigManager::instance().load();
@@ -375,12 +404,11 @@ void WindowManager::shutdown() {
     m_windowRefreshTime = 0;
     m_nativePointerHeld = false;
     m_nativeCommitPending = false;
-    m_nativeWindowDragged = false;
-    m_nativeCameras.clear();
     m_nativeCandidates.clear();
-    m_nativeStartFrames.clear();
     m_draggedWindow.reset();
     m_dragStartVirtualRect.reset();
+    m_nativeInteractions.clear();
+    m_nativeWindow.reset();
     m_zoomRequest.reset();
     m_overviewExit.reset();
     m_overviewFocus.reset();
@@ -485,6 +513,7 @@ bool WindowManager::toggleFocusedWindowPin() {
 }
 
 bool WindowManager::panCamera(Display& display, core::Point delta) {
+    if (m_nativePointerHeld) return false;
     if (delta.x != 0 || delta.y != 0) m_temporaryFullscreenRequested = false;
     if ((delta.x != 0 || delta.y != 0) && m_temporaryFullscreen && !restoreTemporaryFullscreen()) return false;
     return display.state().panCamera(delta);
@@ -623,6 +652,8 @@ void WindowManager::reconcileApplicationWindows(pid_t pid, const std::vector<AXU
         for (const auto& window : display->windowPool().removeUnlistedWindows(pid, liveWindows)) {
             (void)m_yabaiBackend.resetTransform(window->wid());
             std::erase(m_nativeCandidates, window);
+            m_nativeInteractions.erase(window.get());
+            m_nativeCommitPending = !m_nativeInteractions.empty();
             if (m_focusedWindow && CFEqual(m_focusedWindow.get(), window->ref())) m_focusedWindow.reset();
             std::cout << "WindowManager: removed closed AX window WID=" << window->wid() << std::endl;
         }
@@ -653,18 +684,54 @@ void WindowManager::refreshWindowSnapshot(double now) {
         for (const auto& window : display->windowPool().removeMissingWindows(*liveIds)) {
             (void)m_yabaiBackend.resetTransform(window->wid());
             std::erase(m_nativeCandidates, window);
+            m_nativeInteractions.erase(window.get());
+            m_nativeCommitPending = !m_nativeInteractions.empty();
             if (m_focusedWindow && CFEqual(m_focusedWindow.get(), window->ref())) m_focusedWindow.reset();
             std::cout << "WindowManager: removed missing window WID=" << window->wid() << std::endl;
         }
     }
 }
 
+bool WindowManager::updateNativeInteraction(const std::shared_ptr<ClientWindow>& window, double now) {
+    const auto found = m_nativeInteractions.find(window.get());
+    if (found == m_nativeInteractions.end()) return false;
+    found->second.observationValid = false;
+    Display* display = displayById(found->second.displayId);
+    if (!display || display->windowPool().findWindowByWID(window->wid()) != window || window->pinned ||
+        window->isHidden || window->applicationSuspended || m_hiddenApplications.contains(window->pid())) return true;
+    WindowTraceScope scope(window->traceGestureId);
+    if (window->ref()) traceWindowObservation(*window, display->state(), m_yabaiBackend.hasTransform(window->wid()), now);
+    const auto presentation = m_readNativePresentation ? m_readNativePresentation(window->wid()) : std::nullopt;
+    if (!presentation) {
+        traceWindow("native.observe-failed", window->wid(), [](auto&) {});
+        return true; // Never replace a failed read with a competing AX writer.
+    }
+    const core::Rect native{static_cast<float>(presentation->frame.origin.x), static_cast<float>(presentation->frame.origin.y),
+        static_cast<float>(presentation->frame.size.width), static_cast<float>(presentation->frame.size.height)};
+    if (!found->second.geometry) {
+        found->second.geometry = core::NativeWindowInteraction::begin(native, found->second.canvas,
+            found->second.visual, found->second.pointer, found->second.scale);
+    }
+    if (!found->second.geometry) return true;
+    const auto model = found->second.geometry->observe(native, found->second.currentPointer, found->second.dragged);
+    if (!model) return true;
+    traceWindow("native.reconcile", window->wid(), [&](auto& out) {
+        out << " kind=" << static_cast<int>(found->second.geometry->kind()) << " pointer=" << found->second.currentPointer.x << ',' << found->second.currentPointer.y;
+        traceRect(out, "native", native); traceRect(out, "before", window->virtualRect); traceRect(out, "after", *model);
+        const auto matrix = presentation->transform;
+        out << " transform=" << matrix.a << ',' << matrix.b << ',' << matrix.c << ',' << matrix.d << ',' << matrix.tx << ',' << matrix.ty;
+    });
+    window->virtualRect = *model;
+    const auto physical = display->state().virtualToPhysical(*model);
+    const bool matches = nativePresentationMatches(*presentation, physical, display->state().scale());
+    found->second.observationValid = m_renderer.presentNativeInteraction(
+        *window, physical, display->state().scale(), matches, now).succeeded();
+    return true;
+}
+
 void WindowManager::updateWindows(int64_t displayId) {
     if (!m_initialized || m_displays.empty()) return;
     const double now = CACurrentMediaTime();
-    // Native dragging owns the frame until the client has handled mouse-up.
-    // Do not turn its first AX notification into another programmatic move.
-    if (m_nativePointerHeld || (m_nativeCommitPending && now < m_nativeCommitTime)) return;
     if (m_nativeCommitPending) commitNativeInteraction();
     const auto* zoomDisplay = m_zoomRequest ? displayById(m_zoomRequest->displayId) : nullptr;
     const bool enteringOverview = zoomDisplay && !zoomDisplay->state().overviewActive();
@@ -810,6 +877,7 @@ void WindowManager::updateWindows(int64_t displayId) {
         bool overviewFailed = false;
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref()) continue;
+            if (updateNativeInteraction(window, now)) continue;
             if (window->pinned) {
                 if ((focusChanged || !window->pinnedAlwaysOnTop ||
                      *window->pinnedAlwaysOnTop != config.pinsAlwaysOnTop) &&
@@ -868,6 +936,9 @@ void WindowManager::updateWindows(int64_t displayId) {
                 physical.x >= displayBounds.right() || physical.bottom() <= displayBounds.y ||
                 physical.y >= displayBounds.bottom();
             const bool beingDragged = window == m_draggedWindow;
+            if (beingDragged || (window->traceGestureId && now - window->lastProgrammaticMoveTime < 1)) {
+                traceWindowObservation(*window, state, m_yabaiBackend.hasTransform(window->wid()), now);
+            }
             if (fullyOutsideDisplay && !beingDragged) {
                 (void)m_renderer.hide(*window, physical, displayBounds, now, parkingPosition);
                 continue;
@@ -1299,16 +1370,41 @@ bool WindowManager::releaseWindowToIgnoredDisplay(const std::shared_ptr<ClientWi
 }
 
 void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
-    if (overviewActive()) return; // Presentation scaling is never a native model resize.
     const auto window = findWindow(element);
+    WindowTraceScope traceScope(window ? window->traceGestureId : 0);
+    traceWindow("ax.sync", window ? window->wid() : 0, [&](auto& out) {
+        out << " managed=" << (window && window == m_draggedWindow)
+            << " native_held=" << m_nativePointerHeld << " native_commit=" << m_nativeCommitPending
+            << " hidden=" << (window && window->isHidden) << " verify=" << (window && window->positionNeedsVerification)
+            << " rejected=" << (window && bool(window->rejectedPosition)) << " panning=" << m_isPanning
+            << " programmatic_age=" << (window ? CACurrentMediaTime() - window->lastProgrammaticMoveTime : 0);
+    });
+    if (overviewActive()) {
+        traceWindow("ax.skip", window ? window->wid() : 0, [](auto& out) { out << " reason=overview"; });
+        return; // Presentation scaling is never a native model resize.
+    }
+    if (window && window == m_draggedWindow) {
+        traceWindow("ax.skip", window->wid(), [](auto& out) { out << " reason=managed-owner"; });
+        return;
+    }
     if (m_nativePointerHeld || m_nativeCommitPending) {
-        if (window) addNativeCandidate(window);
+        traceWindow("ax.defer", window ? window->wid() : 0, [](auto& out) { out << " reason=native-owner"; });
         return;
     }
     if (isWindowOnIgnoredDisplay(element) && !window) return;
     if (!window || window->isHidden || window->needsGeometryRestore || window->positionNeedsVerification ||
-        window->rejectedPosition || m_isPanning || window->positionAnimation || window->frameAnimation) return;
-    if (CACurrentMediaTime() - window->lastProgrammaticMoveTime < 0.25) return;
+        window->rejectedPosition || m_isPanning || window->positionAnimation || window->frameAnimation) {
+        traceWindow("ax.skip", window ? window->wid() : 0, [&](auto& out) {
+            out << " reason=guard restore=" << (window && window->needsGeometryRestore)
+                << " position_animation=" << (window && bool(window->positionAnimation))
+                << " frame_animation=" << (window && bool(window->frameAnimation));
+        });
+        return;
+    }
+    if (CACurrentMediaTime() - window->lastProgrammaticMoveTime < 0.25) {
+        traceWindow("ax.skip", window->wid(), [](auto& out) { out << " reason=programmatic-grace"; });
+        return;
+    }
 
     for (auto& display : m_displays) {
         if (!display->windowPool().findWindowByAXRef(element)) continue;
@@ -1331,12 +1427,6 @@ void WindowManager::syncPhysicalToVirtual(AXUIElementRef element) {
     }
 }
 
-void WindowManager::addNativeCandidate(const std::shared_ptr<ClientWindow>& window) {
-    if (window) window->positionAnimation.reset();
-    if (std::find(m_nativeCandidates.begin(), m_nativeCandidates.end(), window) == m_nativeCandidates.end()) {
-        m_nativeCandidates.push_back(window);
-    }
-}
 
 bool WindowManager::requestOverviewZoom(core::Point pointer, float delta) {
     if (!m_initialized || !m_yabaiBackend.supportsOverview() || m_nativePointerHeld || overviewReturning() ||
@@ -1464,108 +1554,100 @@ void WindowManager::applyOverviewExit() {
     }
 }
 
-void WindowManager::beginNativeInteraction(core::Point pointer) {
-    if (!m_nativeCommitPending) {
-        m_nativeCameras.clear();
-        m_nativeCandidates.clear();
-        m_nativeStartFrames.clear();
-        m_nativeWindowDragged = false;
-        for (const auto& display : m_displays) m_nativeCameras.emplace(display->id(), display->camera().position());
-    }
+void WindowManager::beginNativeInteraction(core::Point pointer, uint32_t eventWindow) {
+    // Completed transactions on other windows keep their own final pointer.
+    // A new DOWN cannot make an old completion follow the new gesture.
+    if (m_nativePointerHeld) endNativeInteraction();
+    m_nativeWindow.reset();
+    m_nativePointer = pointer;
     m_nativePointerHeld = true;
     m_nativeCommitPending = true;
-    m_nativePointerStart = pointer;
-    m_clippedTitlebarCandidate.reset();
-    // Use the recent top-to-bottom snapshot. WindowServer list queries here
-    // would block the event tap and make the initial grab feel delayed.
-    for (const auto& entry : m_windowHitTestSnapshot) {
-        const uint32_t wid = entry.wid;
+    m_nativeCommitTime = 0;
+    const std::vector<OnscreenWindowSnapshotEntry> eventTarget = eventWindow
+        ? std::vector<OnscreenWindowSnapshotEntry>{{eventWindow, {}}} : std::vector<OnscreenWindowSnapshotEntry>{};
+    const auto& targets = eventWindow ? eventTarget : m_windowHitTestSnapshot;
+    for (const auto& entry : targets) {
         for (const auto& display : m_displays) {
-            if (auto window = display->windowPool().findWindowByWID(wid)) {
-                const core::Rect observedFrame{static_cast<float>(entry.frame.origin.x),
-                    static_cast<float>(entry.frame.origin.y), static_cast<float>(entry.frame.size.width),
-                    static_cast<float>(entry.frame.size.height)};
-                const core::Rect visualFrame = window->virtualCoordinatesInitialized
-                    ? display->state().virtualToPhysical(window->virtualRect) : observedFrame;
-                if (!visualFrame.intersects({pointer.x, pointer.y, 0.01f, 0.01f})) continue;
-                m_nativeStartFrames[window.get()] = visualFrame;
-                addNativeCandidate(window);
-                const core::Rect displayBounds = display->state().geometry().bounds;
-                // AppKit clamps native frames at display edges. For a titlebar
-                // press on a clipped presentation, switch to model-space drag
-                // once movement starts so the window can keep following the
-                // pointer beyond the physical screen bounds.
-                const bool clipped = !core::frameFitsDisplay(visualFrame, displayBounds);
-                const bool titlebarHit = pointer.y >= visualFrame.y && pointer.y < visualFrame.y + 32.0f &&
-                    pointer.x >= visualFrame.x + 64.0f && pointer.x < visualFrame.right() - 40.0f;
-                if (clipped && titlebarHit && window->virtualCoordinatesInitialized &&
-                    !window->pinned && !window->isHidden && !window->applicationSuspended &&
-                    !window->needsGeometryRestore) {
-                    m_clippedTitlebarCandidate = window;
+            const auto window = display->windowPool().findWindowByWID(entry.wid);
+            if (!window || !window->virtualCoordinatesInitialized) continue;
+            auto visual = display->state().virtualToPhysical(window->virtualRect);
+            if (!eventWindow && !visual.expanded(12 * display->state().scale()).intersects({pointer.x, pointer.y, .01f, .01f})) continue;
+            window->traceGestureId = windowTraceGesture;
+            traceWindow("native.begin", window->wid(), [&](auto& out) {
+                out << " app_pid=" << window->pid() << " pointer=" << pointer.x << ',' << pointer.y << " scale=" << display->state().scale();
+                traceRect(out, "model", window->virtualRect); traceRect(out, "visual", visual);
+            });
+            if (!window->pinned && !window->isHidden && !window->isAXHidden && !window->applicationSuspended) {
+                // Query only the selected WID's native frame/transform. No AX
+                // call, window-list scan or chrome discovery runs in the tap.
+                const auto native = m_readNativePresentation ? m_readNativePresentation(window->wid()) : std::nullopt;
+                std::optional<core::NativeWindowInteraction> geometry;
+                const auto previous = m_nativeInteractions.find(window.get());
+                if (native && previous != m_nativeInteractions.end() && previous->second.geometry) {
+                    const core::Rect actual{static_cast<float>(native->frame.origin.x), static_cast<float>(native->frame.origin.y),
+                        static_cast<float>(native->frame.size.width), static_cast<float>(native->frame.size.height)};
+                    if (const auto final = previous->second.geometry->observe(actual, previous->second.currentPointer, previous->second.dragged)) {
+                        window->virtualRect = *final;
+                        visual = display->state().virtualToPhysical(*final);
+                    }
                 }
-                if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
-                    const auto projected = display->state().virtualToPhysical(window->virtualRect);
-                    std::cout << "INPUT down WID=" << wid << " visual=" << visualFrame.x << ',' << visualFrame.y
-                              << " observed=" << observedFrame.x << ',' << observedFrame.y
-                              << " projected=" << projected.x << ',' << projected.y
-                              << " clipped-titlebar=" << (clipped && titlebarHit)
-                              << " cached=" << window->lastRenderedX << ',' << window->lastRenderedY
-                              << " virtual=" << window->virtualRect.x << ',' << window->virtualRect.y << std::endl;
-                }
-                return;
+                if (native) geometry = core::NativeWindowInteraction::begin(
+                    {static_cast<float>(native->frame.origin.x), static_cast<float>(native->frame.origin.y),
+                     static_cast<float>(native->frame.size.width), static_cast<float>(native->frame.size.height)},
+                    window->virtualRect, visual, pointer, display->state().scale());
+                display->state().freezePresentation();
+                m_zoomRequest.reset();
+                window->positionAnimation.reset(); window->frameAnimation.reset();
+                m_nativeInteractions.insert_or_assign(window.get(), NativeInteraction{geometry, display->id(),
+                    window->virtualRect, visual, pointer, display->state().scale(), pointer, display->camera().position()});
+                m_nativeWindow = window;
+                if (std::find(m_nativeCandidates.begin(), m_nativeCandidates.end(), window) == m_nativeCandidates.end()) m_nativeCandidates.push_back(window);
             }
+            return;
         }
+        if (eventWindow || CGRectContainsPoint(entry.frame, CGPointMake(pointer.x, pointer.y))) return;
     }
 }
 
-bool WindowManager::beginClippedTitlebarDrag(core::Point pointer) {
-    if (!m_clippedTitlebarCandidate || !m_nativePointerHeld ||
-        !std::isfinite(pointer.x) || !std::isfinite(pointer.y)) return false;
-    constexpr float dragThreshold = 4.0f;
-    if (std::hypot(pointer.x - m_nativePointerStart.x, pointer.y - m_nativePointerStart.y) < dragThreshold) {
-        return false;
+void WindowManager::noteNativeDrag(core::Point pointer) {
+    if (!m_nativePointerHeld || !std::isfinite(pointer.x) || !std::isfinite(pointer.y)) return;
+    m_nativePointer = pointer;
+    if (const auto window = m_nativeWindow.lock()) {
+        const auto found = m_nativeInteractions.find(window.get());
+        if (found != m_nativeInteractions.end()) { found->second.currentPointer = pointer; found->second.dragged = true; }
     }
-
-    auto window = m_clippedTitlebarCandidate;
-    Display& display = displayForWindow(window->ref());
-    m_nativePointerHeld = false;
-    m_nativeCommitPending = false;
-    m_nativeWindowDragged = false;
-    m_nativeCameras.clear();
-    m_nativeCandidates.clear();
-    m_nativeStartFrames.clear();
-    m_clippedTitlebarCandidate.reset();
-
-    m_draggedWindow = std::move(window);
-    m_draggedWindowDisplayId = display.id();
-    m_dragEverywhereMoved = false;
-    m_dragStartVirtualRect = m_draggedWindow->virtualRect;
-    const core::Rect projectedFrame = display.state().virtualToPhysical(m_draggedWindow->virtualRect);
-    m_dragPointerOffset = core::dragPointerOffset(m_nativePointerStart, projectedFrame);
-    m_draggedWindow->positionAnimation.reset();
-    dragWindowTo(pointer);
-    return true;
 }
 
-void WindowManager::noteNativeDrag() {
-    if (m_nativePointerHeld && !m_nativeStartFrames.empty()) m_nativeWindowDragged = true;
-}
-
-void WindowManager::endNativeInteraction() {
+void WindowManager::endNativeInteraction(std::optional<core::Point> pointer) {
+    if (pointer && std::isfinite(pointer->x) && std::isfinite(pointer->y)) m_nativePointer = *pointer;
     if (!m_nativePointerHeld) return;
     m_nativePointerHeld = false;
-    m_clippedTitlebarCandidate.reset();
-    // The event tap sees mouse-up before the application processes it.
-    m_nativeCommitTime = CACurrentMediaTime() + 0.05;
+    m_nativeCommitTime = CACurrentMediaTime() + .05;
+    if (const auto window = m_nativeWindow.lock()) {
+        const auto found = m_nativeInteractions.find(window.get());
+        if (found != m_nativeInteractions.end()) { found->second.currentPointer = m_nativePointer; found->second.completeAt = m_nativeCommitTime; }
+    }
 }
 
 void WindowManager::flushNativeInteractionForPan() {
+    endNativeInteraction();
     m_nativePointerHeld = false;
     m_nativeCommitTime = 0;
-    m_nativeWindowDragged = false;
-    m_nativeStartFrames.clear();
-    m_nativeCandidates.clear();
-    m_clippedTitlebarCandidate.reset();
+    if (const auto window = m_nativeWindow.lock()) {
+        const auto found = m_nativeInteractions.find(window.get());
+        if (found != m_nativeInteractions.end()) found->second.completeAt = 0;
+    }
+    m_nativeWindow.reset();
+}
+
+void WindowManager::retireNativeInteraction(const std::shared_ptr<ClientWindow>& window) {
+    if (!window || !m_nativeInteractions.contains(window.get())) return;
+    // Reconcile once before a new explicit owner takes the current model.
+    updateNativeInteraction(window, CACurrentMediaTime());
+    m_nativeInteractions.erase(window.get());
+    std::erase(m_nativeCandidates, window);
+    if (m_nativeWindow.lock() == window) { m_nativeWindow.reset(); m_nativePointerHeld = false; }
+    m_nativeCommitPending = !m_nativeInteractions.empty();
 }
 
 bool WindowManager::beginDragEverywhere(core::Point pointer) {
@@ -1574,6 +1656,9 @@ bool WindowManager::beginDragEverywhere(core::Point pointer) {
     const bool previewHit = window && m_overviewPreviews.hitTest(pointer) == window;
     if (!window || !window->virtualCoordinatesInitialized || window->pinned || (window->isHidden && !previewHit) ||
         window->applicationSuspended || window->needsGeometryRestore) return false;
+    retireNativeInteraction(window);
+    window->traceGestureId = windowTraceGesture;
+    traceWindow("gesture.capture", window->wid(), [](auto& out) { out << " owner=drag-everywhere"; });
     m_draggedWindow = std::move(window);
     m_draggedWindowDisplayId = displayForWindow(m_draggedWindow->ref()).id();
     m_dragEverywhereMoved = false;
@@ -1593,15 +1678,22 @@ void WindowManager::dragWindowTo(core::Point pointer) {
     if (!m_draggedWindow || !std::isfinite(pointer.x) || !std::isfinite(pointer.y)) return;
     Display* display = displayById(m_draggedWindowDisplayId);
     if (!display) return;
+    WindowTraceScope traceScope(m_draggedWindow->traceGestureId);
     const auto virtualPoint = core::draggedVirtualOrigin(display->state(), pointer, m_dragPointerOffset);
     if (!std::isfinite(virtualPoint.x) || !std::isfinite(virtualPoint.y)) return;
     if (virtualPoint.x != m_draggedWindow->virtualRect.x ||
         virtualPoint.y != m_draggedWindow->virtualRect.y) m_dragEverywhereMoved = true;
+    traceWindow("gesture.update-everywhere", m_draggedWindow->wid(), [&](auto& out) {
+        out << " pointer=" << pointer.x << ',' << pointer.y << " origin=" << virtualPoint.x << ',' << virtualPoint.y;
+        traceRect(out, "before", m_draggedWindow->virtualRect);
+    });
     m_draggedWindow->virtualRect.x = virtualPoint.x;
     m_draggedWindow->virtualRect.y = virtualPoint.y;
 }
 
-void WindowManager::endDragEverywhere(core::Point pointer) {
+bool WindowManager::endDragEverywhere(core::Point pointer) {
+    WindowTraceScope traceScope(m_draggedWindow ? m_draggedWindow->traceGestureId : 0);
+    traceWindow("gesture.end", m_draggedWindow ? m_draggedWindow->wid() : 0, [&](auto& out) { out << " pointer=" << pointer.x << ',' << pointer.y << " moved=" << m_dragEverywhereMoved; });
     if (m_draggedWindow && m_dragEverywhereMoved) {
         if (Display* source = displayById(m_draggedWindowDisplayId)) {
             const core::Rect physical = source->state().virtualToPhysical(m_draggedWindow->virtualRect);
@@ -1629,13 +1721,17 @@ void WindowManager::endDragEverywhere(core::Point pointer) {
             }
         }
     }
+    const bool moved = m_dragEverywhereMoved;
     m_draggedWindow.reset();
     m_draggedWindowDisplayId = 0;
     m_dragEverywhereMoved = false;
     m_dragStartVirtualRect.reset();
+    return moved;
 }
 
 void WindowManager::cancelDragEverywhere() {
+    WindowTraceScope traceScope(m_draggedWindow ? m_draggedWindow->traceGestureId : 0);
+    traceWindow("gesture.cancel", m_draggedWindow ? m_draggedWindow->wid() : 0, [](auto&) {});
     if (m_draggedWindow && m_dragStartVirtualRect) {
         m_draggedWindow->virtualRect = *m_dragStartVirtualRect;
     }
@@ -1643,64 +1739,47 @@ void WindowManager::cancelDragEverywhere() {
     m_draggedWindowDisplayId = 0;
     m_dragEverywhereMoved = false;
     m_dragStartVirtualRect.reset();
-    m_clippedTitlebarCandidate.reset();
 }
 
 void WindowManager::commitNativeInteraction() {
-    for (const auto& window : m_nativeCandidates) {
-        if (!window || !window->ref() || !window->virtualCoordinatesInitialized || window->isHidden ||
-            window->needsGeometryRestore) continue;
-        Display& source = displayForWindow(window->ref());
-        core::DisplayState observationState = source.state();
-        if (const auto camera = m_nativeCameras.find(source.id()); camera != m_nativeCameras.end()) {
-            observationState.camera().setPosition(camera->second.x, camera->second.y);
-        }
-        CGPoint position{};
-        if (!readWindowPosition(window->ref(), m_yabaiBackend.usesTransforms() ? window->wid() : 0, position)) continue;
-        core::Rect physical{static_cast<float>(position.x), static_cast<float>(position.y),
-                            window->virtualRect.w, window->virtualRect.h};
-        CGSize size{};
-        if (readAXSize(window->ref(), size) && std::isfinite(size.width) &&
-            std::isfinite(size.height) && size.width > 0 && size.height > 0) {
-            physical.w = static_cast<float>(size.width);
-            physical.h = static_cast<float>(size.height);
-        }
-        const core::Point center{physical.x + physical.w / 2.0f,
-                                 physical.y + physical.h / 2.0f};
-        const bool targetIgnored = isIgnoredDisplayAtPoint(center);
-        const auto start = m_nativeStartFrames.find(window.get());
-        const auto cameraAtStart = m_nativeCameras.find(source.id());
-        const bool cameraUnchanged = cameraAtStart != m_nativeCameras.end() &&
-            std::abs(source.camera().x() - cameraAtStart->second.x) <= 0.01f &&
-            std::abs(source.camera().y() - cameraAtStart->second.y) <= 0.01f;
-        bool accepted = false;
-        if (targetIgnored) {
-            if (start != m_nativeStartFrames.end() &&
-                core::shouldReleaseToIgnoredDisplay(m_nativeWindowDragged, cameraUnchanged,
-                                                    start->second, physical, true)) {
-                accepted = releaseWindowToIgnoredDisplay(window, physical);
+    const double now = CACurrentMediaTime();
+    const auto candidates = m_nativeCandidates;
+    for (const auto& window : candidates) {
+        if (!window) continue;
+        const auto session = m_nativeInteractions.find(window.get());
+        if (session == m_nativeInteractions.end() || !session->second.completeAt || now < *session->second.completeAt) continue;
+        updateNativeInteraction(window, now);
+        Display* source = displayById(session->second.displayId);
+        const bool managed = source && source->windowPool().findWindowByWID(window->wid()) == window;
+        if (managed && !session->second.observationValid && now < *session->second.completeAt + .5) continue;
+        if (managed && session->second.observationValid) {
+            const auto physical = source->state().virtualToPhysical(window->virtualRect);
+            const core::Point center{physical.x + physical.w / 2, physical.y + physical.h / 2};
+            const bool cameraUnchanged = std::abs(source->camera().x() - session->second.camera.x) <= .01f &&
+                std::abs(source->camera().y() - session->second.camera.y) <= .01f;
+            const bool moved = session->second.geometry && session->second.geometry->kind() == core::NativeWindowInteraction::Kind::move;
+            if (moved && session->second.dragged) {
+                if (isIgnoredDisplayAtPoint(center)) {
+                    if (core::shouldReleaseToIgnoredDisplay(true, cameraUnchanged, session->second.visual, physical, true))
+                        (void)releaseWindowToIgnoredDisplay(window, physical);
+                } else {
+                    Display& target = displayForPoint(center);
+                    if (core::shouldTransferWindow(true, cameraUnchanged, session->second.visual, physical, source->id(), target.id()))
+                        (void)moveWindowToDisplay(window, target, physical);
+                }
             }
-        } else {
-            Display& target = displayForPoint(center);
-            const bool transfer = start != m_nativeStartFrames.end() &&
-                core::shouldTransferWindow(m_nativeWindowDragged, cameraUnchanged, start->second,
-                                           physical, source.id(), target.id());
-            accepted = transfer
-                ? moveWindowToDisplay(window, target, physical)
-                : m_renderer.acceptNativeGeometry(*window, physical, observationState);
+            window->needsGeometryRestore = false;
+            window->lastProgrammaticMoveTime = now;
         }
-        if (std::getenv("MINFWM_TRACE_WINDOW_INPUT")) {
-            std::cout << "INPUT drop WID=" << window->wid() << " physical=" << physical.x << ',' << physical.y
-                      << " camera=" << observationState.camera().x() << ',' << observationState.camera().y()
-                      << " virtual=" << window->virtualRect.x << ',' << window->virtualRect.y
-                      << " accepted=" << accepted << std::endl;
-        }
+        WindowTraceScope scope(window->traceGestureId);
+        traceWindow("native.commit-result", window->wid(), [&](auto& out) {
+            out << " observed=" << session->second.observationValid << " managed=" << managed;
+            traceRect(out, "model", window->virtualRect);
+        });
+        m_nativeInteractions.erase(session);
+        std::erase(m_nativeCandidates, window);
     }
-    m_nativeCommitPending = false;
-    m_nativeWindowDragged = false;
-    m_nativeCameras.clear();
-    m_nativeCandidates.clear();
-    m_nativeStartFrames.clear();
+    m_nativeCommitPending = !m_nativeInteractions.empty();
 }
 
 } // namespace minfwm

@@ -207,12 +207,13 @@ void testWindowFocusCapability() {
 class FallbackBackend final : public minfwm::WindowBackend {
 public:
     int moveCalls = 0;
+    bool resizeSupported = false;
     minfwm::BackendResult move(AXUIElementRef, uint32_t, int x, int y) override {
         ++moveCalls;
         return {x == 100 && y == -200 ? minfwm::BackendCode::ok : minfwm::BackendCode::failed};
     }
     minfwm::BackendResult resize(AXUIElementRef, uint32_t, float, float) override {
-        return {minfwm::BackendCode::unsupported};
+        return {resizeSupported ? minfwm::BackendCode::ok : minfwm::BackendCode::unsupported};
     }
     minfwm::BackendResult setLayer(AXUIElementRef, uint32_t, int) override {
         return {minfwm::BackendCode::unsupported};
@@ -331,6 +332,68 @@ void testAbsoluteTransforms() {
         FakeSAServer server(false, false, 0x80, false, "2.1.29");
         minfwm::YabaiSA sa(server.path());
         expect(sa.handshake() && !sa.supportsTransforms(), "stale cleanup payload cannot enable transforms");
+    }
+
+    {
+        FakeSAServer server(false, false, 0x180, false, "2.1.29", false, 3);
+        bool readback = false;
+        minfwm::YabaiSABackend sa(server.path(), [&](AXUIElementRef, uint32_t, int, int) { return readback; });
+        expect(sa.initialize(), "native interaction initializes transform backend");
+        expect(!sa.movePreservingTransform(nullptr, 42, -200, 100).succeeded() && sa.hasTransform(42),
+               "uncertain interactive presentation retains transform ownership");
+        expect(server.opcodes() == std::vector<uint8_t>{0x14},
+               "interactive readback failure sends no reset exposing native coordinates");
+        readback = true;
+        expect(sa.movePreservingTransform(nullptr, 42, -200, 100).succeeded(),
+               "interactive presentation recovers without a reset between frames");
+        expect(sa.resetTransform(42).succeeded() && server.opcodes() == std::vector<uint8_t>{0x14, 0x14, 0x15},
+               "preserved interactive transform is still explicitly cleanable");
+    }
+
+    {
+        FakeSAServer server(false, false, 0x180, false, "2.1.29", false, 3);
+        bool matches = true;
+        minfwm::YabaiSABackend sa(server.path(), [&](AXUIElementRef, uint32_t, int, int) { return matches; });
+        expect(sa.initialize(), "delayed presentation verification initializes SA backend");
+        FallbackBackend ax;
+        ax.resizeSupported = true;
+        minfwm::ClientWindow window(nullptr, 42);
+        window.originalPhysicalRect = minfwm::core::Rect{100, 100, 640, 480};
+        window.virtualRect = {100, -200, 700, 500};
+        window.layerAttempted = true;
+        minfwm::WindowRenderer renderer(ax, sa,
+            [&](AXUIElementRef, uint32_t, int, int) { return matches; });
+        expect(renderer.render(window, window.virtualRect, 1).succeeded(), "presentation initially succeeds before delayed correction");
+        matches = false;
+        expect(!renderer.render(window, window.virtualRect, 1.3).succeeded() && sa.hasTransform(42),
+               "failed delayed presentation recovery retains active presentation transform");
+        expect(server.opcodes() == std::vector<uint8_t>{0x14, 0x14},
+               "delayed mismatch recovery never sends a native-baseline reset");
+        expect(sa.resetTransform(42).succeeded(), "delayed failed recovery remains cleanable");
+    }
+
+    {
+        FakeSAServer server(false, false, 0x380, false, "2.1.29", false, 3);
+        bool readback = false;
+        minfwm::YabaiSABackend sa(server.path(), [&](AXUIElementRef, uint32_t, int, int) { return readback; });
+        expect(sa.initialize(), "scaled native interaction initializes overview backend");
+        expect(!sa.presentOverviewPreservingTransform(nullptr, 42, -200, 100, .5f).succeeded() && sa.hasTransform(42),
+               "failed scaled presentation retains transform ownership");
+        expect(server.opcodes() == std::vector<uint8_t>{0x16}, "scaled native interaction never resets after uncertain readback");
+        readback = true;
+        expect(sa.presentOverviewPreservingTransform(nullptr, 42, -200, 100, .5f).succeeded(), "scaled presentation retries successfully");
+        expect(sa.resetTransform(42).succeeded() && server.opcodes() == std::vector<uint8_t>{0x16, 0x16, 0x15},
+               "retained scaled presentation remains explicitly cleanable");
+    }
+
+    {
+        FakeSAServer server(false, false, 0x380, true, "2.1.29", false, 2);
+        minfwm::YabaiSABackend sa(server.path(), [](AXUIElementRef, uint32_t, int, int) { return true; });
+        expect(sa.initialize(), "scaled native interaction handles absent ACK");
+        expect(!sa.presentOverviewPreservingTransform(nullptr, 42, -200, 100, .5f).succeeded() && sa.hasTransform(42),
+               "missing scaled ACK retains uncertain transform ownership");
+        expect(server.opcodes() == std::vector<uint8_t>{0x16}, "missing scaled ACK never sends an implicit reset");
+        (void)sa.resetTransform(42);
     }
 
     for (const auto version : {"2.1.30", "2.1.29"}) {

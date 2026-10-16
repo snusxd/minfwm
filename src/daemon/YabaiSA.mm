@@ -1,3 +1,4 @@
+#include "WindowTrace.hpp"
 #import "YabaiSA.hpp"
 #import <Foundation/Foundation.h>
 #include "UniqueFd.hpp"
@@ -409,13 +410,21 @@ bool YabaiSA::overviewWindow(uint32_t wid, int x, int y, uint32_t scale) const {
 }
 
 BackendResult YabaiSABackend::presentOverview(AXUIElementRef element, uint32_t wid, int x, int y, float scale) {
+    return presentOverviewImpl(element, wid, x, y, scale, false);
+}
+
+BackendResult YabaiSABackend::presentOverviewPreservingTransform(AXUIElementRef element, uint32_t wid, int x, int y, float scale) {
+    return presentOverviewImpl(element, wid, x, y, scale, true);
+}
+
+BackendResult YabaiSABackend::presentOverviewImpl(AXUIElementRef element, uint32_t wid, int x, int y, float scale, bool preserve) {
     if (!supportsOverview()) return {BackendCode::unsupported};
     if (!wid || !std::isfinite(scale) || scale < 0.2f || scale > 1) return {BackendCode::failed};
     m_transformed.insert(wid); // A missing ACK can follow a successful server operation.
     m_transformOwners.insert(wid);
     const bool applied = m_sa.overviewWindow(wid, x, y, static_cast<uint32_t>(std::lround(scale * 1000))) &&
         m_checkPosition && m_checkPosition(element, wid, x, y);
-    if (!applied) (void)resetTransform(wid);
+    if (!applied && !preserve) (void)resetTransform(wid);
     return {applied ? BackendCode::ok : BackendCode::failed};
 }
 
@@ -451,7 +460,9 @@ YabaiSABackend::~YabaiSABackend() {
 
 BackendResult YabaiSABackend::resetTransform(uint32_t wid) {
     if (!m_transformOwners.contains(wid)) return {BackendCode::ok};
-    if (!m_sa.resetTransform(wid)) return {BackendCode::failed};
+    const bool reset = m_sa.resetTransform(wid);
+    traceWindow("sa.reset", wid, [&](auto& out) { out << " ack=" << reset; });
+    if (!reset) return {BackendCode::failed};
     m_transformed.erase(wid);
     m_transformOwners.erase(wid);
     return {BackendCode::ok};
@@ -481,13 +492,31 @@ BackendResult YabaiSABackend::move(AXUIElementRef element, uint32_t wid, int x, 
         // Track before sending: a lost ACK may follow a successful transform.
         m_transformed.insert(wid);
         m_transformOwners.insert(wid);
-        const bool applied = m_sa.transformWindow(wid, x, y) && m_checkPosition &&
-            m_checkPosition(element, wid, x, y);
+        traceWindow("sa.transform-request", wid, [&](auto& out) { out << " target=" << x << ',' << y << " preserve=0"; });
+        const bool ack = m_sa.transformWindow(wid, x, y);
+        const bool matched = ack && m_checkPosition && m_checkPosition(element, wid, x, y);
+        const bool applied = ack && matched;
+        traceWindow("sa.transform-result", wid, [&](auto& out) { out << " ack=" << ack << " checked=" << (ack && bool(m_checkPosition)) << " matched=" << matched << " reset_on_failure=1"; });
         if (!applied) (void)resetTransform(wid);
         return {applied ? BackendCode::ok : BackendCode::failed};
     }
     const bool moved = m_sa.moveWindow(wid, x, y) && m_checkPosition && m_checkPosition(element, wid, x, y);
     return {moved ? BackendCode::ok : BackendCode::failed};
+}
+
+BackendResult YabaiSABackend::movePreservingTransform(AXUIElementRef element, uint32_t wid, int x, int y) {
+    if (!available()) return {BackendCode::unavailable};
+    if (!usesTransforms() || !wid) return {BackendCode::unsupported};
+    m_transformed.insert(wid);
+    m_transformOwners.insert(wid);
+    traceWindow("sa.transform-request", wid, [&](auto& out) { out << " target=" << x << ',' << y << " preserve=1"; });
+    const bool ack = m_sa.transformWindow(wid, x, y);
+    const bool matched = ack && m_checkPosition && m_checkPosition(element, wid, x, y);
+    const bool applied = ack && matched;
+    traceWindow("sa.transform-result", wid, [&](auto& out) { out << " ack=" << ack << " checked=" << (ack && bool(m_checkPosition)) << " matched=" << matched << " reset_on_failure=0"; });
+    // A lost ACK/readback may follow a successful operation. Retain ownership
+    // and retry without exposing the app's independently clamped native frame.
+    return {applied ? BackendCode::ok : BackendCode::failed};
 }
 
 BackendResult YabaiSABackend::focusWindow(uint32_t wid) {
@@ -499,9 +528,11 @@ BackendResult YabaiSABackend::resize(AXUIElementRef, uint32_t, float, float) {
 }
 
 BackendResult YabaiSABackend::moveNative(AXUIElementRef element, uint32_t wid, int x, int y) {
+    traceWindow("sa.native-request", wid, [&](auto& out) { out << " target=" << x << ',' << y << " transformed=" << hasTransform(wid) << " atomic=" << nativeMovePreservesLayer(); });
     if (!available() || !wid) return {BackendCode::unavailable};
     if (nativeMovePreservesLayer() && m_transformed.contains(wid)) {
         const bool handedOff = m_sa.nativeHandoff(wid, x, y) && m_checkPosition && m_checkPosition(element, wid, x, y);
+        traceWindow("sa.handoff-result", wid, [&](auto& out) { out << " success=" << handedOff; });
         if (handedOff) m_transformed.erase(wid);
         else (void)resetTransform(wid);
         return {handedOff ? BackendCode::ok : BackendCode::failed};
@@ -510,7 +541,9 @@ BackendResult YabaiSABackend::moveNative(AXUIElementRef element, uint32_t wid, i
     // position for one frame before moving the application under the pointer.
     const bool moved = m_sa.moveWindow(wid, x, y);
     const bool reset = nativeMovePreservesLayer() || resetTransform(wid).succeeded();
-    return {moved && reset && m_checkPosition && m_checkPosition(element, wid, x, y) ? BackendCode::ok : BackendCode::failed};
+    const bool matched = moved && reset && m_checkPosition && m_checkPosition(element, wid, x, y);
+    traceWindow("sa.native-result", wid, [&](auto& out) { out << " ack=" << moved << " reset=" << reset << " matched=" << matched; });
+    return {matched ? BackendCode::ok : BackendCode::failed};
 }
 
 BackendResult YabaiSABackend::setLayer(AXUIElementRef, uint32_t wid, int layer) {

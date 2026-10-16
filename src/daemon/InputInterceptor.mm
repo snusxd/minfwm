@@ -1,3 +1,4 @@
+#include "WindowTrace.hpp"
 #import "InputInterceptor.hpp"
 #import "WindowManager.hpp"
 #import "ConfigManager.hpp"
@@ -8,8 +9,10 @@
 #include <cmath>
 #include <algorithm>
 #include <dlfcn.h>
+#include <limits>
 
 namespace {
+
 
 CGEventFlags flagForModifier(const std::string& modifier) {
     if (modifier == "Cmd") return kCGEventFlagMaskCommand;
@@ -159,6 +162,7 @@ bool InputInterceptor::start() {
 }
 
 void InputInterceptor::stop() {
+    WindowManager::instance().endNativeInteraction();
     if (m_trackpadCallbackEnabled) {
         m_trackpadCallbackEnabled->store(false, std::memory_order_release);
         m_trackpadCallbackEnabled.reset();
@@ -167,7 +171,10 @@ void InputInterceptor::stop() {
     m_trackpadTouchActive.store(false, std::memory_order_release);
     m_trackpadScrollCaptured = false;
     finishTrackpadPan(false);
-    if (m_trackpadDragEverywhereActive) WindowManager::instance().cancelDragEverywhere();
+    if (m_trackpadDragEverywhereActive || m_dragEverywhereActive) {
+        WindowManager::instance().cancelDragEverywhere();
+    }
+    m_dragEverywhereActive = false;
     m_trackpadDragEverywhereActive = false;
     m_trackpadDragPointer = {};
     m_trackpadZoomGestureActive = false;
@@ -467,6 +474,7 @@ CGEventRef InputInterceptor::scrollTapCallback(CGEventTapProxy proxy, CGEventTyp
     auto* interceptor = static_cast<InputInterceptor*>(refcon);
     if (!interceptor) return event;
     if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+        traceWindow("input.tap-disabled", 0, [&](auto& out) { out << " type=" << type; });
         interceptor->m_zoomScrollCaptured = false;
         interceptor->m_trackpadScrollCaptured = false;
         WindowManager::instance().exitOverview({}, false);
@@ -480,6 +488,7 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
     auto* interceptor = static_cast<InputInterceptor*>(refcon);
     if (!interceptor) return event;
     if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+        traceWindow("input.tap-disabled", 0, [&](auto& out) { out << " type=" << type; });
         if (interceptor->m_mousePanDisplayId) {
             if (Display* display = WindowManager::instance().displayById(*interceptor->m_mousePanDisplayId)) {
                 WindowManager::instance().finishCameraPan(*display, false);
@@ -492,7 +501,6 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         WindowManager::instance().endNativeInteraction();
         WindowManager::instance().cancelDragEverywhere();
         interceptor->m_dragEverywhereActive = false;
-        interceptor->m_clippedTitlebarDragActive = false;
         interceptor->m_trackpadDragEverywhereActive = false;
         interceptor->m_trackpadDragPointer = {};
         const CGPoint pointer = event ? CGEventGetLocation(event) : CGPointZero;
@@ -504,6 +512,18 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
         return event;
     }
     if (!event) return event;
+    if (type == kCGEventLeftMouseDown) beginWindowTraceGesture();
+    if (type == kCGEventLeftMouseDown || type == kCGEventLeftMouseDragged || type == kCGEventLeftMouseUp ||
+        type == kCGEventFlagsChanged) {
+        traceWindow("input.received", 0, [&](auto& out) {
+            const auto point = CGEventGetLocation(event);
+            out << " type=" << type << " event_ns=" << CGEventGetTimestamp(event)
+                << " pointer=" << point.x << ',' << point.y << " flags=" << CGEventGetFlags(event)
+                << " clicks=" << CGEventGetIntegerValueField(event, kCGMouseEventClickState)
+                << " drag_everywhere=" << interceptor->m_dragEverywhereActive
+                << " native_pending=" << WindowManager::instance().nativeInteractionPending();
+        });
+    }
 
     auto& wm = WindowManager::instance();
     const auto dragEverywhereModifiers = ConfigManager::instance().snapshot().dragEverywhereModifiers;
@@ -659,27 +679,18 @@ CGEventRef InputInterceptor::eventTapCallback(CGEventTapProxy proxy, CGEventType
             if (update.consume) wm.flushNativeInteractionForPan();
             else {
                 const CGPoint point = CGEventGetLocation(event);
-                wm.beginNativeInteraction({static_cast<float>(point.x), static_cast<float>(point.y)});
+                const auto target = CGEventGetIntegerValueField(event, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent);
+                wm.beginNativeInteraction({static_cast<float>(point.x), static_cast<float>(point.y)},
+                    target > 0 && target <= std::numeric_limits<uint32_t>::max() ? static_cast<uint32_t>(target) : 0);
             }
         } else if (type == kCGEventLeftMouseDragged) {
             if (update.consume) {
                 wm.flushNativeInteractionForPan();
-            } else if (interceptor->m_clippedTitlebarDragActive) {
-                wm.dragWindowTo(pointer);
-                return nullptr;
-            } else if (wm.beginClippedTitlebarDrag(pointer)) {
-                interceptor->m_clippedTitlebarDragActive = true;
-                return nullptr;
             } else {
-                wm.noteNativeDrag();
+                wm.noteNativeDrag(pointer);
             }
         } else if (type == kCGEventLeftMouseUp && !update.consume) {
-            if (interceptor->m_clippedTitlebarDragActive) {
-                wm.endDragEverywhere(pointer);
-                interceptor->m_clippedTitlebarDragActive = false;
-                return event;
-            }
-            wm.endNativeInteraction();
+            wm.endNativeInteraction(pointer);
         }
         wm.setPanning(interceptor->m_panGesture.isPanning());
         const bool draggingCursor = type == kCGEventLeftMouseDragged ? interceptor->m_panGesture.isPanning() :

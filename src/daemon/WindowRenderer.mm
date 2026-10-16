@@ -1,3 +1,4 @@
+#include "WindowTrace.hpp"
 #include "WindowRenderer.hpp"
 
 #include <cmath>
@@ -101,10 +102,15 @@ BackendResult WindowRenderer::setPinnedLayer(ClientWindow& window, bool alwaysOn
 }
 
 bool WindowRenderer::acceptNativeGeometry(ClientWindow& window, core::Rect physical, const core::DisplayState& state) {
+    WindowTraceScope traceScope(window.traceGestureId);
     int x = 0, y = 0;
     if (!pixelPosition(physical, x, y)) return false;
     const auto virtualFrame = state.physicalToVirtual(physical);
     if (!std::isfinite(virtualFrame.x) || !std::isfinite(virtualFrame.y)) return false;
+    traceWindow("geometry.accept-native", window.wid(), [&](auto& out) {
+        traceRect(out, "observed", physical); traceRect(out, "before", window.virtualRect); traceRect(out, "after", virtualFrame);
+        out << " camera=" << state.camera().x() << ',' << state.camera().y() << " scale=" << state.scale();
+    });
     window.virtualRect = virtualFrame;
     window.virtualCoordinatesInitialized = true;
     window.lastRenderedX = x;
@@ -124,6 +130,10 @@ bool WindowRenderer::acceptNativeGeometry(ClientWindow& window, core::Rect physi
 
 bool WindowRenderer::acceptApplicationGeometry(ClientWindow& window, core::Rect physical,
                                                const core::DisplayState& state, bool transformed) {
+    WindowTraceScope traceScope(window.traceGestureId);
+    traceWindow("geometry.application", window.wid(), [&](auto& out) {
+        out << " transformed=" << transformed; traceRect(out, "observed", physical); traceRect(out, "model", window.virtualRect);
+    });
     if (transformed) {
         // AX movement notifications can arrive after a camera transform. Their
         // screen position is a presentation coordinate, not a user move.
@@ -137,6 +147,11 @@ bool WindowRenderer::acceptApplicationGeometry(ClientWindow& window, core::Rect 
 }
 
 BackendResult WindowRenderer::move(ClientWindow& window, int x, int y) {
+    WindowTraceScope traceScope(window.traceGestureId);
+    traceWindow("render.move", window.wid(), [&](auto& out) {
+        out << " target=" << x << ',' << y << " native_preferred=" << window.preferNativePosition
+            << " transformed=" << m_yabai.hasTransform(window.wid());
+    });
     if (window.preferNativePosition && m_yabai.usesTransforms()) {
         const bool hadTransform = m_yabai.hasTransform(window.wid());
         const auto native = m_yabai.moveNative(window.ref(), window.wid(), x, y);
@@ -155,7 +170,9 @@ BackendResult WindowRenderer::move(ClientWindow& window, int x, int y) {
 }
 
 BackendResult WindowRenderer::resetTransform(ClientWindow& window) {
+    WindowTraceScope traceScope(window.traceGestureId);
     const BackendResult result = m_yabai.resetTransform(window.wid());
+    traceWindow("render.reset", window.wid(), [&](auto& out) { out << " result=" << static_cast<int>(result.code); });
     if (result.succeeded() && m_yabai.usesTransforms()) {
         // The payload restores the captured level along with the transform.
         window.isLayerSet = window.pinnedLevelSet;
@@ -182,7 +199,38 @@ BackendResult WindowRenderer::restoreLayer(ClientWindow& window) {
     return result;
 }
 
+BackendResult WindowRenderer::presentNativeInteraction(ClientWindow& window, core::Rect physical, float scale,
+                                                       bool presentationMatches, double now) {
+    WindowTraceScope scope(window.traceGestureId);
+    int x = 0, y = 0;
+    if (!pixelPosition(physical, x, y) || !std::isfinite(scale) || scale < .2f || scale > 1) return {BackendCode::failed};
+    scale = std::round(scale * 1000) / 1000;
+    if (!presentationMatches && now < window.positionRetryTime) return {BackendCode::failed};
+    BackendResult result{BackendCode::ok};
+    if (!presentationMatches) {
+        result = scale == 1 ? m_yabai.movePreservingTransform(window.ref(), window.wid(), x, y)
+                            : m_yabai.presentOverviewPreservingTransform(window.ref(), window.wid(), x, y, scale);
+    }
+    traceWindow("native.present", window.wid(), [&](auto& out) {
+        out << " matched=" << presentationMatches << " result=" << static_cast<int>(result.code) << " scale=" << scale;
+        traceRect(out, "physical", physical);
+    });
+    window.positionNeedsVerification = false;
+    if (!result.succeeded()) {
+        invalidatePosition(window);
+        window.positionRetryTime = now + .05;
+        return result;
+    }
+    window.lastRenderedX = x; window.lastRenderedY = y; window.lastRenderedScale = scale;
+    window.overviewPresented = scale != 1;
+    window.positionRetryTime = 0;
+    window.rejectedPosition.reset();
+    if (!presentationMatches) window.lastProgrammaticMoveTime = now;
+    return result;
+}
+
 BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, double now) {
+    WindowTraceScope traceScope(window.traceGestureId);
     int x = 0, y = 0;
     if (!window.originalPhysicalRect || !pixelPosition(physical, x, y)) return {BackendCode::failed};
     window.applicationSuspended = false;
@@ -205,6 +253,10 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
         window.lastRenderedX != x || window.lastRenderedY != y || needsNativeHandoff;
     if (!geometryDirty && window.positionNeedsVerification && now >= window.positionVerificationTime) {
         const bool matched = m_checkPosition && m_checkPosition(window.ref(), window.wid(), x, y);
+        traceWindow("render.verify", window.wid(), [&](auto& out) {
+            out << " target=" << x << ',' << y << " matched=" << matched << " fallback_attempted=" << window.positionFallbackAttempted
+                << " native_preferred=" << window.preferNativePosition;
+        });
         if (matched) {
             window.positionNeedsVerification = false;
         } else {
@@ -214,12 +266,13 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
             bool recovered = false;
             if (!window.positionFallbackAttempted) {
                 if (m_yabai.usesTransforms() && !window.preferNativePosition) {
-                    recovered = m_yabai.move(window.ref(), window.wid(), x, y).succeeded();
+                    recovered = m_yabai.movePreservingTransform(window.ref(), window.wid(), x, y).succeeded();
                 } else {
                     (void)resetTransform(window);
                     recovered = m_ax.move(window.ref(), window.wid(), x, y).succeeded();
                 }
             }
+            traceWindow("render.verify-recovery", window.wid(), [&](auto& out) { out << " recovered=" << recovered; });
             window.positionFallbackAttempted = true;
             if (!recovered) {
                 window.positionNeedsVerification = false;
@@ -238,6 +291,11 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
 
     window.lastProgrammaticMoveTime = now;
     if (geometryDirty) {
+        traceWindow("render.dirty", window.wid(), [&](auto& out) {
+            traceRect(out, "target", physical); traceRect(out, "model", window.virtualRect);
+            out << " cached=" << window.lastRenderedX << ',' << window.lastRenderedY
+                << " handoff=" << needsNativeHandoff << " hidden=" << window.isHidden << " restore=" << window.needsGeometryRestore;
+        });
         if (window.preferNativePosition && m_yabai.usesTransforms()) window.nativeHandoffAttempted = true;
         if (window.isAXHidden) {
             const BackendResult shown = m_ax.setHidden(window.ref(), window.wid(), false);
@@ -257,6 +315,7 @@ BackendResult WindowRenderer::render(ClientWindow& window, core::Rect physical, 
         } else {
             geometry = move(window, x, y);
         }
+        traceWindow("render.geometry-result", window.wid(), [&](auto& out) { out << " result=" << static_cast<int>(geometry.code); });
         if (!geometry.succeeded()) {
             // A failed operation may still have changed or clamped the frame.
             // Do not reuse the previously cached position on the next render.

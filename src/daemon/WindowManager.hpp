@@ -9,6 +9,7 @@
 #include "Camera.hpp"
 #include "WindowPool.hpp"
 #include "../core/DisplayState.hpp"
+#include "../core/NativeWindowInteraction.hpp"
 #include "AXBackend.hpp"
 #include "YabaiSA.hpp"
 #include "WindowRenderer.hpp"
@@ -93,14 +94,13 @@ public:
     void loadBookmark(Display& display, int index);
     void centerCameraOnWindow(AXUIElementRef element);
     void syncPhysicalToVirtual(AXUIElementRef element);
-    void beginNativeInteraction(core::Point pointer);
-    bool beginClippedTitlebarDrag(core::Point pointer);
-    void noteNativeDrag();
-    void endNativeInteraction();
+    void beginNativeInteraction(core::Point pointer, uint32_t eventWindow = 0);
+    void noteNativeDrag(core::Point pointer);
+    void endNativeInteraction(std::optional<core::Point> pointer = std::nullopt);
     void flushNativeInteractionForPan();
     bool beginDragEverywhere(core::Point pointer);
     void dragWindowTo(core::Point pointer);
-    void endDragEverywhere(core::Point pointer);
+    bool endDragEverywhere(core::Point pointer);
     void cancelDragEverywhere();
     bool requestOverviewZoom(core::Point pointer, float delta);
     bool overviewActive() const;
@@ -120,6 +120,7 @@ public:
     void setPanning(bool panning) { m_isPanning = panning; }
 
 private:
+    friend struct WindowInteractionTestAccess;
     WindowManager() = default;
 
     NSScreen* screenForDisplay(int64_t displayId) const;
@@ -128,7 +129,8 @@ private:
     bool isWhitelisted(const ClientWindow& window) const;
     void commitNativeInteraction();
     void refreshWindowSnapshot(double now);
-    void addNativeCandidate(const std::shared_ptr<ClientWindow>& window);
+    void retireNativeInteraction(const std::shared_ptr<ClientWindow>& window);
+    bool updateNativeInteraction(const std::shared_ptr<ClientWindow>& window, double now);
     bool moveWindowToDisplay(const std::shared_ptr<ClientWindow>& window, Display& target,
                              core::Rect physical);
     bool releaseWindowToIgnoredDisplay(const std::shared_ptr<ClientWindow>& window,
@@ -148,13 +150,25 @@ private:
     double m_windowRefreshTime = 0;
     bool m_nativePointerHeld = false;
     bool m_nativeCommitPending = false;
-    bool m_nativeWindowDragged = false;
     double m_nativeCommitTime = 0;
-    std::map<int64_t, core::Point> m_nativeCameras;
     std::vector<std::shared_ptr<ClientWindow>> m_nativeCandidates;
-    std::map<const ClientWindow*, core::Rect> m_nativeStartFrames;
-    std::shared_ptr<ClientWindow> m_clippedTitlebarCandidate;
-    core::Point m_nativePointerStart{};
+    struct NativeInteraction {
+        std::optional<core::NativeWindowInteraction> geometry;
+        int64_t displayId;
+        core::Rect canvas, visual;
+        core::Point pointer;
+        float scale;
+        core::Point currentPointer;
+        core::Point camera;
+        bool dragged = false;
+        std::optional<double> completeAt;
+        bool observationValid = false;
+    };
+    std::weak_ptr<ClientWindow> m_nativeWindow;
+    std::map<const ClientWindow*, NativeInteraction> m_nativeInteractions;
+    core::Point m_nativePointer{};
+    using NativePresentationRead = std::function<std::optional<NativeWindowPresentation>(uint32_t)>;
+    NativePresentationRead m_readNativePresentation = readNativeWindowPresentation;
     std::shared_ptr<ClientWindow> m_draggedWindow;
     int64_t m_draggedWindowDisplayId = 0;
     bool m_dragEverywhereMoved = false;

@@ -374,6 +374,19 @@ int main() {
     expect(!returning.returning() && !returning.overviewActive() && returning.scale() == 1, "return finishes at exact native scale");
     expectNear(returning.camera().x(), 400, "return ends at the selected window camera x");
     expectNear(returning.camera().y(), -200, "return ends at the selected window camera y");
+    auto frozen = halfway;
+    const auto frozenCamera = frozen.camera().position();
+    const auto frozenScale = frozen.scale();
+    frozen.freezePresentation();
+    frozen.advanceZoom(2);
+    expect(frozen.scale() == frozenScale && frozen.camera().x() == frozenCamera.x &&
+           frozen.camera().y() == frozenCamera.y && !frozen.returning(),
+           "native DOWN freezes an in-flight return at its visible camera and scale");
+    frozen.animateCameraTo({900, 800});
+    frozen.freezePresentation();
+    frozen.advanceZoom(2);
+    expect(frozen.camera().x() == frozenCamera.x && frozen.camera().y() == frozenCamera.y,
+           "native DOWN cancels camera animation without changing its current position");
     DisplayState atSixty = halfway, atOneTwenty = halfway;
     for (int i = 0; i < 6; ++i) atSixty.advanceZoom(1.0 / 60);
     for (int i = 0; i < 12; ++i) atOneTwenty.advanceZoom(1.0 / 120);

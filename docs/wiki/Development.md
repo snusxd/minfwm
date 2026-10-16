@@ -79,3 +79,8 @@ This allows seamless code iterations without having windows scatter across your 
 - **Naming**: `PascalCase` for types and classes, `lowerCamelCase` for functions and methods, and `m_` prefix for private member variables.
 - **Architecture**: Keep pure math and geometry algorithms in `src/core/`; keep macOS and AppKit API interactions strictly within `src/daemon/`.
 - **Manual Verification**: Since Accessibility, WindowServer, and trackpad gestures interact with the live operating system, see [docs/Acceptance-macos.md](../../docs/Acceptance-macos.md) for manual verification steps.
+
+## Diagnosing inconsistent drag and resize
+
+See [Window interaction trace](../Window-Interaction-Diagnostics.md) for operation
+tracing, optional sampled AX/WindowServer geometry, capture commands and field meanings.

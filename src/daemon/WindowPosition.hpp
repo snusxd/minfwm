@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ApplicationServices/ApplicationServices.h>
+#include "../core/Geometry.hpp"
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -30,6 +31,7 @@ struct NativeWindowPresentation {
     CGAffineTransform transform;
 };
 std::optional<NativeWindowPresentation> readNativeWindowPresentation(uint32_t wid);
+bool nativePresentationMatches(const NativeWindowPresentation& presentation, core::Rect physical, float scale);
 bool needsNativePresentationRecovery(const NativeWindowPresentation& presentation);
 
 } // namespace minfwm

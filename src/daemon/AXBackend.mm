@@ -1,3 +1,4 @@
+#include "WindowTrace.hpp"
 #import "AXBackend.hpp"
 #include "CFRAII.hpp"
 #include <cmath>
@@ -16,13 +17,14 @@ BackendResult setPosition(AXUIElementRef element, int x, int y) {
     return {error == kAXErrorSuccess ? BackendCode::ok : BackendCode::failed};
 }
 
-BackendResult setSize(AXUIElementRef element, float width, float height) {
+BackendResult setSize(AXUIElementRef element, uint32_t wid, float width, float height) {
     if (!element || !std::isfinite(width) || !std::isfinite(height) ||
         width <= 0.0f || height <= 0.0f) return {BackendCode::failed};
     const CGSize size = CGSizeMake(width, height);
     CFRef<AXValueRef> value = CFRef<AXValueRef>::adopt(AXValueCreate(kAXValueTypeCGSize, &size));
     if (!value) return {BackendCode::failed};
     const AXError error = AXUIElementSetAttributeValue(element, kAXSizeAttribute, value.get());
+    traceWindow("ax.resize-result", wid, [&](auto& out) { out << " requested=" << width << ',' << height << " ax_error=" << error; });
     return {error == kAXErrorSuccess ? BackendCode::ok : BackendCode::failed};
 }
 
@@ -98,8 +100,8 @@ BackendResult AXBackend::maximize(AXUIElementRef element) {
     return {BackendCode::unsupported};
 }
 
-BackendResult AXBackend::resize(AXUIElementRef element, uint32_t, float width, float height) {
-    return setSize(element, width, height);
+BackendResult AXBackend::resize(AXUIElementRef element, uint32_t wid, float width, float height) {
+    return setSize(element, wid, width, height);
 }
 
 BackendResult AXBackend::setLayer(AXUIElementRef, uint32_t, int) {
