@@ -1144,7 +1144,34 @@ void WindowManager::centerCameraToFocusedWindow() {
     if (m_focusedWindow && isWindowOnIgnoredDisplay(m_focusedWindow.get())) return;
     auto focused = m_focusedWindow ? findWindow(m_focusedWindow.get()) : nullptr;
     if (!focused) focused = m_lastFocusedWindow.lock();
-    if (focused) centerCameraOnWindow(focused->ref());
+    if (!focused) return;
+
+    if (m_temporaryFullscreen && m_temporaryFullscreen->window == focused) return;
+    if (m_nativePointerHeld || m_nativeCommitPending || m_isPanning ||
+        CACurrentMediaTime() < m_nativeCommitTime + 0.25) return;
+
+    for (auto& display : m_displays) {
+        if (display->windowPool().findWindowByAXRef(focused->ref()) != focused) continue;
+        if (!focused->virtualCoordinatesInitialized) return;
+
+        if (display->state().overviewActive()) {
+            const core::Rect bounds = display->state().geometry().bounds;
+            const core::Rect frame = focused->virtualRect;
+            const core::Point target{
+                frame.x + frame.w / 2.0f - bounds.w / 2.0f,
+                frame.y + frame.h / 2.0f - bounds.h / 2.0f};
+            m_focusedWindow = CFRef<AXUIElementRef>::retain(focused->ref());
+            if (!display->state().beginReturn(target)) {
+                display->state().resetZoom({bounds.x + bounds.w / 2.0f,
+                                            bounds.y + bounds.h / 2.0f});
+                display->state().animateCameraTo(target);
+            }
+            return;
+        }
+
+        centerCameraOnWindow(focused->ref());
+        return;
+    }
 }
 
 void WindowManager::centerFocusedWindowToCamera() {

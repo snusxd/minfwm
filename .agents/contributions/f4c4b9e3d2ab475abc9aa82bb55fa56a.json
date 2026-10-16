@@ -1,0 +1,16 @@
+{
+  "assistance": "ai",
+  "base": "e3b9dfbcc872d163a2c668e32414fb7d9df24109",
+  "id": "f4c4b9e3d2ab475abc9aa82bb55fa56a",
+  "paths": [
+    "docs/Acceptance-macos.md",
+    "docs/wiki/Configuration.md",
+    "docs/wiki/Getting-Started.md",
+    "src/daemon/WindowManager.mm"
+  ],
+  "schema_version": 1,
+  "task": "unassigned",
+  "tools": [
+    "codex"
+  ]
+}

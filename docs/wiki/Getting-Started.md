@@ -97,7 +97,7 @@ Control the `minfwm` daemon easily from your terminal:
 - **`Super + Ctrl` + Drag** (or three-finger swipe): **Drag Everywhere** — move a window without needing to grab its title bar. Dragging a clipped title bar also lets you bring that window back onto the display.
 - **`Super + Ctrl + F`**: **Temporary Fullscreen** — invokes the app's native Fill action (macOS 15+); panning or zooming the camera restores the window's previous frame. This works when the app exposes the system Fill command.
 - **`Super + P`**: Pin or unpin the currently focused window (pinned windows stay on screen as you pan).
-- **`Super + F`**: Center the camera onto the currently focused window.
+- **`Super + F`**: Center the camera onto the currently focused window, returning to 100% zoom if zoomed out.
 - **`Super + S`**: Pull the focused window to the center of the current camera view.
 - **`Cmd + Tab`**: Automatically moves the camera to center the newly focused application window.
 

@@ -193,7 +193,7 @@ Modifiers can include: `"Cmd"`, `"Alt"` (Option), `"Shift"`, `"Ctrl"`, and `"Sup
 | Key | Default | Description |
 | --- | --- | --- |
 | `super` | `["Cmd", "Alt"]` | Modifier chord representing the `Super` key throughout `minfwm`. |
-| `center-camera-to-focus` | `["Super", "F"]` | Shortcut to pan the camera to center the focused window. |
+| `center-camera-to-focus` | `["Super", "F"]` | Shortcut to center the focused window; when zoomed out, it also returns the camera to 100% zoom. |
 | `center-focus-to-camera` | `["Super", "S"]` | Shortcut to move the focused window to the center of your screen. |
 | `temporarily-fullscreen` | `["Super", "Ctrl", "F"]` | Use the native macOS Fill command (macOS 15+); camera movement or zoom restores the previous frame. The app must expose the system Fill menu item. |
 | `drag-everywhere` | `["Super", "Ctrl"]` | Modifiers to hold while dragging any part of a window to move it. |
