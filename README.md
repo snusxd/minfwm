@@ -20,7 +20,6 @@ brew install snusxd/minfwm/minfwm
 
 ### Enable & Start
 
-1. Run `tools/create_signing_identity.sh` once before the first build. The build signs `minfwm` with this persistent identity so the Accessibility grant survives rebuilds; an ad-hoc signed binary is re-prompted after every build.
 1. Grant `minfwm` Accessibility permission in **System Settings → Privacy & Security → Accessibility**.
 2. Enable and start the background service:
 
@@ -28,6 +27,8 @@ brew install snusxd/minfwm/minfwm
 minfwm enable
 minfwm status
 ```
+
+*(`minfwm start`/`restart` re-signs the installed binary with a per-user "minfwm Local Signing" identity, created on first use, so the grant survives rebuilds and `brew upgrade`. Source builds sign with it automatically once it exists; `tools/create_signing_identity.sh` creates it ahead of time.)*
 
 *(If the daemon starts before Accessibility permission is granted, it will wait and start automatically once granted).*
 

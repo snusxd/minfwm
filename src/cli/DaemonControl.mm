@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <iostream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -33,10 +34,10 @@ struct LaunchctlResult {
     std::string output;
 };
 
-LaunchctlResult runLaunchctl(const std::vector<std::string>& arguments) {
+LaunchctlResult runTool(const char* tool, const std::vector<std::string>& arguments) {
     @autoreleasepool {
         NSTask* task = [[NSTask alloc] init];
-        task.executableURL = [NSURL fileURLWithPath:@"/bin/launchctl"];
+        task.executableURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:tool]];
         NSMutableArray<NSString*>* taskArguments = [NSMutableArray arrayWithCapacity:arguments.size()];
         for (const auto& argument : arguments) {
             NSString* value = [NSString stringWithUTF8String:argument.c_str()];
@@ -51,7 +52,7 @@ LaunchctlResult runLaunchctl(const std::vector<std::string>& arguments) {
         NSError* launchError = nil;
         if (![task launchAndReturnError:&launchError]) {
             const char* description = launchError.localizedDescription.UTF8String;
-            return {-1, description == nullptr ? "could not launch launchctl" : description};
+            return {-1, description == nullptr ? std::string("could not launch ") + tool : description};
         }
         NSData* data = [[pipe fileHandleForReading] readDataToEndOfFile];
         [task waitUntilExit];
@@ -59,6 +60,68 @@ LaunchctlResult runLaunchctl(const std::vector<std::string>& arguments) {
         const char* text = output.UTF8String;
         return {task.terminationStatus, text == nullptr ? std::string{} : std::string(text)};
     }
+}
+
+LaunchctlResult runLaunchctl(const std::vector<std::string>& arguments) {
+    return runTool("/bin/launchctl", arguments);
+}
+
+constexpr const char* kSigningIdentity = "minfwm Local Signing";
+
+// Same steps as tools/create_signing_identity.sh, embedded so Homebrew
+// installs (which ship no tools/) can create the identity too.
+constexpr const char* kCreateIdentityScript = R"SH(set -eu
+NAME="$1"
+KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+cat > "$WORK/cert.cnf" <<CNF
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = $NAME
+[ext]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+CNF
+/usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+    -keyout "$WORK/key.pem" -out "$WORK/cert.pem" -config "$WORK/cert.cnf" 2>/dev/null
+/usr/bin/openssl pkcs12 -export -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
+    -out "$WORK/id.p12" -passout pass:minfwm
+/usr/bin/security import "$WORK/id.p12" -k "$KEYCHAIN" -P minfwm -T /usr/bin/codesign
+)SH";
+
+// TCC keys an ad-hoc signed binary by its cdhash, so every rebuild or
+// `brew upgrade` would ask for Accessibility again. Re-sign the installed
+// binary with a persistent per-user identity so the designated requirement,
+// and with it the grant, stays the same across versions.
+bool ensureStableSignature(const std::filesystem::path& executablePath, std::string& error) {
+    std::error_code pathError;
+    const auto binary = std::filesystem::canonical(executablePath, pathError);
+    if (pathError) {
+        error = "could not resolve " + executablePath.string();
+        return false;
+    }
+    const auto current = runTool("/usr/bin/codesign", {"-d", "-r-", binary.string()});
+    if (current.status == 0 && current.output.find("certificate leaf") != std::string::npos) return true;
+
+    if (runTool("/usr/bin/security", {"find-certificate", "-c", kSigningIdentity}).status != 0) {
+        const auto created = runTool("/bin/sh", {"-c", kCreateIdentityScript, "sh", kSigningIdentity});
+        if (created.status != 0) {
+            error = "could not create the '" + std::string(kSigningIdentity) + "' signing identity: " + created.output;
+            return false;
+        }
+    }
+    const auto signedResult = runTool("/usr/bin/codesign",
+        {"--force", "--sign", kSigningIdentity, "--identifier", kLabel, binary.string()});
+    if (signedResult.status != 0) {
+        error = "could not sign " + binary.string() + ": " + signedResult.output;
+        return false;
+    }
+    return true;
 }
 
 std::string serviceTarget() {
@@ -189,6 +252,14 @@ bool controlDaemon(std::string_view action, std::string& error) {
     std::filesystem::path plistPath;
     const bool needsAgent = action == "start" || action == "restart" || action == "enable";
     if (needsAgent && !executablePaths(executablePath, plistPath, error)) return false;
+    if (needsAgent) {
+        // A failed re-sign is not fatal: the daemon still runs, macOS only
+        // asks for Accessibility again after the next upgrade.
+        std::string signError;
+        if (!ensureStableSignature(executablePath, signError)) {
+            std::cerr << "minfwm: " << signError << std::endl;
+        }
+    }
     if (needsAgent && !installLaunchAgent(executablePath, plistPath, error)) return false;
 
     const std::string target = serviceTarget();
