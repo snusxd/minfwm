@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(minfwm LANGUAGES CXX OBJCXX OBJC)
 
+# The daemon runs a per-frame render loop; an unoptimized build stutters while
+# dragging. Default single-config builds to Release unless asked otherwise.
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 execute_process(
     COMMAND git rev-parse --short HEAD
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
