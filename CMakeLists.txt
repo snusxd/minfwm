@@ -108,6 +108,30 @@ target_compile_definitions(minfwm PRIVATE
     MINFWM_BUILD_DIR="${CMAKE_BINARY_DIR}"
 )
 
+# TCC keys an ad-hoc signature by cdhash, so each rebuild would re-prompt for
+# Accessibility. Signing with a persistent identity (tools/create_signing_identity.sh)
+# keeps the designated requirement, and therefore the grant, stable.
+set(MINFWM_CODESIGN_IDENTITY "minfwm Local Signing" CACHE STRING
+    "Code-signing identity for the minfwm binary; empty keeps the ad-hoc linker signature")
+if(MINFWM_CODESIGN_IDENTITY)
+    execute_process(
+        COMMAND security find-certificate -c "${MINFWM_CODESIGN_IDENTITY}"
+        RESULT_VARIABLE MINFWM_CODESIGN_LOOKUP
+        OUTPUT_QUIET ERROR_QUIET
+    )
+    if(MINFWM_CODESIGN_LOOKUP EQUAL 0)
+        add_custom_command(TARGET minfwm POST_BUILD
+            COMMAND codesign --force --sign "${MINFWM_CODESIGN_IDENTITY}"
+                --identifier com.minfwm.daemon "$<TARGET_FILE:minfwm>"
+            VERBATIM
+        )
+    else()
+        message(WARNING "Signing identity '${MINFWM_CODESIGN_IDENTITY}' not found; "
+            "minfwm stays ad-hoc signed and macOS will ask for Accessibility after every rebuild. "
+            "Run tools/create_signing_identity.sh and re-run cmake.")
+    endif()
+endif()
+
 # Run explicitly on a desktop session; never run as part of automated CTest.
 add_executable(minfwm_manual_window_move EXCLUDE_FROM_ALL tools/ManualWindowMove.mm)
 target_link_libraries(minfwm_manual_window_move PRIVATE minfwm_daemon_runtime)

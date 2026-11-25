@@ -20,6 +20,7 @@ brew install snusxd/minfwm/minfwm
 
 ### Enable & Start
 
+1. Run `tools/create_signing_identity.sh` once before the first build. The build signs `minfwm` with this persistent identity so the Accessibility grant survives rebuilds; an ad-hoc signed binary is re-prompted after every build.
 1. Grant `minfwm` Accessibility permission in **System Settings → Privacy & Security → Accessibility**.
 2. Enable and start the background service:
 
