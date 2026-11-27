@@ -17,6 +17,7 @@ bash "$ROOT_DIR/app/Scripts/package_app.sh" >/dev/null
 test -d "$TMP_WORK/rel/minfWM.app"
 test -x "$TMP_WORK/rel/minfWM.app/Contents/MacOS/Minfwm"
 test -x "$TMP_WORK/rel/minfWM.app/Contents/Resources/minfwm"
+test -f "$TMP_WORK/rel/minfWM.app/Contents/Resources/AppIcon.icns"
 test -f "$TMP_WORK/rel/minfWM.app/Contents/Info.plist"
 
 # 2. Verify Info.plist version stripping (v1.2 -> 1.2) and bundle ID

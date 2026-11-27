@@ -64,8 +64,12 @@ if [[ -d "$ICON_SRC" && -x "$ICTOOL" ]]; then
   cp "$MASTER_1024" "$ICONSET_DIR/icon_512x512@2x.png"
   iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AppIcon.icns"
   rm -rf "$ICON_WORK"
+elif [[ -f "$ROOT_DIR/assets/AppIcon.icns" ]]; then
+  echo "==> Copying precompiled assets/AppIcon.icns..."
+  cp "$ROOT_DIR/assets/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 else
-  echo "==> Skipping icon compilation (ictool or assets/minfwm.icon not found)"
+  echo "ERROR: neither ictool nor assets/AppIcon.icns found" >&2
+  exit 1
 fi
 
 cat > "$CONTENTS_DIR/Info.plist" <<PLIST
