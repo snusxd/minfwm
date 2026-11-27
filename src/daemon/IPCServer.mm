@@ -230,6 +230,8 @@ void IPCServer::run() {
                 }
                 continue;
             }
+            int noSigPipe = 1;
+            (void)::setsockopt(clientFd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, sizeof(noSigPipe));
             handleClient(clientFd);
         }
     }
