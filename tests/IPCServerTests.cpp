@@ -83,7 +83,9 @@ int main() {
         expect(descriptorCount() == descriptorsBeforeFailure,
                "repeated failed startup and stop release all wakeup descriptors");
         expect(exists(path), "failed server stop does not unlink the running server socket");
-        sendInvalidRequest(path, false);
+        for (int i = 0; i < 16; ++i) {
+            sendInvalidRequest(path, false);
+        }
         sendInvalidRequest(path, true);
         minfwm::IPCClient client;
         const auto beforeReady = client.sendMessage(minfwm::makePingRequest());

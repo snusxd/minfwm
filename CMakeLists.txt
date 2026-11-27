@@ -232,4 +232,9 @@ if(BUILD_TESTING)
     target_include_directories(minfwm_yabai_sa_tests PRIVATE src/daemon)
     target_link_libraries(minfwm_yabai_sa_tests PRIVATE minfwm_window_runtime minfwm_common ${COMMON_LIBS})
     add_test(NAME minfwm_yabai_sa_tests COMMAND minfwm_yabai_sa_tests)
+
+    add_test(NAME minfwm_service_cli_tests
+        COMMAND bash "${CMAKE_SOURCE_DIR}/tests/ServiceCliTests.sh" $<TARGET_FILE:minfwm>)
+    add_test(NAME minfwm_package_app_tests
+        COMMAND bash "${CMAKE_SOURCE_DIR}/tests/PackageAppTests.sh" "${CMAKE_SOURCE_DIR}" $<TARGET_FILE:minfwm>)
 endif()

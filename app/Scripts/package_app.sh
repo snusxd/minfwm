@@ -7,6 +7,12 @@ ARCH="${ARCH:-$(uname -m)}"
 APP_VERSION="${APP_VERSION:-0.1.0}"
 OUT_APP="${OUT_APP:-$ROOT_DIR/build/minfWM.app}"
 MINFWM_BIN="${MINFWM_BIN:-$ROOT_DIR/build/minfwm}"
+if [[ "$OUT_APP" != /* ]]; then
+  OUT_APP="$PWD/$OUT_APP"
+fi
+if [[ "$MINFWM_BIN" != /* ]]; then
+  MINFWM_BIN="$PWD/$MINFWM_BIN"
+fi
 CONTENTS_DIR="$OUT_APP/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
