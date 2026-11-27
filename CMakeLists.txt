@@ -24,8 +24,9 @@ include(CTest)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Optimization for ARM64
-if(APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+# Optimization for ARM64 (only when actually targeting arm64, not x86_64 cross-builds)
+if(APPLE AND ((CMAKE_OSX_ARCHITECTURES STREQUAL "arm64") OR
+              (NOT CMAKE_OSX_ARCHITECTURES AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")))
     add_compile_options("-mcpu=apple-m1")
 endif()
 
