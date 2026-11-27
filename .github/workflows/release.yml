@@ -76,7 +76,7 @@ jobs:
           mkdir -p release
 
           for arch in arm64 x86_64; do
-            stage="release/dmg-${arch}"
+            stage="$PWD/release/dmg-${arch}"
             rm -rf "$stage"
             mkdir -p "$stage"
 
@@ -85,6 +85,10 @@ jobs:
             MINFWM_BIN="$PWD/build-${arch}/minfwm" \
             OUT_APP="$stage/minfWM.app" \
             bash app/Scripts/package_app.sh
+
+            test -d "$stage/minfWM.app"
+            test -x "$stage/minfWM.app/Contents/MacOS/Minfwm"
+            test -x "$stage/minfWM.app/Contents/Resources/minfwm"
 
             ln -s /Applications "$stage/Applications"
 
