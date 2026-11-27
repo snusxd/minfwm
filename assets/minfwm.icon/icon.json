@@ -1,0 +1,167 @@
+{
+  "color-space-for-untagged-svg-colors": "display-p3",
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "display-p3:0.890,0.840,0.960,1.000",
+          "display-p3:0.975,0.960,0.995,1.000"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 1.0
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 0.0
+          }
+        }
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "srgb:0.039,0.004,0.043,1.000",
+          "srgb:0.141,0.031,0.184,1.000"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 1.0
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 0.0
+          }
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "blur": 0.08,
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "value": {
+                "linear-gradient": [
+                  "display-p3:0.560,0.220,0.960,0.820",
+                  "display-p3:0.340,0.080,0.740,0.680"
+                ]
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "linear-gradient": [
+                  "display-p3:0.780,0.520,1.000,0.720",
+                  "display-p3:0.480,0.200,0.880,0.520"
+                ]
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "windows-fill.svg",
+          "name": "Intersection Fill"
+        }
+      ],
+      "lighting": "individual",
+      "name": "Intersection Fill",
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.24
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.56
+      }
+    },
+    {
+      "blur": 0.06,
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "value": {
+                "linear-gradient": [
+                  "display-p3:0.620,0.340,0.960,0.840",
+                  "display-p3:0.420,0.160,0.800,0.720"
+                ]
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "linear-gradient": [
+                  "display-p3:0.900,0.780,1.000,0.860",
+                  "display-p3:0.680,0.480,0.960,0.720"
+                ]
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "windows-outline.svg",
+          "name": "Windows Outline"
+        }
+      ],
+      "lighting": "individual",
+      "name": "Windows Outline",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.18
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.48
+      }
+    },
+    {
+      "blur": 0.16,
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "value": {
+                "linear-gradient": [
+                  "display-p3:0.720,0.540,0.960,0.560",
+                  "display-p3:0.540,0.340,0.860,0.420"
+                ]
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "linear-gradient": [
+                  "display-p3:0.540,0.300,0.880,0.440",
+                  "display-p3:0.320,0.120,0.620,0.300"
+                ]
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "viewport.svg",
+          "name": "Viewport"
+        }
+      ],
+      "lighting": "individual",
+      "name": "Viewport",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.16
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.72
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

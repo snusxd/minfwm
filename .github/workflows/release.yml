@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build and publish macOS release
+    name: Build and publish macOS App DMGs
     if: github.ref == 'refs/heads/main'
     runs-on: macos-15
     steps:
@@ -20,6 +20,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
       - name: Calculate next release version
         id: version
         shell: bash
@@ -43,19 +44,66 @@ jobs:
           tag="v${major}.$((latest + 1))"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Next release: $tag"
-      - name: Configure
+
+      - name: Build and test Apple Silicon (arm64)
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DMINFWM_BUILD_VERSION="$RELEASE_TAG"
-      - run: cmake --build build --parallel
-      - run: ctest --test-dir build --output-on-failure
-      - name: Package release binaries
         run: |
+          set -euo pipefail
+          cmake -S . -B build-arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DMINFWM_BUILD_VERSION="$RELEASE_TAG"
+          cmake --build build-arm64 --parallel
+          ctest --test-dir build-arm64 --output-on-failure
+
+      - name: Build Intel (x86_64)
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-x86_64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DMINFWM_BUILD_VERSION="$RELEASE_TAG"
+          cmake --build build-x86_64 --parallel --target minfwm
+
+      - name: Package DMGs (Apple Silicon & Intel)
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
           mkdir -p release
-          tar -C build -czf release/minfwm-macos.tar.gz minfwm
-          shasum -a 256 release/minfwm-macos.tar.gz > release/SHA256SUMS
+
+          for arch in arm64 x86_64; do
+            stage="release/dmg-${arch}"
+            rm -rf "$stage"
+            mkdir -p "$stage"
+
+            ARCH="$arch" \
+            APP_VERSION="$RELEASE_TAG" \
+            MINFWM_BIN="$PWD/build-${arch}/minfwm" \
+            OUT_APP="$stage/minfWM.app" \
+            bash app/Scripts/package_app.sh
+
+            ln -s /Applications "$stage/Applications"
+
+            hdiutil create \
+              -volname "minfWM" \
+              -srcfolder "$stage" \
+              -ov \
+              -format UDZO \
+              "release/minfWM-${arch}.dmg"
+          done
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: gh release create "$RELEASE_TAG" release/minfwm-macos.tar.gz release/SHA256SUMS --target "$GITHUB_SHA" --title "$RELEASE_TAG" --generate-notes
+        run: |
+          gh release create "$RELEASE_TAG" \
+            release/minfWM-arm64.dmg \
+            release/minfWM-x86_64.dmg \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG" \
+            --generate-notes

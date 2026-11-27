@@ -1,8 +1,8 @@
-# minfwm
+<h1><img src="assets/icon-dark.svg" alt="minfWM icon" width="40" align="absmiddle" /> minfWM</h1>
 
 ![minfwm preview](docs/images/preview.png)
 
-`minfwm` is an infinite 2D window canvas for macOS 14+. It turns your desktop into an endless virtual workspace that seamlessly spans across all connected displays.
+`minfWM` stands for **m**acOS **inf**inite **W**indow **M**anager – an infinite 2D window canvas for macOS 14+. It turns your desktop into an endless virtual workspace that seamlessly spans across all connected displays.
 
 > [!WARNING]
 > This project is completely vibecoded.
@@ -10,38 +10,34 @@
 ## Installation & Quick Start
 
 > [!IMPORTANT]
-> `minfwm` requires the custom Yabai Scripting Addition to position windows beyond standard display boundaries. Setup requires disabling SIP; see the [Yabai Integration Guide](https://github.com/snusxd/minfwm/wiki/Yabai-Integration).
+> `minfWM` requires the custom Yabai Scripting Addition to position windows beyond standard display boundaries. Setup requires disabling SIP; see the [Yabai Integration Guide](https://github.com/snusxd/minfwm/wiki/Yabai-Integration).
 
-### Install via Homebrew
+### Download
 
-```sh
-brew install snusxd/minfwm/minfwm
-```
+| Architecture | Quick Download |
+| --- | --- |
+| **Apple Silicon** (M1 / M2 / M3 / M4) | [**Download minfWM-arm64.dmg**](https://github.com/snusxd/minfwm/releases/latest/download/minfWM-arm64.dmg) |
+| **Intel** (x86_64) | [**Download minfWM-x86_64.dmg**](https://github.com/snusxd/minfwm/releases/latest/download/minfWM-x86_64.dmg) |
 
-### Enable & Start
+### Setup
 
-1. Grant `minfwm` Accessibility permission in **System Settings → Privacy & Security → Accessibility**.
-2. Enable and start the background service:
+1. Open the downloaded `.dmg` and drag **minfWM.app** into **Applications**.
+2. Launch **minfWM** and complete the onboarding steps:
+   - Grant Accessibility permission in **System Settings → Privacy & Security → Accessibility**.
+   - Start the background service from the app settings or menu bar.
 
-```sh
-minfwm enable
-minfwm status
-```
-
-*(`minfwm start`/`restart` re-signs the installed binary with a per-user "minfwm Local Signing" identity, created on first use, so the grant survives rebuilds and `brew upgrade`. Source builds sign with it automatically once it exists; `tools/create_signing_identity.sh` creates it ahead of time.)*
-
-*(If the daemon starts before Accessibility permission is granted, it will wait and start automatically once granted).*
+*(If the service starts before Accessibility permission is granted, it will wait and start automatically once granted).*
 
 ### Useful Commands
 
 | Command | Action |
 | --- | --- |
-| `minfwm status` | Check if the daemon is running |
-| `minfwm start` / `stop` / `restart` | Control the background daemon |
+| `minfwm status` | Check if the service is running |
+| `minfwm start` / `stop` / `restart` | Control the background service |
 | `minfwm reload` | Reload `~/.config/minfwm/minfwm.toml` |
 | `minfwm list displays` | List connected displays |
 | `minfwm camera move --x 100 --y 0` | Pan the camera via CLI |
-| `minfwm disable` | Disable auto-start on login and stop the daemon |
+| `minfwm disable` | Disable auto-start on login and stop the service |
 
 ## Build from Source
 
@@ -51,9 +47,9 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-For foreground testing: `./build/minfwm daemon`.
+For foreground testing: `./build/minfwm service`.
 
-During active development, run `./build/minfwm dev-update` to rebuild the binary, preserve open window positions, and smoothly restart the daemon.
+During active development, run `./build/minfwm dev-update` to rebuild the binary, preserve open window positions, and smoothly restart the service.
 
 ## Features & Documentation
 

@@ -385,6 +385,81 @@ void WindowManager::shutdown() {
     m_overviewPreviews.reset();
     if (!m_initialized) return;
 
+    const auto config = ConfigManager::instance().snapshot();
+    if (config.animationsEnabled) {
+        struct ShutdownAnimation {
+            std::shared_ptr<ClientWindow> window;
+            float startX = 0.0f;
+            float startY = 0.0f;
+            float startScale = 1.0f;
+            core::Rect targetRect{};
+        };
+
+        std::vector<ShutdownAnimation> animating;
+        for (auto& display : m_displays) {
+            const auto& state = display->state();
+            for (const auto& window : display->windowPool().windows()) {
+                if (!window || !window->ref() || !window->originalPhysicalRect) continue;
+                if (m_hiddenApplications.contains(window->pid()) || window->applicationSuspended) continue;
+
+                const core::Rect target = *window->originalPhysicalRect;
+                float startX = target.x;
+                float startY = target.y;
+                float startScale = 1.0f;
+                if (std::isfinite(window->lastRenderedX) && std::isfinite(window->lastRenderedY)) {
+                    startX = window->lastRenderedX;
+                    startY = window->lastRenderedY;
+                    if (std::isfinite(window->lastRenderedScale) && window->lastRenderedScale > 0.01f) {
+                        startScale = window->lastRenderedScale;
+                    }
+                } else {
+                    const core::Rect projected = state.virtualToPhysical(window->virtualRect);
+                    if (std::isfinite(projected.x) && std::isfinite(projected.y)) {
+                        startX = projected.x;
+                        startY = projected.y;
+                    }
+                    if (std::isfinite(state.scale()) && state.scale() > 0.01f) {
+                        startScale = state.scale();
+                    }
+                }
+
+                const float distance = std::hypot(target.x - startX, target.y - startY);
+                if (distance > 1.0f || std::fabs(1.0f - startScale) > 0.005f) {
+                    window->preferNativePosition = false;
+                    animating.push_back(ShutdownAnimation{window, startX, startY, startScale, target});
+                }
+            }
+        }
+
+        if (!animating.empty()) {
+            const double speed = std::max(0.1, static_cast<double>(config.animationSpeed));
+            const double duration = std::clamp(0.24 / speed, 0.08, 0.6);
+            const double startTime = CACurrentMediaTime();
+            constexpr double frameStep = 1.0 / 120.0;
+
+            while (true) {
+                const double now = CACurrentMediaTime();
+                const double progress = std::clamp((now - startTime) / duration, 0.0, 1.0);
+                const float eased = 1.0f - std::pow(1.0f - static_cast<float>(progress), 3.0f);
+
+                for (const auto& item : animating) {
+                    const float x = item.startX + (item.targetRect.x - item.startX) * eased;
+                    const float y = item.startY + (item.targetRect.y - item.startY) * eased;
+                    const float scale = item.startScale + (1.0f - item.startScale) * eased;
+                    const core::Rect rect{x, y, item.targetRect.w, item.targetRect.h};
+                    if (std::fabs(scale - 1.0f) > 0.002f) {
+                        (void)m_renderer.renderOverview(*item.window, rect, scale, now);
+                    } else {
+                        (void)m_renderer.render(*item.window, rect, now);
+                    }
+                }
+
+                if (progress >= 1.0) break;
+                CFRunLoopRunInMode(kCFRunLoopDefaultMode, frameStep, false);
+            }
+        }
+    }
+
     for (auto& display : m_displays) {
         for (const auto& window : display->windowPool().windows()) {
             if (!window || !window->ref() || !window->originalPhysicalRect) continue;

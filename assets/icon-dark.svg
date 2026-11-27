@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg-dark" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0%" stop-color="#0a010b"/>
+      <stop offset="100%" stop-color="#24082f"/>
+    </linearGradient>
+    <linearGradient id="viewport-dark" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#8a4de0" stop-opacity="0.44"/>
+      <stop offset="100%" stop-color="#521f9e" stop-opacity="0.30"/>
+    </linearGradient>
+    <linearGradient id="outline-dark" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#e6c7ff" stop-opacity="0.86"/>
+      <stop offset="100%" stop-color="#ad7af5" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="fill-dark" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#c785ff" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#7a33e0" stop-opacity="0.52"/>
+    </linearGradient>
+    <clipPath id="viewport-clip">
+      <rect x="286" y="284" width="554" height="456" rx="76"/>
+    </clipPath>
+    <clipPath id="outside-viewport">
+      <rect x="0" y="0" width="286" height="1024"/>
+    </clipPath>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#bg-dark)"/>
+  <rect x="286" y="284" width="554" height="456" rx="76" fill="url(#viewport-dark)"/>
+  <g clip-path="url(#outside-viewport)">
+    <path fill="url(#outline-dark)" fill-rule="evenodd" d="M218,346 H392 A34,34 0 0 1 426,380 V474 A34,34 0 0 1 392,508 H218 A34,34 0 0 1 184,474 V380 A34,34 0 0 1 218,346 Z M218,368 H392 A12,12 0 0 1 404,380 V474 A12,12 0 0 1 392,486 H218 A12,12 0 0 1 206,474 V380 A12,12 0 0 1 218,368 Z"/>
+    <path fill="url(#outline-dark)" fill-rule="evenodd" d="M262,544 H414 A34,34 0 0 1 448,578 V652 A34,34 0 0 1 414,686 H262 A34,34 0 0 1 228,652 V578 A34,34 0 0 1 262,544 Z M262,566 H414 A12,12 0 0 1 426,578 V652 A12,12 0 0 1 414,664 H262 A12,12 0 0 1 250,652 V578 A12,12 0 0 1 262,566 Z"/>
+  </g>
+  <g fill="url(#fill-dark)" clip-path="url(#viewport-clip)">
+    <rect x="184" y="346" width="242" height="162" rx="34"/>
+    <rect x="228" y="544" width="220" height="142" rx="34"/>
+    <rect x="484" y="372" width="194" height="284" rx="38"/>
+  </g>
+</svg>

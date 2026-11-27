@@ -1,5 +1,7 @@
 # --- Build System ---
 build/
+.build/
+release/
 bin/
 out/
 Makefile

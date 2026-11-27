@@ -168,7 +168,7 @@ bool installLaunchAgent(const std::filesystem::path& executablePath,
     @autoreleasepool {
         NSDictionary* plist = @{
             @"Label": [NSString stringWithUTF8String:kLabel],
-            @"ProgramArguments": @[[NSString stringWithUTF8String:executablePath.c_str()], @"daemon"],
+            @"ProgramArguments": @[[NSString stringWithUTF8String:executablePath.c_str()], @"service"],
             @"RunAtLoad": @YES,
             // Restart after unexpected failures, but don't loop on setup
             // failures such as missing Accessibility permission or SA support.
@@ -297,7 +297,7 @@ bool controlDaemon(std::string_view action, std::string& error) {
         if (wasDisabled) {
             const auto restored = runLaunchctl({"disable", target});
             if (restored.status != 0) {
-                if (started) error = "daemon started, but its disabled-at-login setting could not be restored";
+                if (started) error = "service started, but its disabled-at-login setting could not be restored";
                 else error += "; could not restore disabled-at-login setting";
                 return false;
             }
@@ -316,7 +316,7 @@ bool controlDaemon(std::string_view action, std::string& error) {
         if (wasDisabled) {
             const auto restored = runLaunchctl({"disable", target});
             if (restored.status != 0) {
-                if (started) error = "daemon restarted, but its disabled-at-login setting could not be restored";
+                if (started) error = "service restarted, but its disabled-at-login setting could not be restored";
                 else error += "; could not restore disabled-at-login setting";
                 return false;
             }
@@ -324,7 +324,7 @@ bool controlDaemon(std::string_view action, std::string& error) {
         return started;
     }
 
-    error = "unsupported daemon action";
+    error = "unsupported service action";
     return false;
 }
 
@@ -387,7 +387,7 @@ bool stopForegroundDaemon(pid_t pid, std::string& error) {
         return false;
     }
     if (::kill(pid, SIGTERM) != 0 && errno != ESRCH) {
-        error = "could not stop foreground daemon PID " + std::to_string(pid);
+        error = "could not stop foreground service PID " + std::to_string(pid);
         return false;
     }
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -395,7 +395,7 @@ bool stopForegroundDaemon(pid_t pid, std::string& error) {
         if (::kill(pid, 0) != 0 && errno == ESRCH) return true;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     } while (std::chrono::steady_clock::now() < deadline);
-    error = "foreground daemon PID " + std::to_string(pid) + " did not exit within 10 seconds";
+    error = "foreground service PID " + std::to_string(pid) + " did not exit within 10 seconds";
     return false;
 }
 
@@ -407,26 +407,26 @@ bool startForegroundDaemon(pid_t& pid, std::string& error) {
         if (![[NSFileManager defaultManager] createDirectoryAtPath:logDirectory
                                        withIntermediateDirectories:YES
                                                         attributes:nil error:&fileError]) {
-            error = "could not create daemon log directory";
+            error = "could not create service log directory";
             return false;
         }
         NSString* logPath = [logDirectory stringByAppendingPathComponent:@"minfwm.log"];
         const int logFd = ::open(logPath.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND, 0600);
         if (logFd < 0) {
-            error = "could not open daemon log file";
+            error = "could not open service log file";
             return false;
         }
         NSFileHandle* logHandle = [[NSFileHandle alloc] initWithFileDescriptor:logFd closeOnDealloc:YES];
         NSTask* task = [[NSTask alloc] init];
         task.executableURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:executable.c_str()]];
-        task.arguments = @[@"daemon"];
+        task.arguments = @[@"service"];
         task.standardInput = [NSFileHandle fileHandleWithNullDevice];
         task.standardOutput = logHandle;
         task.standardError = logHandle;
         NSError* launchError = nil;
         if (![task launchAndReturnError:&launchError]) {
             const char* description = launchError.localizedDescription.UTF8String;
-            error = description == nullptr ? "could not launch foreground daemon" : description;
+            error = description == nullptr ? "could not launch foreground service" : description;
             [logHandle closeFile];
             return false;
         }

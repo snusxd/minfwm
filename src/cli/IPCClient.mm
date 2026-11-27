@@ -50,7 +50,7 @@ IPCClient::Result IPCClient::sendMessage(const Request& request, pid_t expectedP
         return Result{false, {}, "socket path is too long"};
     }
     if (!isTrustedSocketPath(path)) {
-        return Result{false, {}, "daemon socket is missing or has unsafe ownership"};
+        return Result{false, {}, "service socket is missing or has unsafe ownership"};
     }
 
     struct sockaddr_un addr{};
@@ -58,17 +58,17 @@ IPCClient::Result IPCClient::sendMessage(const Request& request, pid_t expectedP
     std::strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
 
     if (connect(clientFd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == -1) {
-        return Result{false, {}, "failed to connect to daemon"};
+        return Result{false, {}, "failed to connect to service"};
     }
 
     pid_t actualPeerPid = 0;
     socklen_t peerPidLength = sizeof(actualPeerPid);
     if (::getsockopt(clientFd, SOL_LOCAL, LOCAL_PEERPID, &actualPeerPid, &peerPidLength) != 0 ||
         peerPidLength != sizeof(actualPeerPid) || actualPeerPid <= 0) {
-        return Result{false, {}, "could not identify daemon socket owner"};
+        return Result{false, {}, "could not identify service socket owner"};
     }
     if (expectedPeerPid != 0 && actualPeerPid != expectedPeerPid) {
-        return Result{false, {}, "daemon socket belongs to PID " +
+        return Result{false, {}, "service socket belongs to PID " +
                       std::to_string(actualPeerPid) + ", not expected PID " +
                       std::to_string(expectedPeerPid)};
     }
@@ -79,7 +79,7 @@ IPCClient::Result IPCClient::sendMessage(const Request& request, pid_t expectedP
 
     Response response;
     if (!readResponse(clientFd, response)) {
-        return Result{false, {}, "invalid or missing daemon response"};
+        return Result{false, {}, "invalid or missing service response"};
     }
     return Result{true, response, {}, actualPeerPid};
 }

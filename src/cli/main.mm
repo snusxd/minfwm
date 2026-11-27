@@ -59,7 +59,7 @@ const char* errorCodeName(minfwm::ErrorCode error) {
 }
 
 void printUsage() {
-    std::cerr << "Usage: minfwm [daemon|start|stop|restart|dev-update|reload|enable|disable|status|list displays|version [--dev]] | camera move --x <value> --y <value>\n";
+    std::cerr << "Usage: minfwm [service|start|stop|restart|dev-update|reload|enable|disable|status|list displays|version [--dev]] | camera move --x <value> --y <value>\n";
 }
 
 std::string latestLocalCommit() {
@@ -150,7 +150,7 @@ void attachToDaemonLogs() {
 
     g_detachFromLogs = 0;
     const auto previousHandler = std::signal(SIGINT, requestLogDetach);
-    std::cout << "minfwm: attached to daemon logs; press Ctrl-C to detach (daemon keeps running)"
+    std::cout << "minfwm: attached to service logs; press Ctrl-C to detach (service keeps running)"
               << std::endl;
     while (g_detachFromLogs == 0) {
         std::error_code currentSizeError;
@@ -178,7 +178,7 @@ void attachToDaemonLogs() {
         std::this_thread::sleep_for(std::chrono::milliseconds(150));
     }
     std::signal(SIGINT, previousHandler);
-    std::cout << "minfwm: detached from daemon logs; daemon is still running" << std::endl;
+    std::cout << "minfwm: detached from service logs; service is still running" << std::endl;
 }
 
 std::uintmax_t daemonLogSize() {
@@ -195,13 +195,13 @@ std::string startupIssueSince(std::uintmax_t initialLogSize) {
     std::string line;
     std::string failure;
     while (std::getline(log, line)) {
-        if (line.find("minfwm daemon: Accessibility permission is not active") != std::string::npos ||
-            line.find("minfwm daemon: waiting for Accessibility permission") != std::string::npos ||
-            line.find("minfwm daemon: required Yabai Scripting Addition is unavailable") != std::string::npos ||
-            line.find("minfwm daemon: failed to start IPC server") != std::string::npos ||
-            line.find("minfwm daemon: failed to bound Accessibility messaging timeout") != std::string::npos) {
+        if (line.find("minfwm service: Accessibility permission is not active") != std::string::npos ||
+            line.find("minfwm service: waiting for Accessibility permission") != std::string::npos ||
+            line.find("minfwm service: required Yabai Scripting Addition is unavailable") != std::string::npos ||
+            line.find("minfwm service: failed to start IPC server") != std::string::npos ||
+            line.find("minfwm service: failed to bound Accessibility messaging timeout") != std::string::npos) {
             failure = line;
-        } else if (line.find("minfwm daemon: Accessibility permission is active") != std::string::npos) {
+        } else if (line.find("minfwm service: Accessibility permission is active") != std::string::npos) {
             failure.clear();
         }
     }
@@ -219,14 +219,14 @@ bool waitForDaemonReady(std::uintmax_t initialLogSize, std::optional<pid_t> fore
             if (result.transportSucceeded && result.response.status == minfwm::ResponseStatus::OK) {
                 return true;
             }
-            error = result.transportSucceeded ? "daemon is not ready yet" : result.error;
+            error = result.transportSucceeded ? "service is not ready yet" : result.error;
         } else {
             error = "LaunchAgent is not running";
         }
         const auto issue = startupIssueSince(initialLogSize);
         if (!issue.empty()) {
             if (issue.find("Accessibility permission") != std::string::npos) {
-                error = std::string(foregroundPid.has_value() ? "foreground daemon" : "LaunchAgent") +
+                error = std::string(foregroundPid.has_value() ? "foreground service" : "LaunchAgent") +
                         " needs Accessibility permission for " +
                         (std::filesystem::path(MINFWM_BUILD_DIR) / "minfwm").string() +
                         ". Add this executable in System Settings > Privacy & Security > "
@@ -240,7 +240,7 @@ bool waitForDaemonReady(std::uintmax_t initialLogSize, std::optional<pid_t> fore
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     } while (std::chrono::steady_clock::now() < deadline);
     if (error.find("needs Accessibility permission") == std::string::npos) {
-        error = "daemon did not become ready within 10 seconds: " + error;
+        error = "service did not become ready within 10 seconds: " + error;
     }
     error += " (log: ~/Library/Logs/minfwm.log)";
     return false;
@@ -251,9 +251,10 @@ bool waitForDaemonReady(std::uintmax_t initialLogSize, std::optional<pid_t> fore
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         signal(SIGPIPE, SIG_IGN);
-        if (argc > 1 && argv[1] != nullptr && std::string_view(argv[1]) == "daemon") {
+        if (argc > 1 && argv[1] != nullptr &&
+            (std::string_view(argv[1]) == "service" || std::string_view(argv[1]) == "daemon")) {
             if (argc != 2) {
-                std::cerr << "minfwm: daemon does not accept arguments\n";
+                std::cerr << "minfwm: service does not accept arguments\n";
                 return 2;
             }
             return runDaemon();
@@ -267,7 +268,7 @@ int main(int argc, const char * argv[]) {
 
         const auto command = parsed.command->command;
         if (command == minfwm::ParsedCommandLine::Command::STATUS) {
-            std::cout << "minfwm daemon: " << minfwm::daemonStatus() << '\n';
+            std::cout << "minfwm service: " << minfwm::daemonStatus() << '\n';
             return 0;
         }
         if (command == minfwm::ParsedCommandLine::Command::LIST_DISPLAYS) {
@@ -384,16 +385,16 @@ int main(int argc, const char * argv[]) {
                                  command == minfwm::ParsedCommandLine::Command::STOP ? "stop" :
                                  command == minfwm::ParsedCommandLine::Command::RESTART ? "restart" :
                                  command == minfwm::ParsedCommandLine::Command::ENABLE ? "enable" : "disable";
-            const char* progress = command == minfwm::ParsedCommandLine::Command::START ? "starting daemon..." :
-                                   command == minfwm::ParsedCommandLine::Command::STOP ? "stopping daemon..." :
-                                   command == minfwm::ParsedCommandLine::Command::RESTART ? "restarting daemon..." :
-                                   command == minfwm::ParsedCommandLine::Command::ENABLE ? "enabling daemon..." :
-                                                                                          "disabling daemon...";
-            const char* success = command == minfwm::ParsedCommandLine::Command::START ? "daemon started successfully" :
-                                  command == minfwm::ParsedCommandLine::Command::STOP ? "daemon stopped successfully" :
-                                  command == minfwm::ParsedCommandLine::Command::RESTART ? "daemon restarted successfully" :
-                                  command == minfwm::ParsedCommandLine::Command::ENABLE ? "daemon enabled successfully" :
-                                                                                         "daemon disabled successfully";
+            const char* progress = command == minfwm::ParsedCommandLine::Command::START ? "starting service..." :
+                                   command == minfwm::ParsedCommandLine::Command::STOP ? "stopping service..." :
+                                   command == minfwm::ParsedCommandLine::Command::RESTART ? "restarting service..." :
+                                   command == minfwm::ParsedCommandLine::Command::ENABLE ? "enabling service..." :
+                                                                                          "disabling service...";
+            const char* success = command == minfwm::ParsedCommandLine::Command::START ? "service started successfully" :
+                                  command == minfwm::ParsedCommandLine::Command::STOP ? "service stopped successfully" :
+                                  command == minfwm::ParsedCommandLine::Command::RESTART ? "service restarted successfully" :
+                                  command == minfwm::ParsedCommandLine::Command::ENABLE ? "service enabled successfully" :
+                                                                                         "service disabled successfully";
             std::cout << "minfwm: " << progress << std::endl;
             std::string error;
             if (!minfwm::controlDaemon(action, error)) {
@@ -413,7 +414,7 @@ int main(int argc, const char * argv[]) {
         }
 
         if (isReload) {
-            std::cout << "minfwm: reloading daemon configuration..." << std::endl;
+            std::cout << "minfwm: reloading service configuration..." << std::endl;
         } else {
             std::cout << "minfwm: moving camera (x=" << parsed.command->x
                       << ", y=" << parsed.command->y << ")..." << std::endl;
@@ -427,11 +428,11 @@ int main(int argc, const char * argv[]) {
             return 1;
         }
         if (result.response.status != minfwm::ResponseStatus::OK) {
-            std::cerr << "minfwm: daemon rejected request ("
+            std::cerr << "minfwm: service rejected request ("
                       << errorCodeName(result.response.error) << ")\n";
             return 1;
         }
-        std::cout << (isReload ? "minfwm: daemon configuration reloaded successfully\n"
+        std::cout << (isReload ? "minfwm: service configuration reloaded successfully\n"
                                : "minfwm: camera move completed successfully\n");
     }
     return 0;
