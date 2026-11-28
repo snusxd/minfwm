@@ -1,4 +1,4 @@
-<h1><img src="assets/icon-dark.svg" alt="minfWM icon" width="40" align="absmiddle" /> minfWM</h1>
+<h1><img src="assets/icon-light.png" alt="minfWM icon" width="40" align="absmiddle" /> minfWM</h1>
 
 ![minfwm preview](docs/images/preview.png)
 
