@@ -13,6 +13,7 @@ struct OnboardingView: View {
 
     @State private var phase: OnboardingPhase = .welcome
     @State private var showingCheckmark = false
+    @State private var isRequestingScreenConsent = false
     @State private var isHoveringIcon = false
     @State private var isAnimatingWindowMove = false
     @State private var didPositionNextToSettings = false
@@ -132,7 +133,11 @@ struct OnboardingView: View {
             .animation(.spring(response: 0.42, dampingFraction: 0.82), value: permission)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showingCheckmark)
 
-            Text(showingCheckmark ? "Granted" : "Drag icon into System Settings")
+            Text(
+                showingCheckmark
+                    ? "Granted"
+                    : (isRequestingScreenConsent ? "Click Allow in the system prompt" : "Drag icon into System Settings")
+            )
                 .font(.caption)
                 .foregroundStyle(showingCheckmark ? .green : .secondary)
         }
@@ -178,16 +183,7 @@ struct OnboardingView: View {
         if monitor.allGranted {
             if wasInProgress {
                 phase = .granting(.screenRecording)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    showingCheckmark = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        showingCheckmark = false
-                        UserDefaults.standard.set(false, forKey: onboardingInProgressKey)
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
-                            phase = .completed
-                        }
-                    }
-                }
+                finishScreenRecordingGrant()
             } else {
                 DispatchQueue.main.async {
                     onFinish()
@@ -232,11 +228,33 @@ struct OnboardingView: View {
     private func handlePermissionUpdate() {
         guard case .granting(let current) = phase,
               !showingCheckmark,
+              !isRequestingScreenConsent,
               monitor.isGranted(current)
         else {
             return
         }
 
+        if current == .screenRecording {
+            finishScreenRecordingGrant()
+            return
+        }
+
+        completeCurrentPermissionStep()
+    }
+
+    private func finishScreenRecordingGrant() {
+        guard !isRequestingScreenConsent, !showingCheckmark else { return }
+        isRequestingScreenConsent = true
+        ScreenDragOverlayController.shared.hide()
+
+        Task { @MainActor in
+            _ = await monitor.requestScreenCaptureConsent()
+            isRequestingScreenConsent = false
+            completeCurrentPermissionStep()
+        }
+    }
+
+    private func completeCurrentPermissionStep() {
         // 1. Show checkmark celebration
         showingCheckmark = true
         ScreenDragOverlayController.shared.hide()
@@ -316,6 +334,7 @@ struct OnboardingView: View {
     private func syncOverlay() {
         guard case .granting = phase,
               !showingCheckmark,
+              !isRequestingScreenConsent,
               !isHoveringIcon,
               !isAnimatingWindowMove,
               let window = onboardingWindow(),

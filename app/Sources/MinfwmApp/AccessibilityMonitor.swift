@@ -3,6 +3,7 @@ import ApplicationServices
 import Combine
 import CoreGraphics
 import Foundation
+import ScreenCaptureKit
 
 enum RequiredPermission: String, CaseIterable, Identifiable {
     case accessibility = "Accessibility"
@@ -76,6 +77,18 @@ final class PermissionsMonitor: ObservableObject {
         }
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// Triggers macOS's ScreenCaptureKit one-time consent prompt during onboarding
+    /// so it does not interrupt the user later when overview previews are captured.
+    @discardableResult
+    func requestScreenCaptureConsent() async -> Bool {
+        do {
+            _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            return true
+        } catch {
+            return false
         }
     }
 

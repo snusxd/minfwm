@@ -177,6 +177,20 @@ struct SettingsView: View {
                     .toggleStyle(.switch)
                 }
 
+                SoftDivider()
+
+                SettingsRow(
+                    title: "Launch at login",
+                    subtitle: "Start minfWM automatically when you log in"
+                ) {
+                    Toggle("", isOn: Binding(
+                        get: { store.launchAtLogin },
+                        set: { store.setLaunchAtLogin($0) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                }
+
                 if let error = store.statusMessage {
                     SoftDivider()
                     Text(error)

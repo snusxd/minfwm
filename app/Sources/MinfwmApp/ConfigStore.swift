@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import ServiceManagement
 
 struct MinfwmConfig: Equatable {
     // [window]
@@ -57,6 +58,7 @@ struct MinfwmConfig: Equatable {
 final class ConfigStore: ObservableObject {
     @Published var config = MinfwmConfig()
     @Published private(set) var isServiceRunning = false
+    @Published private(set) var launchAtLogin = false
     @Published private(set) var statusMessage: String? = nil
 
     private var serviceProcess: Process?
@@ -69,6 +71,7 @@ final class ConfigStore: ObservableObject {
     init() {
         load()
         refreshServiceStatus()
+        refreshLaunchAtLoginStatus()
     }
 
     func load() {
@@ -150,7 +153,26 @@ final class ConfigStore: ObservableObject {
         try? proc.run()
     }
 
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            statusMessage = nil
+        } catch {
+            statusMessage = "Could not update launch at login: \(error.localizedDescription)"
+        }
+        refreshLaunchAtLoginStatus()
+    }
+
+    func refreshLaunchAtLoginStatus() {
+        launchAtLogin = (SMAppService.mainApp.status == .enabled)
+    }
+
     func refreshServiceStatus() {
+        refreshLaunchAtLoginStatus()
         if let proc = serviceProcess, proc.isRunning {
             isServiceRunning = true
             return
