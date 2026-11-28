@@ -32,10 +32,9 @@ if [[ "$bundle_id" != "com.minfwm.app" ]]; then
   exit 1
 fi
 
-# 3. Verify SVG assets exist and contain valid <svg> tags
-for svg in "$ROOT_DIR/assets/icon-dark.svg" "$ROOT_DIR/assets/menubar-icon.svg"; do
-  test -f "$svg"
-  grep -q "<svg" "$svg"
-done
+# 3. Verify icon assets exist
+test -s "$ROOT_DIR/assets/icon-light.png"
+test -f "$ROOT_DIR/assets/menubar-icon.svg"
+grep -q "<svg" "$ROOT_DIR/assets/menubar-icon.svg"
 
 echo "PackageAppTests: all checks passed"
